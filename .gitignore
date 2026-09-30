@@ -13,3 +13,4 @@ yi-ratings.json
 yi-ratings.json.*
 .env
 .env.local
+.claude/
