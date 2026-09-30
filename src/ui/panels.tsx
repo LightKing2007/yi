@@ -20,7 +20,7 @@ export function MenuPanel({ h }: { h: number }) {
   return (
     <div style={{ height: h + 'px', position: 'relative', paddingTop: h * 0.08 + 'px' }}>
       <div class="brand">
-        <div class="big">弈</div>
+        <div class="big" role="img" aria-label="弈" />
         <div class="seal">{T('棋')}</div>
       </div>
       <div class="sub" style={{ fontSize: '16px' }}>{T('五子棋  ·  围棋')}</div>

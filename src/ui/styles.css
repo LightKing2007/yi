@@ -50,7 +50,8 @@ canvas { position: fixed; left: 0; top: 0; display: block; }
 @keyframes panel-in { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
 @keyframes panel-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(-28px); } }
 
-.title { font-family: var(--serif); font-size: 44px; line-height: 1; margin: 0 0 0 -2px; font-weight: 400; white-space: nowrap; }
+/* 标题用最粗的一款宋体（Songti SC Black，与 C 版相同） */
+.title { font-family: var(--serif); font-size: 44px; line-height: 1; margin: 0 0 0 -2px; font-weight: 900; white-space: nowrap; }
 .row-between { display: flex; justify-content: space-between; align-items: center; }
 .sub { font-size: 14px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .faint { color: var(--faint); }
@@ -60,8 +61,12 @@ canvas { position: fixed; left: 0; top: 0; display: block; }
 
 /* 开始菜单 */
 .brand { position: relative; height: 150px; }
-.brand .big { position: absolute; left: -10px; top: -8px; font-family: var(--serif); font-size: 132px; line-height: 1; font-weight: 400; }
-.seal { position: absolute; left: 116px; top: 86px; width: 28px; height: 28px; border-radius: 5px; background: var(--seal); color: rgb(250 238 228); font-family: var(--serif); font-size: 18px; display: flex; align-items: center; justify-content: center; }
+/* 大字「弈」：宣传片片名同款的行楷，预先渲染成图（scripts/make-title.swift），当遮罩用，颜色跟随主题 */
+.brand .big {
+  position: absolute; left: -4px; top: -6px; width: 126px; height: 143px; background: var(--text);
+  -webkit-mask: url('./assets/title-yi.png') center / contain no-repeat; mask: url('./assets/title-yi.png') center / contain no-repeat;
+}
+.seal { position: absolute; left: 128px; top: 98px; width: 28px; height: 28px; border-radius: 5px; background: var(--seal); color: rgb(250 238 228); font-family: var(--serif); font-size: 18px; font-weight: 900; display: flex; align-items: center; justify-content: center; }
 .stack { display: flex; flex-direction: column; gap: 12px; }
 
 /* ---------------- 控件 ---------------- */

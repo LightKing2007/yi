@@ -56,7 +56,8 @@ npm run dist:win     # release/Yi-2.0.0-win-x64-setup.exe（在 Windows 上打�
 npm run dist:linux   # release/Yi-2.0.0-linux-x86_64.AppImage（在 Linux 上打包）
 ```
 
-- 应用图标由 [public/icon.svg](public/icon.svg) 生成：改了图标后运行 `npm run icon`，得到 `build-res/icon.png`，打包时自动转换成各平台格式。
+- 开始菜单的大字「弈」是宣传片片名同款的行楷（macOS 的 Xingkai SC），预先渲染成 `src/ui/assets/title-yi.png`，程序里只带这张图、不带字体文件（系统字体不能随程序分发）。要重新生成：在 Mac 上运行 `npm run title-art`（行楷若未下载，先在「字体册」里下载）。
+- 应用图标是暖白圆角方块正中一个墨色行楷「弈」，由 [scripts/make-icon.swift](scripts/make-icon.swift) 画出：在 Mac 上运行 `npm run icon`（也可 `npm run icon -- seal` 加上红色「棋」印，或 `-- ink` 用深色底），得到 `build-res/icon.png`（打包时自动转换成各平台格式）与 `public/icon.png`（窗口图标）。
 - **macOS 签名与公证**：默认做临时（ad-hoc）签名，本机与自己的电脑可以直接运行；发给别人时，从网上下载的未公证应用会被系统拦截。
   正式发行需要 Apple 开发者账号：在钥匙串里装好「Developer ID Application」证书，把 `package.json` 里 `build.mac.identity` 的 `"-"` 删掉（让 electron-builder 自动找证书），
   并设置环境变量 `APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID` 进行公证，详见 <https://www.electron.build/code-signing-mac>。
