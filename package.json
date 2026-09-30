@@ -8,6 +8,9 @@
   "private": true,
   "type": "module",
   "main": "dist-electron/main.cjs",
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
     "dev": "vite",
     "typecheck": "tsc --noEmit",

@@ -17,9 +17,6 @@ export const IDLE_SECS = 35;         // 多久没收到任何消息就判定连�
 export const PING_SECS = 10;         // 客户端心跳间隔
 export const CONFIRM_SECS = 15;      // 匹配成功后双方确认的时限
 
-/** 在线服务器。换服务器（或加域名）时只改这里；本机测试可在地址栏加 ?server=ws://127.0.0.1:7700 */
-export const ONLINE_SERVER = 'ws://47.108.181.240:7700';
-
 export type QueueMode = 'match' | 'ranked';
 /** 一局的来历：匹配、排位、好友房间 */
 export type GameKind = QueueMode | 'friend';

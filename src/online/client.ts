@@ -11,9 +11,10 @@ import { T, TF } from '../i18n';
 import { sfx } from '../audio';
 import { animK, setSettings, settings } from '../app/settings';
 import { game, screen, Screen } from '../app/state';
+import { ONLINE_SERVER } from './config';
 import { bump, goScreen } from '../app/controller';
 import {
-  GRACE_SECS, ONLINE_SERVER, PING_SECS, PROTO_VERSION, cleanName, newRating,
+  GRACE_SECS, PING_SECS, PROTO_VERSION, cleanName, newRating,
   type Act, type AskKind, type C2S, type GameKind, type Opponent, type OverReason, type QueueMode, type Rating, type Ratings, type S2C,
 } from '../shared/protocol';
 

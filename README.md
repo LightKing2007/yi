@@ -1,6 +1,6 @@
 # 弈 · 五子棋 & 围棋
 
-TypeScript 编写，一份代码同时是 **桌面版**（macOS / Windows / Linux 安装包，Electron）与 **网页版**（任何现代浏览器）。
+TypeScript 编写的 **桌面游戏**（macOS / Windows / Linux 安装包，Electron）。开发时也可以直接在浏览器里运行调试。
 棋盘和棋子不使用任何贴图，全部由 WebGL2 着色器实时绘制：
 
 - **榧木棋盘**：多层噪声生成的直纹、细年轮与木纤维，清漆柔光、倒角与棋盘厚度，悬浮投影
@@ -33,7 +33,7 @@ TypeScript 编写，一份代码同时是 **桌面版**（macOS / Windows / Linu
 
 ## 开发
 
-需要 Node.js 20 或更新版本。
+需要 Node.js 22.13 或更新版本（见 `.nvmrc`）。
 
 ```bash
 npm install
@@ -54,7 +54,6 @@ npm run typecheck
 npm run dist:mac     # release/Yi-2.0.0-mac-arm64.dmg、Yi-2.0.0-mac-x64.dmg
 npm run dist:win     # release/Yi-2.0.0-win-x64-setup.exe（在 Windows 上打包）
 npm run dist:linux   # release/Yi-2.0.0-linux-x86_64.AppImage（在 Linux 上打包）
-npm run build:web    # 网页版：dist/ 是纯静态文件，放到任何静态网站托管即可
 ```
 
 - 应用图标由 [public/icon.svg](public/icon.svg) 生成：改了图标后运行 `npm run icon`，得到 `build-res/icon.png`，打包时自动转换成各平台格式。
@@ -62,7 +61,8 @@ npm run build:web    # 网页版：dist/ 是纯静态文件，放到任何静态
   正式发行需要 Apple 开发者账号：在钥匙串里装好「Developer ID Application」证书，把 `package.json` 里 `build.mac.identity` 的 `"-"` 删掉（让 electron-builder 自动找证书），
   并设置环境变量 `APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID` 进行公证，详见 <https://www.electron.build/code-signing-mac>。
 - **Windows**：未签名的安装包首次运行时 SmartScreen 会提示「未知发布者」，点「仍要运行」即可；有代码签名证书时按 <https://www.electron.build/code-signing-win> 配置。
-- 网页版部署在 `https://` 站点上时，浏览器只允许连接 `wss://` 的服务端，需要给服务端配上 TLS（见下文）。
+- **在线服务器地址**在 [.env.production](.env.production) 的 `VITE_YI_SERVER`，打包时读取；换服务器（或改成 `wss://域名`）时只改这一处，然后重新打包。
+  没有配置时用 [src/online/config.ts](src/online/config.ts) 里的默认地址。
 
 ## 联机服务端
 
@@ -97,12 +97,12 @@ sudo systemctl enable --now yi
 journalctl -u yi -f                # 查看日志：上线、建房、开局、结束……
 ```
 
-记得在云服务器的安全组 / 防火墙里放行 TCP 7700。游戏连接的服务器地址写在
-[src/shared/protocol.ts](src/shared/protocol.ts) 的 `ONLINE_SERVER`，换服务器（或改成 `wss://域名`）时只改这一处，然后重新打包。
+记得在云服务器的安全组 / 防火墙里放行 TCP 7700。游戏连接的服务器地址见上文「打包发行」里的 `VITE_YI_SERVER`。
 **注意**：2.0 的联机协议（WebSocket + JSON，协议版本 3）与 1.x 的 C 版服务端不兼容，服务器上要换成新的 `server.cjs`
 （`User=yi` 需要先 `sudo useradd -r yi && sudo chown yi /opt/yi`，让服务端能写段位文件）。
 
-需要 `wss://`（网页版挂在 https 站点上）时，用 Nginx / Caddy 反向代理并配证书，例如 Caddy：`yi.example.com { reverse_proxy 127.0.0.1:7700 }`。
+需要 `wss://` 时，用 Nginx / Caddy 反向代理并配证书，例如 Caddy：`yi.example.com { reverse_proxy 127.0.0.1:7700 }`；
+这时给服务端设环境变量 `HOST=127.0.0.1`（systemd 里加一行 `Environment=HOST=127.0.0.1`），让它只接受本机反向代理的连接，并在安全组里关掉 7700。
 
 ## 语言
 
@@ -125,8 +125,9 @@ src/
   fx/                 终局特效：gomokuWin、blow（炸飞与倒放）、goEnd、rewind、ghost（落子预览）、gather
   scene/              bowls（棋罐）、light（五种光影）、online（多人游戏页棋盘上的布置）
   audio/              合成音效与程序化背景音乐（在 Worker 里合成）
+  online/config.ts    在线服务器地址（构建时从 VITE_YI_SERVER 读取）
   online/client.ts    联机会话：匹配 / 排位队列、配对确认、好友房间、对局中的各种请求；确认后的每一步交给本地规则执行
-  shared/protocol.ts  联机协议（客户端与服务端共用）、段位表与在线服务器地址
+  shared/protocol.ts  联机协议（客户端与服务端共用）与段位表
   ui/                 Preact 界面：panels（菜单 / 对局 / 设置 / 更多）、online（多人游戏：匹配 · 排位 · 好友）、widgets、styles.css、info（“更多”的文字）
   i18n/               多语言
 server/               rooms.ts 队列、配对、房间、对局与段位（与传输无关）、store.ts 段位存档、host.ts 接到 WebSocket、main.ts 入口
