@@ -14,6 +14,11 @@ const scene = document.getElementById('scene') as HTMLCanvasElement;
 const over = document.getElementById('over') as HTMLCanvasElement;
 const glow = document.getElementById('glow') as HTMLCanvasElement;
 
+// 开发用：?scenario=名字 跑场景脚本（见 app/scenarios.ts）；打包时这一段连同场景脚本一起去掉
+const scenarioName = import.meta.env.DEV ? new URLSearchParams(location.search).get('scenario') : null;
+const scenarios = import.meta.env.DEV && scenarioName ? await import('./app/scenarios') : null;
+scenarios?.prepare();
+
 try {
   const stage = startApp(scene, over, glow);
   if (import.meta.env.DEV) (window as any).__yi = { stage, net, controller };   // 开发时调试用
@@ -27,3 +32,7 @@ try {
 }
 initAudio();
 render(<App />, document.getElementById('ui')!);
+if (scenarios && scenarioName) {
+  const q = new URLSearchParams(location.search);
+  scenarios.run(scenarioName, q.get('set') ?? 'now', q.has('hold')).catch(e => console.error('[scenario]', e));
+}

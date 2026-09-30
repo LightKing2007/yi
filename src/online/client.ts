@@ -9,8 +9,8 @@ import { now } from '../core/clock';
 import { GameType } from '../core/types';
 import { T, TF } from '../i18n';
 import { sfx } from '../audio';
-import { animK, setSettings, settings } from '../app/settings';
-import { game, screen, Screen, VERSION } from '../app/state';
+import { setSettings, settings } from '../app/settings';
+import { game, screen, Screen, VERSION, boardView } from '../app/state';
 import { ONLINE_SERVER } from './config';
 import { native } from '../app/native';
 import { bump, goScreen } from '../app/controller';
@@ -210,10 +210,7 @@ function replay(acts: Act[]) {
     else if (a.k === 'K') g.toggleDead(a.x, a.y);
     else if (a.k === 'R') g.resume();
   }
-  g.placeT.fill(-10); g.appearT.fill(-10);
-  g.fades = []; g.rw = [];
-  g.switch.t0 = -100;
-  g.msg = null;
+  boardView.settle();
   g.eventRewind(mark);
 }
 
@@ -233,7 +230,6 @@ function onStart(m: Extract<S2C, { t: 'start' }>) {
   st.toMove = 1; st.turnEnds = 0;
   st.leaveAsk = false;
   st.shownOnline = true;
-  game.animK = animK();
   game.newGame(m.type ? GameType.Go : GameType.Gomoku, m.size, { renju: m.type === 0 && m.renju, vsAI: false });
   if (screen.value !== Screen.Game) goScreen(Screen.Game);
   bump();
@@ -335,13 +331,12 @@ function handle(m: S2C) {
     case 'start': st.resumeBy = 0; onStart(m); break;
     case 'resumeFailed': resumeFailed(); break;
     case 'sync': replay(m.acts); bump(); break;
-    case 'moved': g.animK = animK(); g.play(m.x, m.y); g.msg = null; bump(); break;
+    case 'moved': g.play(m.x, m.y); boardView.msg = null; bump(); break;
     case 'passed': g.pass(); st.agreed = [false, false, false]; bump(); break;
     case 'turn': st.toMove = m.color; st.turnEnds = m.secs >= 0 ? t + m.secs : 0; break;
     case 'ask': st.askIn = m.kind; st.askInAt = t; st.turnEnds = 0; break;   // 等回应时服务端暂停计时，回应后会重新发 turn
     case 'answer': st.askOut = null; note([ANSWER[m.kind]?.[m.ok ? 0 : 1] ?? '']); break;
     case 'undone':
-      g.animK = animK();
       for (let i = 0; i < m.n; i++) g.undo();
       st.askIn = null;
       bump();

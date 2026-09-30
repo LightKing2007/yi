@@ -1,5 +1,5 @@
 /** 五子棋连珠：光晕、点亮、涟漪、火花与余烬 */
-import { game } from '../app/state';
+import { game, boardView } from '../app/state';
 import { settings } from '../app/settings';
 import { sfx } from '../audio';
 import { easeOut } from '../core/types';
@@ -26,12 +26,12 @@ function winCenter(L: Layout) {
 export function winUpdate(L: Layout, now: number, dt: number) {
   const g = game, t = winClock(now), fx = settings.value.fx;
   ensureBlowSim();
-  if (t >= -WIN_HIT && !g.winBurst) {                    // 音效从连珠时刻就开始（先是吸气声），冲击声正对 t = 0
-    g.winBurst = 1;
+  if (t >= -WIN_HIT && !boardView.winBurst) {                    // 音效从连珠时刻就开始（先是吸气声），冲击声正对 t = 0
+    boardView.winBurst = 1;
     if (fx >= 1) { sfx.play('win'); sfx.duck(); }
   }
-  if (fx === 2 && t >= 0 && g.winBurst === 1) {          // 粒子只在“完整”特效下出现
-    g.winBurst = 2;
+  if (fx === 2 && t >= 0 && boardView.winBurst === 1) {          // 粒子只在“完整”特效下出现
+    boardView.winBurst = 2;
     emitBlowDust(L, now);
     const cell = L.cell;
     g.win.forEach((w, i) => {

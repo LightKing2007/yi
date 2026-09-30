@@ -6,8 +6,8 @@ import { sfx } from '../audio';
 import { blowing } from '../fx/blow';
 import { startGather } from '../fx/gather';
 import type { AiReply, AiRequest } from './ai.worker';
-import { aiColor, animK, setSettings, settings } from './settings';
-import { bowlsShown, game, screen, Screen, uiTick, view } from './state';
+import { aiColor, setSettings, settings } from './settings';
+import { bowlsShown, game, screen, Screen, uiTick, view, boardView } from './state';
 import { online } from '../online/client';
 import { logError } from './native';
 
@@ -15,7 +15,6 @@ export function bump() { uiTick.value++; }
 
 /** 新局：人机设置、禁手取自设置 */
 export function newGame(type: GameType = game.type, N: number = type === GameType.Gomoku ? 15 : game.goSize) {
-  game.animK = animK();
   game.newGame(type, N, { renju: settings.value.renju, aiColor: aiColor() });
   cancelAi();
   bump();
@@ -26,16 +25,15 @@ export function setVsAI(on: boolean) { game.vsAI = on; newGame(game.type, game.N
 /** 悔棋：若其余棋子已被炸飞，先让它们倒放飞回原位，落定后再悔棋 */
 export function requestUndo() {
   const g = game;
-  if (!g.hist.length || g.undoPending) return;
-  g.animK = animK();
-  if (blowing() && g.blowView > 0.001) { g.review = true; g.undoPending = true; bump(); return; }
+  if (!g.hist.length || boardView.undoPending) return;
+  if (blowing() && boardView.blowView > 0.001) { boardView.review = true; boardView.undoPending = true; bump(); return; }
   g.undo();
   cancelAi();
   bump();
 }
 
 export function pass() { if (!game.aiToMove()) { game.pass(); bump(); } }
-export function toggleReview() { if (blowing()) { game.review = !game.review; bump(); } }
+export function toggleReview() { if (blowing()) { boardView.review = !boardView.review; bump(); } }
 export function resumeGame() { game.resume(); bump(); }
 export function confirmScore() { game.confirmScore(); bump(); }
 
@@ -48,7 +46,7 @@ export function goScreen(s: Screen) {
     // 离开对局：盘上的棋子飞回棋罐，棋盘清空；模式、路数与对手保持不变
     startGather(now());
     newGame(game.type, game.N);
-    game.switch.t0 = -100;
+    boardView.switch.t0 = -100;
   }
   online.onScreen(cur, s);
   view.panelFrom = cur;
@@ -77,10 +75,9 @@ export function boardClick(L: { ox: number; oy: number; cell: number }) {
     else if (h.canPlace) online.move(h.hx, h.hy);
     return;
   }
-  g.animK = animK();
   if (g.scoring) { g.toggleDead(h.hx, h.hy); bump(); }
-  else if (h.canPlace && g.play(h.hx, h.hy)) { g.aiAt = now() + 0.35; bump(); }
-  else if (g.msg) bump();
+  else if (h.canPlace && g.play(h.hx, h.hy)) { boardView.aiAt = now() + 0.35; bump(); }
+  else if (boardView.msg) bump();
 }
 
 // ---------------- 电脑 ----------------
@@ -95,7 +92,7 @@ function stampOf() { const g = game; return `${g.type}:${g.N}:${g.cur.moves}:${g
 function ensureWorker() {
   if (worker) return worker;
   worker = new Worker(new URL('./ai.worker.ts', import.meta.url), { type: 'module' });
-  worker.onerror = e => { logError('电脑思考', e.message); cancelAi(); worker = null; game.aiAt = now() + 2; };   // 出错就丢掉这个线程，稍后重新开
+  worker.onerror = e => { logError('电脑思考', e.message); cancelAi(); worker = null; boardView.aiAt = now() + 2; };   // 出错就丢掉这个线程，稍后重新开
   worker.onmessage = (e: MessageEvent<AiReply>) => {
     if (pending && e.data.id === pending.id) { result = { stamp: pending.stamp, x: e.data.x, y: e.data.y }; pending = null; }
   };
@@ -109,12 +106,11 @@ let wasScoring = false;
 /** 每帧：轮到电脑就在后台想，想好了才落子 */
 export function aiTick(t: number) {
   const g = game;
-  if (screen.value === Screen.Game && !online.inGame() && g.aiToMove() && t >= g.aiAt) {
+  if (screen.value === Screen.Game && !online.inGame() && g.aiToMove() && t >= boardView.aiAt) {
     const stamp = stampOf();
     if (result && result.stamp === stamp) {
       const { x, y } = result;
       result = null;
-      g.animK = animK();
       if (g.type === GameType.Gomoku) { if (x >= 0) g.play(x, y); }
       else if (x < 0 || !g.play(x, y)) g.pass();
       view.aiThinking = false;

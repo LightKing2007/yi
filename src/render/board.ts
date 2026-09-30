@@ -1,5 +1,5 @@
 /** 棋盘：木面、网格星位、棋子与各种覆盖效果的绘制顺序 */
-import { game } from '../app/state';
+import { game, boardView } from '../app/state';
 import { animK, settings } from '../app/settings';
 import { BLACK, EMPTY, GameType, MAXN, easeOut, smooth01 } from '../core/types';
 import { blowing, buildDebris, drawDebris, staysOnBoard } from '../fx/blow';
@@ -60,8 +60,8 @@ export function drawBoard(p: Painter, L: Layout, now: number) {
 
   // 网格：切换棋盘时旧网格淡出，新网格从略大处收拢淡入
   const sk = switchK(now);
-  if (sk < 1 && g.switch.N !== N) {
-    drawGrid(p, layoutForN(L, g.switch.N), g.switch.N, 1 - smooth01(sk / 0.55));
+  if (sk < 1 && boardView.switch.N !== N) {
+    drawGrid(p, layoutForN(L, boardView.switch.N), boardView.switch.N, 1 - smooth01(sk / 0.55));
     const an = smooth01((sk - 0.3) / 0.7), sc = 1.035 - 0.035 * an;
     const bc = { x: top.x + top.w / 2, y: top.y + top.h / 2 };
     p.g.push(); p.g.translate(bc.x, bc.y); p.g.scale(sc); p.g.translate(-bc.x, -bc.y);
@@ -75,7 +75,7 @@ export function drawBoard(p: Painter, L: Layout, now: number) {
   for (let x = 0; x < N; x++) for (let y = 0; y < N; y++) {
     const st = g.b(x, y), i = x * MAXN + y;
     if (!st || (blow && !staysOnBoard(x, y))) continue;
-    const k = easeOut((now - g.placeT[i]) / (0.22 * AK));
+    const k = easeOut((now - boardView.placeT[i]) / (0.22 * AK));
     let alive = (g.dead[i] ? 0.35 : 1) * appearK(x, y, now);
     const dk = goDeadFade(x, y, now);
     if (dk >= 1) continue;
@@ -84,7 +84,7 @@ export function drawBoard(p: Painter, L: Layout, now: number) {
     if (dk > 0) alive *= 1 - dk;
     p.stoneShadow(q.x + R * 0.1 + lift * 0.6, q.y + R * 0.16 + lift, R * (1 + (1 - k) * 0.15), k * alive);
   }
-  for (const f of g.fades) {
+  for (const f of boardView.fades) {
     let k = (now - f.t0) / (0.32 * AK);
     if (k >= 1 || k < -0.5) continue;
     k = Math.max(k, 0);
@@ -101,7 +101,7 @@ export function drawBoard(p: Painter, L: Layout, now: number) {
   for (let x = 0; x < N; x++) for (let y = 0; y < N; y++) {
     const st = g.b(x, y), i = x * MAXN + y;
     if (!st || (blow && !staysOnBoard(x, y))) continue;
-    const k = easeOut((now - g.placeT[i]) / (0.22 * AK));
+    const k = easeOut((now - boardView.placeT[i]) / (0.22 * AK));
     const q = pt(L, x, y);
     let sc = 1 + (1 - k) * 0.1;
     const wi = wt >= 0 && s.fx >= 1 ? winIndex(x, y) : -1;
@@ -115,9 +115,9 @@ export function drawBoard(p: Painter, L: Layout, now: number) {
     if (dk > 0) { up += easeOut(dk) * R * 0.8; sc *= 1 + 0.2 * dk; alpha *= 1 - dk; }   // 死子升起化去
     sc *= goWinPop(x, y, now) * (0.94 + 0.06 * easeOut(ap));
     const mark = s.lastMark && x === g.cur.lastX && y === g.cur.lastY && k > 0.6;
-    p.stone(q.x, q.y - up, R * sc, st, g.seed[i], alpha, mark);
+    p.stone(q.x, q.y - up, R * sc, st, boardView.seed[i], alpha, mark);
   }
-  for (const f of g.fades) {
+  for (const f of boardView.fades) {
     let k = (now - f.t0) / (0.32 * AK);
     if (k >= 1 || k < -0.5) continue;
     k = Math.max(k, 0);

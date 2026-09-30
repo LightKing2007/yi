@@ -1,6 +1,7 @@
 /** 应用的共享状态：当前界面、对局、各种过渡动画的进度 */
 import { signal } from '@preact/signals';
 import { Game } from '../core/game';
+import { BoardView } from '../presentation/boardView';
 
 /** 界面：开始菜单 → 单人对局 / 多人游戏 / 设置 / 更多 */
 export enum Screen { Menu, Settings, Game, More, Online }
@@ -8,6 +9,10 @@ export enum Screen { Menu, Settings, Game, More, Online }
 export const VERSION = __APP_VERSION__;
 
 export const game = new Game();
+
+/** 棋盘的画面状态（落子、提子、悔棋、胜负的动画），跟着 game 走 */
+export const boardView = new BoardView();
+game.listener = boardView;
 
 export const screen = signal<Screen>(Screen.Menu);
 

@@ -6,6 +6,7 @@
  */
 import { createHash } from 'node:crypto';
 import { Game } from '../src/core/game';
+import { rejectText } from '../src/shared/reject';
 import { BLACK, GameType, WHITE } from '../src/core/types';
 import {
   ASK_SECS, CONFIRM_SECS, DRAW_LIMIT, GRACE_SECS, IDLE_SECS, PROTO_VERSION, UNDO_LIMIT, cleanName, newRating, queueRules,
@@ -556,11 +557,7 @@ export class RoomServer {
         if (scoring || toMove !== me) { this.send(p, { t: 'info', text: '还没轮到你' }); return; }
         if (r.ask) { this.send(p, { t: 'info', text: '请先等对方回应申请' }); return; }
         const x = int(m.x), y = int(m.y);
-        g.msg = null;
-        const ok = g.play(x, y);
-        const msg = g.msg as { key: string } | null;
-        g.msg = null;
-        if (!ok) { this.send(p, { t: 'info', text: msg?.key ?? '这里不能落子' }); return; }
+        if (!g.play(x, y)) { this.send(p, { t: 'info', text: rejectText(g.lastReject ?? 'occupied') }); return; }
         this.addAct(r, { k: 'M', x, y });
         this.broadcast(r, { t: 'moved', x, y });
         if (g.over) this.finish(r, g.winner, g.winner === 3 ? 'full' : 'five');
@@ -569,7 +566,7 @@ export class RoomServer {
       }
       case 'pass':
         if (g.type !== GameType.Go || scoring || toMove !== me || r.ask) return;
-        g.pass(); g.msg = null;
+        g.pass();
         this.addAct(r, { k: 'P' });
         this.broadcast(r, { t: 'passed' });
         r.agreed = [false, false, false];

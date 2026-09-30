@@ -44,6 +44,10 @@ npm test             # 规则、禁手、人机、联机服务端与联机客户
 npm run typecheck
 ```
 
+**画面回归检查**（改动画面或规则代码前后用）：`npm run shots -- base` 在不显示的窗口里跑完全部场景脚本（[src/app/scenarios.ts](src/app/scenarios.ts)），
+把各特效关键时刻的截图存到 `.shots/base/`；改完代码后 `npm run shots` 再截一组，`node scripts/compare-shots.mjs` 逐像素对比，有差异的在 `.shots/diff/` 里标红。
+开发时也可以在浏览器里打开 `http://localhost:5173/?scenario=gomoku-win&hold=1` 直接看某个场景。
+
 桌面版调试：先 `npm run dev`，另开一个终端 `npm run app:dev`（Electron 窗口加载开发服务器）。
 
 本机测试联机：`npm run build:node && npm run server` 起一个本地服务端（端口 8443），浏览器打开
@@ -157,24 +161,29 @@ npm run build:node && scp dist-server/server.cjs root@47.108.181.240:/opt/yi/ser
 src/
   main.tsx            入口：启动画面循环与界面
   core/               规则核心（不依赖画面，服务端也用）
-    game.ts             对局状态、落子 / 提子 / 打劫 / 点目 / 悔棋 / 历史，以及发给应用层的事件
+    rules/index.ts      规则：纯函数，给定局面与一手棋返回新局面或不合法的原因（错误码）；点目
+    move.ts、config.ts  着法、错误码、对局结果；一局的规则设置
+    record.ts           棋谱与回放
+    game.ts             对局：历史、棋谱、点目标记、胜负，通过 listener 通知画面层
     renju.ts            五子棋禁手判定（三三、四四、长连）
     gomokuAI.ts         五子棋人机；goAI.ts 围棋人机（蒙特卡洛树搜索、估死子）
   app/                app（主循环、布局、输入）、stage（每帧的场景更新与绘制顺序）、controller（对局操作与快捷键）、
                       state（界面与对局状态）、settings（设置，存在本地存储）、ai.worker（电脑在后台线程思考）、native（桌面版的系统功能与错误日志）
+  presentation/       boardView（棋盘的动画状态：落子、提子、悔棋倒放、换棋盘、胜负动画、提示）
   render/             gl（WebGL2 批量绘制）、shaders（全部着色器）、painter（绘制原语）、board、layout（自动缩放的布局）、theme
   fx/                 终局特效：gomokuWin、blow（炸飞与倒放）、goEnd、rewind、ghost（落子预览）、gather
   scene/              bowls（棋罐）、light（五种光影）、online（多人游戏页棋盘上的布置）
   audio/              合成音效与程序化背景音乐（在 Worker 里合成）
   online/config.ts    在线服务器地址（构建时从 VITE_YI_SERVER 读取）
   online/client.ts    联机会话：匹配 / 排位队列、配对确认、好友房间、对局中的各种请求；确认后的每一步交给本地规则执行
-  shared/protocol.ts  联机协议（客户端与服务端共用）与段位表
+  shared/protocol.ts  联机协议（客户端与服务端共用）与段位表；reject.ts 不合法着法的提示文字
   ui/                 Preact 界面：panels（菜单 / 对局 / 设置 / 更多）、online（多人游戏：匹配 · 排位 · 好友）、widgets、styles.css、info（“更多”的文字）
   i18n/               多语言
 server/               rooms.ts 队列、配对、房间、对局与段位（与传输无关）、store.ts 段位存档、host.ts 接到 WebSocket（可同时监听几个端口）、main.ts 入口
 electron/             桌面版主进程（窗口、只允许一个实例、匹配成功时的任务栏提醒、错误日志）与预加载
-tests/                vitest：rules（规则与人机）、server（联机服务端）、client（联机客户端：断线、重连、服务器重启）
-scripts/              build-node（打包主进程与服务端）、make-icon.swift（生成图标）、make-title.swift（生成开始菜单的标题字）
+tests/                vitest：rules（规则与人机）、record（规则层与棋谱）、server（联机服务端）、client（联机客户端：断线、重连、服务器重启）
+scripts/              build-node（打包主进程与服务端）、make-icon.swift（生成图标）、make-title.swift（生成开始菜单的标题字）、
+                      shots.cjs 与 compare-shots.mjs（场景截图与逐像素对比）
 ```
 
 画面分四层：`#scene`（WebGL：背景、棋盘、棋子、棋罐、光影）、`#ui`（Preact 界面）、`#over`（飞过界面的碎子）、`#glow`（叠加的光）。

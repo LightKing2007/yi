@@ -1,5 +1,5 @@
 /** 五子棋取胜后其余棋子被炸飞：带碰撞的物理模拟录像、立体翻滚、倒放查看 */
-import { game } from '../app/state';
+import { game, boardView } from '../app/state';
 import { settings } from '../app/settings';
 import { GameType, MAXN } from '../core/types';
 import { pt, type Layout } from '../render/layout';
@@ -18,12 +18,12 @@ export const staysOnBoard = (x: number, y: number) => winIndex(x, y) >= 0 || (ga
 
 export function blowing() {
   const g = game;
-  return settings.value.fx === 2 && g.type === GameType.Gomoku && g.over && g.winner !== 3 && g.winT > 0 && (g.win.length >= 5 || g.forfeit);
+  return settings.value.fx === 2 && g.type === GameType.Gomoku && g.over && g.winner !== 3 && boardView.winT > 0 && (g.win.length >= 5 || g.forfeit);
 }
 
 /** 由棋子自身的随机种子派生的确定性随机数，保证倒放时轨迹一致 */
 function seedRnd(x: number, y: number, k: number) {
-  const v = Math.sin((game.seed[x * MAXN + y] + 1) * 12.9898 + (x * 19 + y) * 4.1414 + k * 78.233) * 43758.5453;
+  const v = Math.sin((boardView.seed[x * MAXN + y] + 1) * 12.9898 + (x * 19 + y) * 4.1414 + k * 78.233) * 43758.5453;
   return v - Math.floor(v);
 }
 
@@ -101,14 +101,14 @@ function simulate() {
       }
     }
   }
-  sim.forWinT = g.winT;
+  sim.forWinT = boardView.winT;
 }
 
-export function ensureBlowSim() { if (blowing() && sim.forWinT !== game.winT) simulate(); }
+export function ensureBlowSim() { if (blowing() && sim.forWinT !== boardView.winT) simulate(); }
 
 /** 整场爆炸的播放时间：正常随时钟前进，“查看棋局”时倒放回 0 */
 function blowTime(now: number) {
-  let v = game.blowView; v = v * v * (3 - 2 * v);
+  let v = boardView.blowView; v = v * v * (3 - 2 * v);
   return Math.min(Math.max(winClock(now), 0), (sim.samples - 1) / BLOW_HZ) * v;
 }
 
@@ -119,7 +119,7 @@ const I3: Mat3 = [1, 0, 0, 0, 1, 0, 0, 0, 1];
 function debrisAt(L: Layout, now: number, x: number, y: number): Debris | null {
   const p0 = pt(L, x, y);
   const o: Debris = { x, y, cx: p0.x, cy: p0.y, r: L.R, z: 0, alpha: 1, deg: 0, tilt: 0, rot: I3 };
-  if (sim.forWinT !== game.winT) return o;
+  if (sim.forWinT !== boardView.winT) return o;
   const T = blowTime(now), f = T * BLOW_HZ;
   const i0 = Math.floor(Math.min(f, sim.samples - 1)), i1 = i0 + 1 < sim.samples ? i0 + 1 : i0, u = f - i0;
   const base = (x * MAXN + y) * BLOW_MAXS;
@@ -163,7 +163,7 @@ export function drawDebris(p: Painter, L: Layout, shadows: boolean, flying: bool
   const g = game;
   for (const d of debris) {
     if ((d.tilt !== 0) !== flying) continue;
-    const c = g.b(d.x, d.y), seed = g.seed[d.x * MAXN + d.y];
+    const c = g.b(d.x, d.y), seed = boardView.seed[d.x * MAXN + d.y];
     if (shadows) {                                        // 影子是椭球在盘面上的投影
       const ct = Math.cos(d.tilt), st = Math.sin(d.tilt), along = d.r * Math.sqrt(ct * ct + 0.277 * st * st);
       p.stoneShadowE(d.cx + L.R * (0.1 + 0.3 * d.z), d.cy + L.R * (0.16 + 0.55 * d.z), along, d.r, d.deg, d.alpha / (1 + 0.8 * d.z));

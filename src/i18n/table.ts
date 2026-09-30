@@ -1,5 +1,8 @@
 /** 界面文字的译文表：[中文原文（也是查表的键）, 文言, English]。新增界面文字时在这里补一行 */
 export const TABLE: [string, string, string][] = [
+  ["对局已经结束", "此局已终", "The game is over"],
+  ["正在点目", "方在点目", "Counting in progress"],
+  ["五子棋不能停一手", "连珠不可停着", "You can't pass in Gomoku"],
   ["这台设备已经在排位中了", "此机已在排位之中", "This device is already in a ranked game"],
   ["尝试次数太多，请稍后再试", "所试过多，少顷再试", "Too many attempts, please try again later"],
   ["这一局已经无法继续，可能是服务器重启过或掉线太久", "此局已不可续，或枢纽重启，或断之过久", "This game can't be continued. The server may have restarted or you were away too long"],

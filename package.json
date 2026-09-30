@@ -18,6 +18,7 @@
     "build:node": "node scripts/build-node.mjs",
     "build": "npm run typecheck && npm run build:web && npm run build:node",
     "test": "vitest run",
+    "shots": "electron scripts/shots.cjs",
     "server": "node dist-server/server.cjs",
     "app": "npm run build && electron .",
     "app:dev": "npm run build:node && YI_DEV_URL=http://localhost:5173 electron .",

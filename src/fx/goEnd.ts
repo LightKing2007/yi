@@ -1,5 +1,5 @@
 /** 围棋“胜负揭晓”：冲击波自棋盘中心扫过，死子化光散去，领地逐点亮起，胜方棋子依次闪耀 */
-import { game } from '../app/state';
+import { game, boardView } from '../app/state';
 import { settings } from '../app/settings';
 import { sfx } from '../audio';
 import { MAXN, WHITE } from '../core/types';
@@ -38,10 +38,10 @@ export function goEndUpdate(L: Layout, now: number, dt: number) {
   const g = game, t = goEndClock(now), fx = settings.value.fx;
   if (t < 0) return;
   const cell = L.cell;
-  if (!g.goBurst) { g.goBurst = 1; if (fx >= 1) { sfx.play('goend'); sfx.duck(); } }
+  if (!boardView.goBurst) { boardView.goBurst = 1; if (fx >= 1) { sfx.play('goend'); sfx.duck(); } }
   if (fx < 2) return;
-  if (g.goBurst === 1) {
-    g.goBurst = 2;
+  if (boardView.goBurst === 1) {
+    boardView.goBurst = 2;
     for (let x = 0; x < g.N; x++) for (let y = 0; y < g.N; y++) {
       const s = g.b(x, y);
       if (!s) continue;

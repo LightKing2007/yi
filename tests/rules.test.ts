@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Game } from '../src/core/game';
+import { BoardView } from '../src/presentation/boardView';
 import { goThink } from '../src/core/goAI';
 import { gomokuMove } from '../src/core/gomokuAI';
 import { renjuForbidden, Renju } from '../src/core/renju';
@@ -58,12 +59,13 @@ describe('五子棋规则', () => {
     playAll(g, [[7, 7], [0, 0], [8, 7], [0, 1], [9, 7], [0, 2], [10, 7], [0, 3], [11, 7]]);
     expect(g.over && g.winner === BLACK && g.win.length === 5).toBe(true);
   });
-  it('悔棋把收回的子放进倒流动画', () => {
-    const g = gomoku15();
+  it('悔棋把收回的子放进倒流动画（画面层）', () => {
+    const g = gomoku15(), view = new BoardView();
+    g.listener = view;
     playAll(g, [[7, 7], [8, 8]]);
     g.undo();
     expect(g.b(8, 8)).toBe(EMPTY);
-    expect(g.rw.length).toBe(1);
+    expect(view.rw).toEqual([{ x: 8, y: 8, c: WHITE, t0: expect.any(Number) }]);
   });
 });
 
@@ -85,8 +87,11 @@ describe('禁手', () => {
 
   it('黑棋下禁手被拒绝，关闭禁手后可以下', () => {
     const g = gomoku15([5, 7, B, 6, 7, B, 7, 5, B, 7, 6, B]);
+    const view = new BoardView();
+    g.listener = view;
     expect(g.play(7, 7)).toBe(false);
-    expect(g.msg?.key).toBe('禁手：黑棋不能下三三');
+    expect(g.lastReject).toBe('renju-33');
+    expect(view.msg?.key).toBe('禁手：黑棋不能下三三');
     g.renju = false;
     expect(g.play(7, 7)).toBe(true);
   });

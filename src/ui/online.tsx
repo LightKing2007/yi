@@ -7,7 +7,7 @@ import { useEffect } from 'preact/hooks';
 import { goScreen, newGame, toggleReview } from '../app/controller';
 import { layout } from '../app/app';
 import { Lang, setSettings, settings } from '../app/settings';
-import { game, screen, Screen, uiTick } from '../app/state';
+import { game, screen, Screen, uiTick, boardView } from '../app/state';
 import { now } from '../core/clock';
 import { BLACK, GameType, WHITE } from '../core/types';
 import { blowing } from '../fx/blow';
@@ -266,7 +266,7 @@ export function OnlineGamePanel({ h }: { h: number }) {
     : g.type === GameType.Go ? TF('第 %d 手  ·  黑提 %d  ·  白提 %d', g.cur.moves + 1, g.cur.cap[BLACK], g.cur.cap[WHITE])
       : TF('第 %d 手', g.cur.moves + 1);
   const free = !st.askIn && !st.askOut && !st.leaveAsk;
-  const msgAge = g.msg ? t - g.msgAt : 99;
+  const msgAge = boardView.msg ? t - boardView.msgAt : 99;
   const foot = st.over ? (blown ? 'V 查看棋局   Esc 离开' : 'Esc 离开') : g.type === GameType.Go ? 'U 悔棋   P 停一手   Esc 离开' : 'U 悔棋   Esc 离开';
   const leaveNow = () => { net.leave(); goScreen(Screen.Online); };
 
@@ -313,7 +313,7 @@ export function OnlineGamePanel({ h }: { h: number }) {
 
       {st.over ? (
         <div class="btns">
-          {blown && <Button label={T(g.review ? '收起棋局' : '查看棋局')} onClick={toggleReview} />}
+          {blown && <Button label={T(boardView.review ? '收起棋局' : '查看棋局')} onClick={toggleReview} />}
           {ranked
             ? <Button label={T('继续排位')} primary onClick={net.playAgain} />
             : <Button label={T('再来一局')} primary disabled={!free || st.oppLeft || !st.peerOnline} onClick={net.rematch} />}
@@ -336,7 +336,7 @@ export function OnlineGamePanel({ h }: { h: number }) {
         </div>
       )}
       <Notice style={{ marginTop: '12px' }} />
-      <div class="msg faint" style={{ fontSize: '13px', marginTop: '2px', opacity: msgAge < 2.4 ? 1 : 0 }}>{g.msg && msgAge < 3 ? T(g.msg.key) : ''}</div>
+      <div class="msg faint" style={{ fontSize: '13px', marginTop: '2px', opacity: msgAge < 2.4 ? 1 : 0 }}>{boardView.msg && msgAge < 3 ? T(boardView.msg.key) : ''}</div>
       <div class="foot" style={{ bottom: '0px' }}>{T(foot)}</div>
     </div>
   );

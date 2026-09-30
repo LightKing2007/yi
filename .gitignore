@@ -14,3 +14,4 @@ yi-ratings.json.*
 .env
 .env.local
 .claude/
+.shots/

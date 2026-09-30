@@ -5,12 +5,15 @@ import { sfx } from '../audio';
 import { ghostUpdate } from '../fx/ghost';
 import { clearParticles } from '../fx/fx';
 import { aiTick, boardClick, boardHover, bump, handleKey, newGame } from './controller';
-import { settings } from './settings';
-import { game, screen, Screen, uiTick, view } from './state';
+import { animK, settings } from './settings';
+import { game, screen, Screen, uiTick, view, boardView } from './state';
 import { Stage } from './stage';
 import { online } from '../online/client';
 import { signal } from '@preact/signals';
 import { GameType } from '../core/types';
+
+/** 开发用的钩子：每帧画完之后调用（场景脚本在这里推进虚拟时钟、截图） */
+export const devHooks = { afterDraw: null as null | (() => void) };
 
 /** 当前布局（界面按它摆放面板、坐标） */
 export const layout = signal<Layout>(computeLayout(window.innerWidth, window.innerHeight, 15));
@@ -19,7 +22,7 @@ export function startApp(sceneCanvas: HTMLCanvasElement, overCanvas: HTMLCanvasE
   let stage = new Stage(sceneCanvas, overCanvas, glowCanvas);
   game.goSize = 19;
   newGame(GameType.Gomoku, 15);
-  game.switch.t0 = -100;
+  boardView.switch.t0 = -100;
 
   let W = 0, H = 0, dpr = 0, N = 0, scale = 0;
   const relayout = () => {
@@ -57,7 +60,7 @@ export function startApp(sceneCanvas: HTMLCanvasElement, overCanvas: HTMLCanvasE
   const handleEvents = () => {
     for (let ev = game.pollEvent(); ev; ev = game.pollEvent()) {
       if (ev.type === 'stone') sfx.clack(ev.strength);
-      else if (ev.type === 'undo') sfx.play('rewind', 1, 1 / game.animK);
+      else if (ev.type === 'undo') sfx.play('rewind', 1, 1 / animK());
       else clearParticles();
     }
   };
@@ -66,7 +69,7 @@ export function startApp(sceneCanvas: HTMLCanvasElement, overCanvas: HTMLCanvasE
   let lastKey = '';
   const uiKey = () => {
     const g = game;
-    return `${screen.value}|${g.type}|${g.N}|${g.cur.moves}|${g.cur.toMove}|${g.over}|${g.winner}|${g.scoring}|${g.finished}|${g.review}|${g.hist.length}|${g.msg?.key}|${g.msgAt}|${view.aiThinking}|${g.vsAI}|${g.scoreB}|${g.scoreW}`;
+    return `${screen.value}|${g.type}|${g.N}|${g.cur.moves}|${g.cur.toMove}|${g.over}|${g.winner}|${g.scoring}|${g.finished}|${boardView.review}|${g.hist.length}|${boardView.msg?.key}|${boardView.msgAt}|${view.aiThinking}|${g.vsAI}|${g.scoreB}|${g.scoreW}`;
   };
 
   let last = now();
@@ -87,6 +90,7 @@ export function startApp(sceneCanvas: HTMLCanvasElement, overCanvas: HTMLCanvasE
       stage.prepare(L, t);
       stage.draw(L, t);
     }
+    devHooks.afterDraw?.();
     const k = uiKey();
     if (k !== lastKey) { lastKey = k; bump(); }
     requestAnimationFrame(frame);

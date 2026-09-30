@@ -1,5 +1,5 @@
 /** 特效公共部分：终局计时、冲击波、粒子、震屏与闪白 */
-import { game } from '../app/state';
+import { game, boardView } from '../app/state';
 import { settings } from '../app/settings';
 import { GameType, easeOut } from '../core/types';
 import { PAD, type Layout } from '../render/layout';
@@ -19,15 +19,15 @@ let particles: Particle[] = [];
 /** 胜利动画进行时间（以冲击时刻为 0）；无胜利动画时返回很小的负数 */
 export function winClock(now: number) {
   const g = game;
-  if (g.type !== GameType.Gomoku || g.winT <= 0 || (g.win.length < 5 && !g.forfeit)) return -1e9;
-  return now - g.winT - WIN_HIT;
+  if (g.type !== GameType.Gomoku || boardView.winT <= 0 || (g.win.length < 5 && !g.forfeit)) return -1e9;
+  return now - boardView.winT - WIN_HIT;
 }
 
 /** 围棋“胜负揭晓”动画进行时间（以确认结果为 0） */
 export function goEndClock(now: number) {
   const g = game;
-  if (g.type !== GameType.Go || !(g.finished || g.forfeit) || g.goEndT <= 0) return -1e9;
-  return now - g.goEndT;
+  if (g.type !== GameType.Go || !(g.finished || g.forfeit) || boardView.goEndT <= 0) return -1e9;
+  return now - boardView.goEndT;
 }
 
 const endClock = (now: number) => Math.max(winClock(now), goEndClock(now));
