@@ -1,0 +1,108 @@
+{
+  "name": "yi",
+  "productName": "弈",
+  "version": "2.0.0",
+  "description": "弈 · 五子棋与围棋",
+  "author": "LightKing",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "main": "dist-electron/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "build:web": "vite build",
+    "build:node": "node scripts/build-node.mjs",
+    "build": "npm run typecheck && npm run build:web && npm run build:node",
+    "test": "vitest run",
+    "server": "node dist-server/server.cjs",
+    "app": "npm run build && electron .",
+    "app:dev": "npm run build:node && YI_DEV_URL=http://localhost:5173 electron .",
+    "icon": "electron scripts/make-icon.cjs",
+    "dist": "npm run build && electron-builder",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:linux": "npm run build && electron-builder --linux"
+  },
+  "devDependencies": {
+    "@preact/signals": "^2.0.0",
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.0",
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.0",
+    "esbuild": "^0.25.0",
+    "preact": "^10.26.0",
+    "typescript": "^5.8.0",
+    "vite": "^7.0.0",
+    "vitest": "^3.2.0",
+    "ws": "^8.18.0"
+  },
+  "build": {
+    "appId": "com.lightking.yi",
+    "productName": "弈",
+    "copyright": "Copyright 2026 LightKing All rights Reserved.",
+    "directories": {
+      "output": "release",
+      "buildResources": "build-res"
+    },
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.board-games",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "darkModeSupport": true,
+      "identity": "-",
+      "hardenedRuntime": true,
+      "entitlements": "build-res/entitlements.mac.plist",
+      "entitlementsInherit": "build-res/entitlements.mac.plist"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Yi-${version}-win-${arch}-setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "弈",
+      "uninstallDisplayName": "弈"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Game",
+      "synopsis": "五子棋与围棋"
+    },
+    "asar": true,
+    "artifactName": "Yi-${version}-${os}-${arch}.${ext}",
+    "electronLanguages": [
+      "zh_CN",
+      "zh_TW",
+      "en"
+    ]
+  },
+  "allowScripts": {
+    "electron@38.8.6": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.2": true,
+    "electron-winstaller@5.4.0": true
+  }
+}

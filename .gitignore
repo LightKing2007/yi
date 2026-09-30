@@ -1,0 +1,15 @@
+node_modules/
+dist/
+dist-electron/
+dist-server/
+release/
+*.log
+.DS_Store
+trailer/
+*.db
+*.db-wal
+*.db-shm
+yi-ratings.json
+yi-ratings.json.*
+.env
+.env.local

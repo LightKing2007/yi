@@ -1,0 +1,84 @@
+/** 应用主循环：窗口尺寸 → 布局，输入 → 更新 → 绘制 */
+import { now } from '../core/clock';
+import { computeLayout, type Layout } from '../render/layout';
+import { sfx } from '../audio';
+import { ghostUpdate } from '../fx/ghost';
+import { clearParticles } from '../fx/fx';
+import { aiTick, boardClick, boardHover, bump, handleKey, newGame } from './controller';
+import { settings } from './settings';
+import { game, screen, Screen, uiTick, view } from './state';
+import { Stage } from './stage';
+import { online } from '../online/client';
+import { signal } from '@preact/signals';
+import { GameType } from '../core/types';
+
+/** 当前布局（界面按它摆放面板、坐标） */
+export const layout = signal<Layout>(computeLayout(window.innerWidth, window.innerHeight, 15));
+
+export function startApp(sceneCanvas: HTMLCanvasElement, overCanvas: HTMLCanvasElement, glowCanvas: HTMLCanvasElement) {
+  const stage = new Stage(sceneCanvas, overCanvas, glowCanvas);
+  game.goSize = 19;
+  newGame(GameType.Gomoku, 15);
+  game.switch.t0 = -100;
+
+  let W = 0, H = 0, dpr = 0, N = 0, scale = 0;
+  const relayout = () => {
+    const w = window.innerWidth, h = window.innerHeight, d = window.devicePixelRatio || 1;
+    if (w === W && h === H && d === dpr && N === game.N && scale === settings.value.uiScale) return;
+    W = w; H = h; dpr = d; N = game.N; scale = settings.value.uiScale;
+    stage.resize(w, h, d);
+    layout.value = computeLayout(w, h, game.N, settings.value.uiScale);
+    document.documentElement.style.setProperty('--u', String(layout.value.u));
+  };
+
+  // 输入：界面层不接收鼠标的地方（棋盘）落到下层画布上
+  window.addEventListener('pointermove', e => { view.mouse.x = e.clientX; view.mouse.y = e.clientY; view.mouse.inside = true; });
+  document.addEventListener('pointerleave', () => { view.mouse.inside = false; });
+  sceneCanvas.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    view.mouse.x = e.clientX; view.mouse.y = e.clientY; view.mouse.inside = true;
+    boardClick(layout.value);
+  });
+  window.addEventListener('keydown', handleKey);
+
+  // 规则层事件 → 音效 / 清理特效
+  const handleEvents = () => {
+    for (let ev = game.pollEvent(); ev; ev = game.pollEvent()) {
+      if (ev.type === 'stone') sfx.clack(ev.strength);
+      else if (ev.type === 'undo') sfx.play('rewind', 1, 1 / game.animK);
+      else clearParticles();
+    }
+  };
+
+  // 界面上显示的状态有变化时才重绘面板
+  let lastKey = '';
+  const uiKey = () => {
+    const g = game;
+    return `${screen.value}|${g.type}|${g.N}|${g.cur.moves}|${g.cur.toMove}|${g.over}|${g.winner}|${g.scoring}|${g.finished}|${g.review}|${g.hist.length}|${g.msg?.key}|${g.msgAt}|${view.aiThinking}|${g.vsAI}|${g.scoreB}|${g.scoreW}`;
+  };
+
+  let last = now();
+  const frame = () => {
+    const t = now(), dt = Math.min(t - last, 0.05);
+    last = t;
+    relayout();
+    const L = layout.value;
+    view.panelT = Math.min(1, view.panelT + dt / 0.6);
+    aiTick(t);
+    stage.update(L, t, dt);
+    handleEvents();
+    online.update(t);
+    const h = boardHover(L);
+    ghostUpdate(L, view.mouse.x, view.mouse.y, dt, h.onBoard && !game.over && !game.scoring && h.humanTurn, h.onBoard && game.b(h.hx, h.hy) === 0 && !game.forbiddenAt(h.hx, h.hy));
+    sceneCanvas.style.cursor = h.canPlace || (game.scoring && h.onBoard && game.b(h.hx, h.hy)) ? 'pointer' : 'default';
+    stage.prepare(L, t);
+    stage.draw(L, t);
+    const k = uiKey();
+    if (k !== lastKey) { lastKey = k; bump(); }
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+  return stage;
+}
+
+export { uiTick, Screen };
