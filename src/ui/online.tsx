@@ -16,7 +16,7 @@ import * as net from '../online/client';
 import { Phase, netTick, ratingOf, st, tr } from '../online/client';
 import { seatPlates } from '../scene/online';
 import { RANKS, queueRules, rankIndex, rankName, type Opponent } from '../shared/protocol';
-import { Row } from './panels';
+import { Row, UpdateNote } from './panels';
 import { Button, Field, Fit, Hair, Seg, StoneIcon } from './widgets';
 
 const typeName = (type: number) => T(type ? '围棋' : '五子棋');
@@ -133,6 +133,7 @@ function lobby(h: number) {
   return (
     <div class="npanel col" style={{ height: h + 'px', ['--lw' as any]: labelW() + 'px' }}>
       <h1 class="title" style={{ height: '60px' }}>{T('多人游戏')}</h1>
+      <UpdateNote style={{ marginTop: '-8px', marginBottom: '8px' }} />
       <Row label={T('昵称')}><Field value={s.nick} maxLength={16} placeholder={T('给自己取个名字')} onInput={v => setSettings({ nick: v })} /></Row>
       <Seg items={[T('匹配'), T('排位'), T('好友')]} sel={u.tab} onChange={v => setUi({ tab: v })} />
       <div style={{ height: '20px' }} />

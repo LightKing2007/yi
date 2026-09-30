@@ -15,6 +15,7 @@ export const ASK_SECS = 20;          // 申请无人回应多久后视为拒绝
 export const GRACE_SECS = 60;        // 掉线后保留对局的时间
 export const IDLE_SECS = 35;         // 多久没收到任何消息就判定连接已断
 export const PING_SECS = 10;         // 客户端心跳间隔
+export const SILENT_SECS = 25;       // 客户端多久没收到服务端的任何消息（含心跳回应）就判定连接已断
 export const CONFIRM_SECS = 15;      // 匹配成功后双方确认的时限
 
 export type QueueMode = 'match' | 'ranked';
@@ -76,7 +77,8 @@ export interface Opponent { name: string; points?: number }
 
 /** 服务端 → 客户端 */
 export type S2C =
-  | { t: 'welcome'; id: number; token: string; ratings: Ratings }
+  | { t: 'welcome'; id: number; token: string; ratings: Ratings; latest?: string; url?: string }   // latest / url：最新版本号与下载地址（服务端配置了才有）
+  | { t: 'resumeFailed' }                                          // 带令牌重连，但原来的对局已经不在了（服务器重启或掉线太久）
   | { t: 'pong' }
   | { t: 'queued'; mode: QueueMode; type: number; size: number }   // 已进入队列
   | { t: 'found'; opp: Opponent; secs: number }                    // 找到对手，等双方确认

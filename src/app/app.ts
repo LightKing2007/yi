@@ -16,7 +16,7 @@ import { GameType } from '../core/types';
 export const layout = signal<Layout>(computeLayout(window.innerWidth, window.innerHeight, 15));
 
 export function startApp(sceneCanvas: HTMLCanvasElement, overCanvas: HTMLCanvasElement, glowCanvas: HTMLCanvasElement) {
-  const stage = new Stage(sceneCanvas, overCanvas, glowCanvas);
+  let stage = new Stage(sceneCanvas, overCanvas, glowCanvas);
   game.goSize = 19;
   newGame(GameType.Gomoku, 15);
   game.switch.t0 = -100;
@@ -30,6 +30,18 @@ export function startApp(sceneCanvas: HTMLCanvasElement, overCanvas: HTMLCanvasE
     layout.value = computeLayout(w, h, game.N, settings.value.uiScale);
     document.documentElement.style.setProperty('--u', String(layout.value.u));
   };
+
+  // 显卡重置、睡眠唤醒等情况下 WebGL 上下文会丢失：丢失期间只更新不绘制，恢复后重建着色器与离屏贴图（棋局不受影响）
+  let lost = 0;
+  for (const c of [sceneCanvas, overCanvas, glowCanvas]) {
+    c.addEventListener('webglcontextlost', e => { e.preventDefault(); lost++; });
+    c.addEventListener('webglcontextrestored', () => {
+      if (--lost > 0) return;
+      lost = 0;
+      stage = new Stage(sceneCanvas, overCanvas, glowCanvas);
+      W = 0;                                                  // 让 relayout 重新设置画布尺寸
+    });
+  }
 
   // 输入：界面层不接收鼠标的地方（棋盘）落到下层画布上
   window.addEventListener('pointermove', e => { view.mouse.x = e.clientX; view.mouse.y = e.clientY; view.mouse.inside = true; });
@@ -71,8 +83,10 @@ export function startApp(sceneCanvas: HTMLCanvasElement, overCanvas: HTMLCanvasE
     const h = boardHover(L);
     ghostUpdate(L, view.mouse.x, view.mouse.y, dt, h.onBoard && !game.over && !game.scoring && h.humanTurn, h.onBoard && game.b(h.hx, h.hy) === 0 && !game.forbiddenAt(h.hx, h.hy));
     sceneCanvas.style.cursor = h.canPlace || (game.scoring && h.onBoard && game.b(h.hx, h.hy)) ? 'pointer' : 'default';
-    stage.prepare(L, t);
-    stage.draw(L, t);
+    if (!lost) {
+      stage.prepare(L, t);
+      stage.draw(L, t);
+    }
     const k = uiKey();
     if (k !== lastKey) { lastKey = k; bump(); }
     requestAnimationFrame(frame);

@@ -5,7 +5,7 @@ import { Game } from '../core/game';
 /** 界面：开始菜单 → 单人对局 / 多人游戏 / 设置 / 更多 */
 export enum Screen { Menu, Settings, Game, More, Online }
 
-export const VERSION = '2.0.0';
+export const VERSION = __APP_VERSION__;
 
 export const game = new Game();
 

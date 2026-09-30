@@ -9,10 +9,20 @@ import { BLACK, GameType, WHITE } from '../core/types';
 import { blowing } from '../fx/blow';
 import { T, TF } from '../i18n';
 import { INFO_PAGES, type InfoLine } from './info';
-import { native } from '../online/client';
+import { native } from '../app/native';
+import { netTick, st as netSt } from '../online/client';
 import { Button, Fit, Hair, Seg, Slider, StoneIcon } from './widgets';
 
 export const isDesktop = () => !!native();
+
+/** 服务端告知有新版本时的提示；有下载地址时点一下用浏览器打开 */
+export function UpdateNote({ style }: { style?: Record<string, string> }) {
+  netTick.value;
+  const u = netSt.update;
+  if (!u) return null;
+  const go = () => { if (/^https?:\/\//.test(u.url)) window.open(u.url); };
+  return <div class={'update-note' + (u.url ? ' link' : '')} style={style} onClick={go}><Fit size={13} min={10}>{TF(u.url ? '有新版本 %s，点这里下载' : '有新版本 %s', u.version)}</Fit></div>;
+}
 
 // ---------------- 开始菜单 ----------------
 
@@ -33,6 +43,7 @@ export function MenuPanel({ h }: { h: number }) {
         <Button label={T('更多')} height={46} onClick={() => goScreen(Screen.More)} />
         {isDesktop() && <Button label={T('退出游戏')} height={46} onClick={() => native()?.quit()} />}
       </div>
+      <UpdateNote style={{ position: 'absolute', left: '0px', right: '0px', bottom: '24px' }} />
       <div class="foot" style={{ bottom: '0px' }}>v{VERSION}   ·   Copyright 2026 LightKing</div>
     </div>
   );
@@ -215,7 +226,12 @@ export function MorePanel({ h }: { h: number }) {
       </div>
       <div style={{ position: 'absolute', left: 0, right: 0, top: Math.max(80, bottom - top) + top + 12 + 'px' }}>
         <Hair />
-        <Button label={T('返回')} height={44} style={{ marginTop: '12px', width: '100%' }} onClick={() => goScreen(Screen.Menu)} />
+        {INFO_PAGES[tab].title === '关于' && isDesktop()
+          ? <div class="btns" style={{ marginTop: '12px' }}>
+            <Button label={T('打开日志文件夹')} height={44} onClick={() => native()?.openLogs()} />
+            <Button label={T('返回')} height={44} onClick={() => goScreen(Screen.Menu)} />
+          </div>
+          : <Button label={T('返回')} height={44} style={{ marginTop: '12px', width: '100%' }} onClick={() => goScreen(Screen.Menu)} />}
       </div>
     </div>
   );

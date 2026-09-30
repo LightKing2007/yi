@@ -7,6 +7,7 @@ import { screen, Screen } from '../app/state';
 import { now } from '../core/clock';
 import { setAudioImpl, type SfxId } from './index';
 import type { SynthOut } from './synth.worker';
+import { logError } from '../app/native';
 
 let ctx: AudioContext | null = null;
 const buffers = new Map<string, AudioBuffer>();
@@ -79,6 +80,7 @@ function updateMusic() {
 
 export function initAudio() {
   const worker = new Worker(new URL('./synth.worker.ts', import.meta.url), { type: 'module' });
+  worker.onerror = e => logError('合成声音', e.message);
   worker.onmessage = (e: MessageEvent<SynthOut>) => { if (ctx) toBuffer(e.data); else pendingRaw.push(e.data); };
   worker.postMessage('go');
   // 浏览器的自动播放限制：第一次点击 / 按键时才开声音

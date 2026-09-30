@@ -1,7 +1,7 @@
 /** 联机服务端：匹配 / 排位、配对确认、好友房间、段位、对局中的各种请求、断线重连、超时（用假时钟直接驱动 RoomServer），以及真实的 WebSocket 连接 */
 import { describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
-import { MemoryStore, RoomServer, type Session } from '../server/rooms';
+import { MemoryStore, RoomServer, type Conn, type RoomServerOptions, type Session } from '../server/rooms';
 import { startHost } from '../server/host';
 import { PROTO_VERSION, type C2S, type S2C } from '../src/shared/protocol';
 
@@ -13,17 +13,19 @@ const newUid = () => 'test-device-' + String(++uidSeq).padStart(8, '0');
 class Client {
   inbox: S2C[] = [];
   sess: Session;
+  conn: Conn;
   id = 0;
   token = '';
   closed = false;
   welcome?: Msg<'welcome'>;
   constructor(public srv: RoomServer, public name: string, token?: string, public uid = newUid()) {
-    this.sess = srv.connect({ send: m => { if (!this.closed) this.inbox.push(m); }, close: () => { this.closed = true; } })!;
+    this.conn = { send: m => { if (!this.closed) this.inbox.push(m); }, close: () => { this.closed = true; } };
+    this.sess = srv.connect(this.conn)!;
     this.send({ t: 'hello', v: PROTO_VERSION, name, uid, token });
     const w = this.welcome = this.expect('welcome');
     if (w) { this.id = w.id; this.token = w.token; }
   }
-  send(m: C2S) { this.sess = this.srv.message(this.sess, m); }
+  send(m: C2S) { this.sess = this.srv.message(this.sess, m, this.conn); }
   /** 取出第一条该类型（且满足条件）的消息，连同它之前的消息一起丢掉 */
   expect<T extends S2C['t']>(t: T, where?: (m: Msg<T>) => boolean): Msg<T> | undefined {
     const i = this.inbox.findIndex(m => m.t === t && (!where || where(m as Msg<T>)));
@@ -34,12 +36,14 @@ class Client {
   }
   has(t: S2C['t']) { return this.inbox.some(m => m.t === t); }
   drain() { this.inbox = []; }
-  drop() { this.closed = true; this.srv.disconnect(this.sess); }
+  drop() { this.closed = true; this.srv.disconnect(this.sess, this.conn); }
+  /** 网络断了但服务端还没发现：这条连接收不到消息，也不再发出任何消息 */
+  silence() { this.closed = true; }
 }
 
-function world(store = new MemoryStore()) {
+function world(store = new MemoryStore(), opt: RoomServerOptions = {}) {
   let t = 1000;
-  const srv = new RoomServer({ now: () => t, random: () => 0.3, store });
+  const srv = new RoomServer({ now: () => t, random: () => 0.3, store, ...opt });
   const advance = (s: number) => { t += s; srv.tick(); };
   /** 时间流逝，期间这些客户端照常每 10 秒发一次心跳 */
   const idle = (s: number, ...cs: Client[]) => {
@@ -419,5 +423,101 @@ describe('WebSocket 传输', () => {
     } finally {
       await host.close();
     }
+  });
+});
+
+describe('2.0.1 联机修复', () => {
+  it('令牌已经失效（服务器重启过或掉线太久）：告诉客户端原来的对局不在了', () => {
+    const { srv } = world();
+    const a = new Client(srv, '甲', 'f'.repeat(32));
+    expect(a.id).toBeGreaterThan(0);
+    expect(a.expect('resumeFailed')).toBeTruthy();
+    const b = new Client(srv, '乙');
+    expect(b.has('resumeFailed')).toBe(false);
+  });
+
+  it('旧连接其实已经断了但还没被发现：新连接用令牌接管，旧连接迟到的断开被忽略', () => {
+    const { srv } = world();
+    const a = new Client(srv, '甲'), b = new Client(srv, '乙');
+    startGame(a, b);
+    a.send({ t: 'move', x: 7, y: 7 });
+    b.drain();
+    a.silence();
+    const a2 = new Client(srv, '甲', a.token, a.uid);
+    expect(a2.id).toBe(a.id);
+    expect(a2.expect('start')?.color).toBe(1);
+    expect(a2.expect('sync')?.acts).toEqual([{ k: 'M', x: 7, y: 7 }]);
+    expect(b.expect('peer')).toEqual({ t: 'peer', online: true });
+    srv.disconnect(a.sess, a.conn);                        // 旧连接这时才被发现断开
+    expect(b.has('peer')).toBe(false);
+    b.send({ t: 'move', x: 8, y: 8 });
+    expect(a2.expect('moved')).toEqual({ t: 'moved', x: 8, y: 8 });
+  });
+
+  it('断线期间对局结束：重连后补发结果与排位结算', () => {
+    const { srv } = world();
+    const a = new Client(srv, '甲'), b = new Client(srv, '乙');
+    matchUp(a, b, 'ranked');
+    a.drop();
+    b.send({ t: 'resign' });
+    expect(b.expect('over')?.reason).toBe('resign');
+    const a2 = new Client(srv, '甲', a.token, a.uid);
+    expect(a2.expect('start')).toBeTruthy();
+    expect(a2.expect('over')).toEqual({ t: 'over', winner: expect.any(Number), reason: 'resign' });
+    expect(a2.expect('rated')?.delta).toBe(16);
+    expect(a2.has('turn')).toBe(false);
+  });
+
+  it('掉线的一方不在时不计时，回来后才开始计时', () => {
+    const { srv, idle } = world();
+    const a = new Client(srv, '甲'), b = new Client(srv, '乙');
+    startGame(a, b, { moveTime: 30 });
+    a.send({ t: 'move', x: 7, y: 7 });
+    a.drop();
+    b.drain();
+    b.send({ t: 'move', x: 8, y: 8 });                     // 轮到掉线的黑棋
+    expect(b.expect('turn', m => m.color === 1)?.secs).toBe(-1);
+    idle(50, b);                                            // 比每步限时长，但在掉线宽限之内
+    expect(b.has('over')).toBe(false);
+    const a2 = new Client(srv, '甲', a.token, a.uid);
+    expect(a2.expect('turn')).toEqual({ t: 'turn', color: 1, secs: 30 });
+    expect(b.expect('turn')).toEqual({ t: 'turn', color: 1, secs: 30 });
+    idle(31, a2, b);
+    expect(b.expect('over')).toEqual({ t: 'over', winner: 2, reason: 'timeout' });
+  });
+
+  it('加入房间失败太多次后暂时不能再试', () => {
+    const { srv, advance } = world();
+    const a = new Client(srv, '甲'), b = new Client(srv, '乙');
+    a.send({ t: 'create', type: 0, size: 15, hostColor: 0, renju: true, moveTime: 0 });
+    const code = a.expect('created')!.code;
+    const wrong = code === '1234' ? '4321' : '1234';
+    for (let i = 0; i < 5; i++) { b.send({ t: 'join', code: wrong }); expect(b.expect('joinNo')?.reason).toBe('房号不存在，或房间已经开始'); }
+    b.send({ t: 'join', code });
+    expect(b.expect('joinNo')?.reason).toBe('尝试次数太多，请稍后再试');
+    a.send({ t: 'ping' });
+    b.send({ t: 'ping' });
+    advance(30); a.send({ t: 'ping' }); b.send({ t: 'ping' }); advance(31);
+    b.send({ t: 'join', code });
+    expect(b.expect('start')).toBeTruthy();
+  });
+
+  it('同一台设备的两个窗口不能同时排位', () => {
+    const { srv } = world();
+    const a = new Client(srv, '甲'), a2 = new Client(srv, '甲', undefined, a.uid);
+    a.send({ t: 'queue', mode: 'ranked', type: 0, size: 15 });
+    a2.send({ t: 'queue', mode: 'ranked', type: 0, size: 15 });
+    expect(a2.expect('error')?.text).toBe('这台设备已经在排位中了');
+    a2.send({ t: 'queue', mode: 'match', type: 0, size: 15 });
+    expect(a2.expect('queued')?.mode).toBe('match');
+  });
+
+  it('配置了最新版本时，welcome 带上版本号与下载地址', () => {
+    const { srv } = world(new MemoryStore(), { latest: '2.0.1', download: 'https://example.com/yi' });
+    const a = new Client(srv, '甲');
+    expect(a.welcome?.latest).toBe('2.0.1');
+    expect(a.welcome?.url).toBe('https://example.com/yi');
+    const { srv: plain } = world();
+    expect(new Client(plain, '乙').welcome?.latest).toBeUndefined();
   });
 });

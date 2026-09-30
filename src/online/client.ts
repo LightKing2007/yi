@@ -10,11 +10,12 @@ import { GameType } from '../core/types';
 import { T, TF } from '../i18n';
 import { sfx } from '../audio';
 import { animK, setSettings, settings } from '../app/settings';
-import { game, screen, Screen } from '../app/state';
+import { game, screen, Screen, VERSION } from '../app/state';
 import { ONLINE_SERVER } from './config';
+import { native } from '../app/native';
 import { bump, goScreen } from '../app/controller';
 import {
-  GRACE_SECS, PING_SECS, PROTO_VERSION, cleanName, newRating,
+  GRACE_SECS, PING_SECS, PROTO_VERSION, SILENT_SECS, cleanName, newRating,
   type Act, type AskKind, type C2S, type GameKind, type Opponent, type OverReason, type QueueMode, type Rating, type Ratings, type S2C,
 } from '../shared/protocol';
 
@@ -24,9 +25,6 @@ export enum Phase { Off, Connecting, Lobby, Queue, Found, Hosting, Playing }
 export type Msg = [string, ...(string | number)[]];
 export const tr = (m: Msg) => TF(m[0], ...m.slice(1));
 
-/** 桌面版主进程提供的少量系统功能（浏览器版没有） */
-export interface YiNative { platform: string; quit(): void; attention(): void }
-export const native = (): YiNative | undefined => (window as any).yiNative;
 
 /** 界面与联机状态有关的部分需要重绘时递增 */
 export const netTick = signal(0);
@@ -62,9 +60,33 @@ export const st = {
   rated: null as { delta: number; rating: Rating } | null,   // 排位结束后的段位变化
   peerOnline: true, oppLeft: false, peerBackBy: 0,
   reconnecting: false, retryAt: 0, lostAt: 0, pingAt: 0,
+  lastRecv: 0,                       // 最后一次收到服务端消息的时刻（判断连接是否已经静默断开）
+  resumeBy: 0,                       // 重连后应在此刻之前收到对局（收不到说明原来的对局已经不在了）；0 表示不在等
+  update: loadUpdate(),              // 服务端告知的新版本（比本机新才有）
   leaveAsk: false,                   // 对局未结束时点“离开”：先确认
   shownOnline: false,                // 对局界面显示的是联机对局（离开时面板淡出期间也保持）
 };
+
+/** 版本号比较：a 比 b 新 */
+export function newerVersion(a: string, b: string) {
+  const pa = a.split('.').map(n => parseInt(n, 10) || 0), pb = b.split('.').map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) > (pb[i] ?? 0);
+  return false;
+}
+
+/** 服务端告知过的新版本（存在本地，比当前版本新才算） */
+function loadUpdate(): { version: string; url: string } | null {
+  try {
+    const v = JSON.parse(localStorage.getItem('yi.update') ?? 'null');
+    if (v && typeof v.version === 'string' && newerVersion(v.version, VERSION)) return { version: v.version, url: String(v.url ?? '') };
+  } catch { /* 读不到就算了 */ }
+  return null;
+}
+
+function saveUpdate(latest: string | undefined, url: string | undefined) {
+  st.update = latest && newerVersion(latest, VERSION) ? { version: latest, url: url ?? '' } : null;
+  try { localStorage.setItem('yi.update', JSON.stringify(st.update)); } catch { /* 忽略 */ }
+}
 
 export function note(...parts: Msg[]) { st.notice = parts; st.noticeAt = now(); changed(); }
 
@@ -124,6 +146,7 @@ export function connect() {
     if (ws !== sock) return;
     opened = true;
     clearTimeout(timer);
+    st.lastRecv = now();
     sock.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, name: nick(), uid: uid(), token: st.reconnecting ? st.token : undefined } satisfies C2S));
     st.pingAt = now() + PING_SECS;
   };
@@ -131,6 +154,7 @@ export function connect() {
     if (ws !== sock || typeof e.data !== 'string') return;
     let m: S2C;
     try { m = JSON.parse(e.data); } catch { return; }
+    st.lastRecv = now();
     handle(m);
     changed();
   };
@@ -167,6 +191,7 @@ export function disconnect() {
   pending = [];
   st.phase = Phase.Off;
   st.reconnecting = false;
+  st.resumeBy = 0;
   st.token = '';
   st.busy = false;
   st.opp = null;
@@ -215,7 +240,7 @@ function onStart(m: Extract<S2C, { t: 'start' }>) {
 }
 
 const WHY: Record<string, [string, string]> = {
-  resign: ['对方认输', '你认输了'], timeout: ['对方超时', '你超时了'], disconnect: ['对方掉线未归', '对方掉线未归'],
+  resign: ['对方认输', '你认输了'], timeout: ['对方超时', '你超时了'], disconnect: ['对方掉线未归', '你掉线太久，对局已判负'],
   left: ['对方离开了对局', '你离开了对局'], draw: ['双方同意和棋', '双方同意和棋'], full: ['棋盘已满', '棋盘已满'],
   score: ['点目结束', '点目结束'], five: ['五子连珠', '五子连珠'],
 };
@@ -243,6 +268,18 @@ const ANSWER: Record<AskKind, [string, string]> = {
   rematch: ['对方同意了你的再来一局申请', '对方拒绝了你的再来一局申请'],
 };
 
+/** 重连上了，但原来的对局已经不在了（服务器重启过，或者掉线太久被判负）：退出对局，回到多人游戏页 */
+function resumeFailed() {
+  st.resumeBy = 0;
+  if (st.phase !== Phase.Playing) return;
+  st.phase = Phase.Lobby;
+  st.askIn = st.askOut = null;
+  st.leaveAsk = false;
+  st.turnEnds = 0;
+  st.error = null;
+  note(['这一局已经无法继续，可能是服务器重启过或掉线太久']);
+}
+
 /** 匹配成功：两声落子般的轻响；窗口不在前台时提醒一下 */
 function alertFound() {
   sfx.clack(1);
@@ -262,7 +299,12 @@ function handle(m: S2C) {
     case 'welcome': {
       st.token = m.token;
       st.ratings = m.ratings;
-      if (st.reconnecting) { st.reconnecting = false; note(['已重新连上']); }   // 随后会收到 start 与 sync
+      saveUpdate(m.latest, m.url);
+      if (st.reconnecting) {                                   // 随后应收到 start 与 sync；老版本服务端找不回对局时什么也不说，所以限时等
+        st.reconnecting = false;
+        st.resumeBy = t + 3;
+        note(['已重新连上']);
+      }
       else if (st.phase === Phase.Connecting) st.phase = Phase.Lobby;
       const out = pending;
       pending = [];
@@ -290,7 +332,8 @@ function handle(m: S2C) {
       break;
     case 'created': st.code = m.code; st.phase = Phase.Hosting; st.busy = false; break;
     case 'joinNo': st.busy = false; note([m.reason]); break;
-    case 'start': onStart(m); break;
+    case 'start': st.resumeBy = 0; onStart(m); break;
+    case 'resumeFailed': resumeFailed(); break;
     case 'sync': replay(m.acts); bump(); break;
     case 'moved': g.animK = animK(); g.play(m.x, m.y); g.msg = null; bump(); break;
     case 'passed': g.pass(); st.agreed = [false, false, false]; bump(); break;
@@ -340,6 +383,9 @@ export function update(t: number) {
     } else if (t >= st.retryAt) { st.retryAt = t + 2; connect(); }
   }
   if (ws && ws.readyState === WebSocket.OPEN && t >= st.pingAt) { send({ t: 'ping' }); st.pingAt = t + PING_SECS; }
+  // 很久没收到服务端的任何消息（连心跳回应都没有）：连接多半已经静默断开，主动关掉，对局中会自动重连
+  if (ws && ws.readyState === WebSocket.OPEN && st.lastRecv && t - st.lastRecv > SILENT_SECS) { netClose(); lost(); }
+  if (st.resumeBy && t > st.resumeBy) resumeFailed();
   // 确认超时（服务端也会判，这里只是保证界面不会停在“找到对手”）
   if (st.phase === Phase.Found && t - st.foundAt > st.foundSecs + 3) { st.phase = Phase.Lobby; st.opp = null; changed(); }
   // 联机对局中连接彻底断了：回到多人游戏页

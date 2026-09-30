@@ -51,10 +51,13 @@ npm run typecheck
 ## 打包发行
 
 ```bash
-npm run dist:mac     # release/Yi-2.0.0-mac-arm64.dmg、Yi-2.0.0-mac-x64.dmg
-npm run dist:win     # release/Yi-2.0.0-win-x64-setup.exe（在 Windows 上打包）
-npm run dist:linux   # release/Yi-2.0.0-linux-x86_64.AppImage（在 Linux 上打包）
+npm run dist:mac     # release/Yi-<版本>-mac-arm64.dmg、Yi-<版本>-mac-x64.dmg
+npm run dist:win     # release/Yi-<版本>-win-x64-setup.exe（在 Windows 上打包）
+npm run dist:linux   # release/Yi-<版本>-linux-x86_64.AppImage（在 Linux 上打包）
 ```
+
+- **版本号**只写在 `package.json` 的 `version` 一处，游戏里显示的版本号在构建时从这里取。
+- **错误日志**：桌面版把出错信息写到用户数据目录下的 `logs/yi.log`（超过 1 MB 时换成 `yi.old.log`），「更多 · 关于」里有「打开日志文件夹」。只在本机，不上传。
 
 - 开始菜单的大字「弈」是宣传片片名同款的行楷（macOS 的 Xingkai SC），预先渲染成 `src/ui/assets/title-yi.png`，程序里只带这张图、不带字体文件（系统字体不能随程序分发）。要重新生成：在 Mac 上运行 `npm run title-art`（行楷若未下载，先在「字体册」里下载）。
 - 应用图标是暖白圆角方块正中一个墨色行楷「弈」，由 [scripts/make-icon.swift](scripts/make-icon.swift) 画出：在 Mac 上运行 `npm run icon`（也可 `npm run icon -- seal` 加上红色「棋」印，或 `-- ink` 用深色底），得到 `build-res/icon.png`（打包时自动转换成各平台格式）与 `public/icon.png`（窗口图标）。
@@ -76,6 +79,19 @@ node dist-server/server.cjs 8443   # 端口默认 8443
 
 段位存在运行目录下的 `yi-ratings.json`（可用环境变量 `YI_DATA` 指定路径），只记匿名身份的散列、昵称与段位分，备份这一个文件即可。
 
+服务端的环境变量：
+
+| 变量 | 作用 |
+|---|---|
+| `PORT` | 端口（也可以写在命令行参数里），默认 8443 |
+| `EXTRA_PORTS` | 另外同时监听的端口，逗号分隔。换端口的过渡期让老版本客户端照常连上，例如 `7700` |
+| `HOST` | 监听地址，默认所有网卡；放在反向代理后面时设为 `127.0.0.1` |
+| `YI_DATA` | 段位存档的路径 |
+| `YI_LATEST` | 最新的客户端版本号，例如 `2.0.1`。客户端版本较旧时，开始菜单和多人游戏页会提示有新版本 |
+| `YI_DOWNLOAD` | 新版本的下载地址（`https://`），提示可以点开 |
+
+同一个 IP 最多同时 8 条连接；同一条连接一分钟内加入房间失败 5 次后，暂时不能再试。
+
 部署到服务器：把 `dist-server/server.cjs` 拷过去，装好 Node.js 20+，用 systemd 常驻（`/etc/systemd/system/yi.service`）：
 
 ```ini
@@ -85,6 +101,9 @@ After=network.target
 
 [Service]
 ExecStart=/usr/bin/node /opt/yi/server.cjs 8443
+Environment=EXTRA_PORTS=7700
+Environment=YI_LATEST=2.0.1
+Environment=YI_DOWNLOAD=https://example.com/yi
 WorkingDirectory=/opt/yi
 Restart=always
 User=yi
@@ -98,7 +117,7 @@ sudo systemctl enable --now yi
 journalctl -u yi -f                # 查看日志：上线、建房、开局、结束……
 ```
 
-记得在云服务器的安全组 / 防火墙里放行 TCP 8443。游戏连接的服务器地址见上文「打包发行」里的 `VITE_YI_SERVER`。
+记得在云服务器的安全组 / 防火墙里放行 TCP 8443（过渡期还有 7700）。改了 service 文件后执行 `sudo systemctl daemon-reload && sudo systemctl restart yi`。游戏连接的服务器地址见上文「打包发行」里的 `VITE_YI_SERVER`。
 **注意**：2.0 的联机协议（WebSocket + JSON，协议版本 3）与 1.x 的 C 版服务端不兼容，服务器上要换成新的 `server.cjs`
 （`User=yi` 需要先 `sudo useradd -r yi && sudo chown yi /opt/yi`，让服务端能写段位文件）。
 
@@ -121,7 +140,7 @@ src/
     renju.ts            五子棋禁手判定（三三、四四、长连）
     gomokuAI.ts         五子棋人机；goAI.ts 围棋人机（蒙特卡洛树搜索、估死子）
   app/                app（主循环、布局、输入）、stage（每帧的场景更新与绘制顺序）、controller（对局操作与快捷键）、
-                      state（界面与对局状态）、settings（设置，存在本地存储）、ai.worker（电脑在后台线程思考）
+                      state（界面与对局状态）、settings（设置，存在本地存储）、ai.worker（电脑在后台线程思考）、native（桌面版的系统功能与错误日志）
   render/             gl（WebGL2 批量绘制）、shaders（全部着色器）、painter（绘制原语）、board、layout（自动缩放的布局）、theme
   fx/                 终局特效：gomokuWin、blow（炸飞与倒放）、goEnd、rewind、ghost（落子预览）、gather
   scene/              bowls（棋罐）、light（五种光影）、online（多人游戏页棋盘上的布置）
@@ -131,10 +150,10 @@ src/
   shared/protocol.ts  联机协议（客户端与服务端共用）与段位表
   ui/                 Preact 界面：panels（菜单 / 对局 / 设置 / 更多）、online（多人游戏：匹配 · 排位 · 好友）、widgets、styles.css、info（“更多”的文字）
   i18n/               多语言
-server/               rooms.ts 队列、配对、房间、对局与段位（与传输无关）、store.ts 段位存档、host.ts 接到 WebSocket、main.ts 入口
-electron/             桌面版主进程（窗口、匹配成功时的任务栏提醒）与预加载
-tests/                vitest：rules（规则与人机）、server（联机服务端）
-scripts/              build-node（打包主进程与服务端）、make-icon（生成图标）
+server/               rooms.ts 队列、配对、房间、对局与段位（与传输无关）、store.ts 段位存档、host.ts 接到 WebSocket（可同时监听几个端口）、main.ts 入口
+electron/             桌面版主进程（窗口、只允许一个实例、匹配成功时的任务栏提醒、错误日志）与预加载
+tests/                vitest：rules（规则与人机）、server（联机服务端）、client（联机客户端：断线、重连、服务器重启）
+scripts/              build-node（打包主进程与服务端）、make-icon.swift（生成图标）、make-title.swift（生成开始菜单的标题字）
 ```
 
 画面分四层：`#scene`（WebGL：背景、棋盘、棋子、棋罐、光影）、`#ui`（Preact 界面）、`#over`（飞过界面的碎子）、`#glow`（叠加的光）。

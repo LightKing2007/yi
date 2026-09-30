@@ -28,6 +28,7 @@ const MAX_PLAYERS = 2048;
 const MAX_ROOMS = 1024;
 const MAX_ACTS = 4096;
 const ELO_K = 32;
+const JOIN_FAILS = 5;              // 一条连接一分钟内最多几次加入失败，超过就暂时不让再试（防止遍历房号）
 
 interface QEntry { p: Player; mode: QueueMode; type: number; size: number; since: number }
 
@@ -50,6 +51,7 @@ interface Player {
   room: number;                   // 所在房间号，0 表示不在房间
   queued: QEntry | null;          // 正在匹配
   match: Match | null;            // 已配对、等双方确认
+  joinFails: number[];            // 最近几次加入房间失败的时刻
 }
 
 const enum RS { Wait, Play, Over }
@@ -68,7 +70,9 @@ interface Room {
   ask: AskKind | null; askFrom: number; askUntil: number;
   undoUsed: number[]; drawUsed: number[]; agreed: boolean[];
   deadline: number;               // 本手限时截止时刻；0 表示不计时
-  paused: number;                 // 掉线时暂停，保存剩余秒数
+  paused: number;                 // 有人掉线时暂停计时，保存本手剩余秒数
+  result: { winner: number; reason: OverReason } | null;   // 终局结果（掉线期间结束的，重连时补发）
+  rated: ({ type: number; rating: Rating; delta: number } | null)[];   // 排位结算，按执子颜色
 }
 
 export interface RoomServerOptions {
@@ -76,6 +80,8 @@ export interface RoomServerOptions {
   random?: () => number;
   log?: (text: string) => void;
   store?: RatingStore;
+  latest?: string;               // 最新的客户端版本号，随 welcome 发给客户端
+  download?: string;             // 新版本的下载地址
 }
 
 /** 连接对象：由传输层持有，收到消息时交回 RoomServer */
@@ -96,12 +102,14 @@ export class RoomServer {
   private random: () => number;
   private log: (text: string) => void;
   private store: RatingStore;
+  private latest: { latest?: string; url?: string };
 
   constructor(opt: RoomServerOptions = {}) {
     this.now = opt.now ?? (() => performance.now() / 1000);
     this.random = opt.random ?? Math.random;
     this.log = opt.log ?? (() => {});
     this.store = opt.store ?? new MemoryStore();
+    this.latest = opt.latest ? { latest: opt.latest, url: opt.download } : {};
   }
 
   // ---------------- 对外接口 ----------------
@@ -109,14 +117,14 @@ export class RoomServer {
   /** 新连接；满员时返回 null（调用方应关闭连接） */
   connect(conn: Conn): Session | null {
     if (this.players.size >= MAX_PLAYERS) return null;
-    const p: Player = { id: 0, conn, name: '', token: '', key: '', ratings: { gomoku: newRating(), go: newRating() }, lastSeen: this.now(), offAt: 0, room: 0, queued: null, match: null };
+    const p: Player = { id: 0, conn, name: '', token: '', key: '', ratings: { gomoku: newRating(), go: newRating() }, lastSeen: this.now(), offAt: 0, room: 0, queued: null, match: null, joinFails: [] };
     this.players.add(p);
     return p;
   }
 
   /** 收到一条消息（已解析的 JSON；格式不对的直接忽略）。返回此后该连接对应的会话（带令牌重连时换成原来的玩家） */
-  message(p: Session, raw: unknown): Session {
-    if (!this.players.has(p) || !p.conn || !raw || typeof raw !== 'object') return p;
+  message(p: Session, raw: unknown, conn?: Conn): Session {
+    if (!this.players.has(p) || !p.conn || (conn && p.conn !== conn) || !raw || typeof raw !== 'object') return p;
     const m = raw as C2S;
     if (typeof m.t !== 'string') return p;
     if (!p.id) return this.hello(p, m);
@@ -125,11 +133,11 @@ export class RoomServer {
   }
 
   /** 连接还活着（WebSocket 层的心跳回应）：浏览器把页面放到后台时脚本的定时器会被放慢，但心跳照常回应 */
-  touch(p: Session) { if (this.players.has(p) && p.conn) p.lastSeen = this.now(); }
+  touch(p: Session, conn?: Conn) { if (this.players.has(p) && p.conn && (!conn || p.conn === conn)) p.lastSeen = this.now(); }
 
-  /** 连接断开：对局中保留席位等待重连，其余情况直接离开 */
-  disconnect(p: Session) {
-    if (!this.players.has(p) || !p.conn) return;
+  /** 连接断开：对局中保留席位等待重连，其余情况直接离开。conn：断开的是哪条连接（已被新连接接管的旧连接断开时什么也不做） */
+  disconnect(p: Session, conn?: Conn) {
+    if (!this.players.has(p) || !p.conn || (conn && p.conn !== conn)) return;
     p.conn = null;
     p.offAt = this.now();
     if (!p.id) { this.players.delete(p); return; }
@@ -138,8 +146,10 @@ export class RoomServer {
     if (p.match) this.dropMatch(p.match, [p], '对方已离开');
     const r = this.rooms.get(p.room);
     if (r && r.state === RS.Play) {
-      if (r.deadline) { r.paused = r.deadline - this.now(); r.deadline = 0; }
-      this.send(this.seat(r, 3 - this.colorOf(r, p)), { t: 'peer', online: false, wait: GRACE_SECS });
+      if (r.deadline) { r.paused = r.deadline - this.now(); r.deadline = 0; }   // 有人掉线时双方都不计时
+      const other = this.seat(r, 3 - this.colorOf(r, p));
+      this.send(other, { t: 'peer', online: false, wait: GRACE_SECS });
+      if (r.paused > 0) this.send(other, { t: 'turn', color: r.g.cur.toMove, secs: -1 });
       return;
     }
     this.leaveRoom(p);
@@ -195,6 +205,18 @@ export class RoomServer {
   private broadcast(r: Room, msg: S2C) { for (const c of [BLACK, WHITE]) this.send(this.seat(r, c), msg); }
   private addAct(r: Room, a: Act) { if (r.acts.length < MAX_ACTS) r.acts.push(a); }
   private busy(p: Player) { return !!(p.room || p.match); }
+
+  /** 同一台设备的另一个会话正在排位（排队、等确认或对局中）：两个窗口同时排位会互相覆盖段位 */
+  private rankedElsewhere(p: Player) {
+    if (!p.key) return false;
+    for (const o of this.players) {
+      if (o === p || o.key !== p.key) continue;
+      if (o.queued?.mode === 'ranked' || o.match?.mode === 'ranked') return true;
+      const r = this.rooms.get(o.room);
+      if (r && r.kind === 'ranked' && r.state === RS.Play) return true;
+    }
+    return false;
+  }
 
   // ---------------- 匹配与排位 ----------------
 
@@ -267,7 +289,7 @@ export class RoomServer {
       id: this.nextRoom++, kind, code: '', state: RS.Wait, type, size, hostColor, renju, moveTime, host,
       pid: [0, 0, 0], who: [null, null, null], g: new Game(), acts: [],
       ask: null, askFrom: 0, askUntil: 0, undoUsed: [0, 0, 0], drawUsed: [0, 0, 0], agreed: [false, false, false],
-      deadline: 0, paused: 0,
+      deadline: 0, paused: 0, result: null, rated: [null, null, null],
     };
     this.rooms.set(r.id, r);
     return r;
@@ -295,15 +317,21 @@ export class RoomServer {
 
   /** 新的一手开始：重新计时并通知双方 */
   private startTurn(r: Room) {
-    r.deadline = r.moveTime > 0 && !r.g.scoring ? this.now() + r.moveTime : 0;
+    const timed = r.moveTime > 0 && !r.g.scoring;
+    r.deadline = timed && this.bothOnline(r) ? this.now() + r.moveTime : 0;
+    r.paused = timed && !r.deadline ? r.moveTime : 0;
     this.broadcast(r, { t: 'turn', color: r.g.cur.toMove, secs: r.deadline ? r.moveTime : -1 });
   }
+
+  /** 对局双方都连着 */
+  private bothOnline(r: Room) { return !!(this.seat(r, BLACK)?.conn && this.seat(r, WHITE)?.conn); }
 
   private finish(r: Room, winner: number, reason: OverReason) {
     if (r.state !== RS.Play) return;
     r.state = RS.Over;
     r.ask = null;
-    r.deadline = 0;
+    r.deadline = 0; r.paused = 0;
+    r.result = { winner, reason };
     this.broadcast(r, { t: 'over', winner, reason });
     this.log(`房间 ${r.id} 结束：胜方 ${winner}（${reason}）`);
     if (r.kind === 'ranked') this.rate(r, winner);
@@ -323,6 +351,7 @@ export class RoomServer {
       rt.points = Math.max(0, rt.points + delta);
       if (s === 1) rt.win++; else if (s === 0) rt.loss++; else rt.draw++;
       if (p.key) this.store.set(p.key, p.ratings, p.name);
+      r.rated[p === b ? BLACK : WHITE] = { type: r.type, rating: { ...rt }, delta };
       this.send(p, { t: 'rated', type: r.type, rating: { ...rt }, delta });
     };
     apply(b, rb, d, sb);
@@ -346,6 +375,7 @@ export class RoomServer {
     r.undoUsed = [0, 0, 0]; r.drawUsed = [0, 0, 0]; r.agreed = [false, false, false];
     r.state = RS.Play;
     r.paused = 0;
+    r.result = null; r.rated = [null, null, null];
   }
 
   private freeRoom(r: Room) {
@@ -397,7 +427,12 @@ export class RoomServer {
     this.sendStart(r, p);
     this.send(p, { t: 'sync', acts: r.acts.slice() });
     for (const c of [BLACK, WHITE]) if (r.agreed[c]) this.send(p, { t: 'agreed', color: c });
-    if (r.state === RS.Over) return;
+    if (r.state === RS.Over) {                                   // 掉线期间对局已经结束：补发结果与排位结算
+      if (r.result) this.send(p, { t: 'over', ...r.result });
+      const rt = r.rated[this.colorOf(r, p)];
+      if (rt) this.send(p, { t: 'rated', ...rt });
+      return;
+    }
     const me = this.colorOf(r, p);
     if (r.ask && r.askFrom !== me) this.send(p, { t: 'ask', kind: r.ask });
     this.send(p, { t: 'turn', color: r.g.cur.toMove, secs: r.deadline ? Math.round(r.deadline - this.now()) : -1 });
@@ -407,19 +442,28 @@ export class RoomServer {
     if (m.t !== 'hello') { this.send(p, { t: 'error', text: '协议错误' }); return p; }
     if (int(m.v) !== PROTO_VERSION) { this.send(p, { t: 'error', text: '客户端版本与服务器不一致，请更新游戏' }); return p; }
     p.lastSeen = this.now();
-    if (typeof m.token === 'string' && m.token) {             // 带令牌：找回掉线的自己
+    const resuming = typeof m.token === 'string' && !!m.token;
+    if (resuming) {                                           // 带令牌：找回掉线的自己
       for (const o of this.players) {
-        if (o === p || o.conn || !o.id || o.token !== m.token) continue;
+        if (o === p || !o.id || o.token !== m.token) continue;
+        const old = o.conn;
+        if (old) {                                            // 旧连接其实已经断了，只是还没被发现：由新连接接管
+          o.conn = null;
+          old.close();
+        }
         o.conn = p.conn;
         o.lastSeen = this.now();
         this.players.delete(p);
         p.conn = null;
-        this.send(o, { t: 'welcome', id: o.id, token: o.token, ratings: o.ratings });
+        this.send(o, { t: 'welcome', id: o.id, token: o.token, ratings: o.ratings, ...this.latest });
         const r = this.rooms.get(o.room);
         if (r && r.state !== RS.Wait) {
-          if (r.paused > 0) { r.deadline = this.now() + r.paused; r.paused = 0; }
+          const resume = r.state === RS.Play && r.paused > 0 && this.bothOnline(r);
+          if (resume) { r.deadline = this.now() + r.paused; r.paused = 0; }
           this.resync(r, o);
-          this.send(this.seat(r, 3 - this.colorOf(r, o)), { t: 'peer', online: true });
+          const other = this.seat(r, 3 - this.colorOf(r, o));
+          this.send(other, { t: 'peer', online: true });
+          if (resume) this.send(other, { t: 'turn', color: r.g.cur.toMove, secs: Math.round(r.deadline - this.now()) });
         }
         this.log(`${o.name} 重新连上`);
         return o;
@@ -433,7 +477,8 @@ export class RoomServer {
     p.key = uid ? createHash('sha256').update('yi:' + uid).digest('hex').slice(0, 32) : '';
     const saved = p.key ? this.store.get(p.key) : undefined;
     p.ratings = { gomoku: { ...newRating(), ...saved?.gomoku }, go: { ...newRating(), ...saved?.go } };
-    this.send(p, { t: 'welcome', id: p.id, token: p.token, ratings: p.ratings });
+    this.send(p, { t: 'welcome', id: p.id, token: p.token, ratings: p.ratings, ...this.latest });
+    if (resuming) this.send(p, { t: 'resumeFailed' });        // 原来的对局已经不在了（服务器重启过，或掉线太久）
     this.log(`${p.name} 上线（玩家 ${p.id}）`);
     return p;
   }
@@ -449,6 +494,7 @@ export class RoomServer {
       case 'name': if (!this.busy(p)) p.name = cleanName(m.name, p.name); return;
       case 'queue': {
         if (this.busy(p)) { this.send(p, { t: 'error', text: '你已经在一个房间里了' }); return; }
+        if (m.mode === 'ranked' && this.rankedElsewhere(p)) { this.send(p, { t: 'error', text: '这台设备已经在排位中了' }); return; }
         this.unqueue(p);
         this.enqueue(p, m.mode === 'ranked' ? 'ranked' : 'match', int(m.type), int(m.size));
         return;
@@ -472,12 +518,15 @@ export class RoomServer {
         if (r && r.state === RS.Wait && r.host === p.id) { p.room = 0; this.freeRoom(r); }
         return;
       case 'join': {
-        const code = String(m.code ?? '').trim();
+        const code = String(m.code ?? '').trim(), now = this.now();
+        p.joinFails = p.joinFails.filter(t0 => now - t0 < 60);
+        if (p.joinFails.length >= JOIN_FAILS) { this.send(p, { t: 'joinNo', reason: '尝试次数太多，请稍后再试' }); return; }
         const t = [...this.rooms.values()].find(o => o.state === RS.Wait && o.code === code);
         if (this.busy(p)) { this.send(p, { t: 'joinNo', reason: '你已经在一个房间里了' }); return; }
-        if (!t) { this.send(p, { t: 'joinNo', reason: '房号不存在，或房间已经开始' }); return; }
+        const noRoom = () => { p.joinFails.push(now); this.send(p, { t: 'joinNo', reason: '房号不存在，或房间已经开始' }); };
+        if (!t) { noRoom(); return; }
         const host = this.byId(t.host);
-        if (!host || !host.conn) { this.freeRoom(t); this.send(p, { t: 'joinNo', reason: '房号不存在，或房间已经开始' }); return; }
+        if (!host || !host.conn) { this.freeRoom(t); noRoom(); return; }
         if (host === p) { this.send(p, { t: 'joinNo', reason: '这是你自己的房间' }); return; }
         this.unqueue(p);
         const hc = t.hostColor === 2 ? (this.random() < 0.5 ? BLACK : WHITE) : t.hostColor === 1 ? WHITE : BLACK;

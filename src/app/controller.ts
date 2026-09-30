@@ -9,6 +9,7 @@ import type { AiReply, AiRequest } from './ai.worker';
 import { aiColor, animK, setSettings, settings } from './settings';
 import { bowlsShown, game, screen, Screen, uiTick, view } from './state';
 import { online } from '../online/client';
+import { logError } from './native';
 
 export function bump() { uiTick.value++; }
 
@@ -94,6 +95,7 @@ function stampOf() { const g = game; return `${g.type}:${g.N}:${g.cur.moves}:${g
 function ensureWorker() {
   if (worker) return worker;
   worker = new Worker(new URL('./ai.worker.ts', import.meta.url), { type: 'module' });
+  worker.onerror = e => { logError('电脑思考', e.message); cancelAi(); worker = null; game.aiAt = now() + 2; };   // 出错就丢掉这个线程，稍后重新开
   worker.onmessage = (e: MessageEvent<AiReply>) => {
     if (pending && e.data.id === pending.id) { result = { stamp: pending.stamp, x: e.data.x, y: e.data.y }; pending = null; }
   };
