@@ -7,7 +7,7 @@
  */
 
 export const PROTO_VERSION = 3;
-export const PROTO_PORT = 7700;
+export const PROTO_PORT = 8443;
 export const NAME_MAX = 16;          // 昵称最多几个字
 export const UNDO_LIMIT = 3;         // 每局每人最多申请悔棋次数
 export const DRAW_LIMIT = 3;         // 每局每人最多求和次数

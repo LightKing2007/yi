@@ -44,8 +44,8 @@ npm run typecheck
 
 桌面版调试：先 `npm run dev`，另开一个终端 `npm run app:dev`（Electron 窗口加载开发服务器）。
 
-本机测试联机：`npm run build:node && npm run server` 起一个本地服务端（端口 7700），浏览器打开
-`http://localhost:5173/?server=ws://127.0.0.1:7700`，开两个标签页即可互相匹配或开好友房间。
+本机测试联机：`npm run build:node && npm run server` 起一个本地服务端（端口 8443），浏览器打开
+`http://localhost:5173/?server=ws://127.0.0.1:8443`，开两个标签页即可互相匹配或开好友房间。
 （两个标签页共用同一个匿名身份，排位不会让同一台设备自己和自己配对；测排位可以用两个不同的浏览器。）
 
 ## 打包发行
@@ -70,7 +70,7 @@ npm run dist:linux   # release/Yi-2.0.0-linux-x86_64.AppImage（在 Linux 上打
 
 ```bash
 npm run build:node                 # 生成 dist-server/server.cjs
-node dist-server/server.cjs 7700   # 端口默认 7700
+node dist-server/server.cjs 8443   # 端口默认 8443
 ```
 
 段位存在运行目录下的 `yi-ratings.json`（可用环境变量 `YI_DATA` 指定路径），只记匿名身份的散列、昵称与段位分，备份这一个文件即可。
@@ -83,7 +83,7 @@ Description=Yi online server
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/node /opt/yi/server.cjs 7700
+ExecStart=/usr/bin/node /opt/yi/server.cjs 8443
 WorkingDirectory=/opt/yi
 Restart=always
 User=yi
@@ -97,12 +97,12 @@ sudo systemctl enable --now yi
 journalctl -u yi -f                # 查看日志：上线、建房、开局、结束……
 ```
 
-记得在云服务器的安全组 / 防火墙里放行 TCP 7700。游戏连接的服务器地址见上文「打包发行」里的 `VITE_YI_SERVER`。
+记得在云服务器的安全组 / 防火墙里放行 TCP 8443。游戏连接的服务器地址见上文「打包发行」里的 `VITE_YI_SERVER`。
 **注意**：2.0 的联机协议（WebSocket + JSON，协议版本 3）与 1.x 的 C 版服务端不兼容，服务器上要换成新的 `server.cjs`
 （`User=yi` 需要先 `sudo useradd -r yi && sudo chown yi /opt/yi`，让服务端能写段位文件）。
 
-需要 `wss://` 时，用 Nginx / Caddy 反向代理并配证书，例如 Caddy：`yi.example.com { reverse_proxy 127.0.0.1:7700 }`；
-这时给服务端设环境变量 `HOST=127.0.0.1`（systemd 里加一行 `Environment=HOST=127.0.0.1`），让它只接受本机反向代理的连接，并在安全组里关掉 7700。
+需要 `wss://` 时，用 Nginx / Caddy 反向代理并配证书，例如 Caddy：`yi.example.com { reverse_proxy 127.0.0.1:8443 }`；
+这时给服务端设环境变量 `HOST=127.0.0.1`（systemd 里加一行 `Environment=HOST=127.0.0.1`），让它只接受本机反向代理的连接，并在安全组里关掉 8443，只开放 443。
 
 ## 语言
 

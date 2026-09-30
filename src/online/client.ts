@@ -78,7 +78,7 @@ let ws: WebSocket | null = null;
 let pending: C2S[] = [];             // 连上之后要发的消息
 
 function serverUrl() {
-  const q = new URLSearchParams(location.search).get('server');   // 本机测试：?server=ws://127.0.0.1:7700
+  const q = new URLSearchParams(location.search).get('server');   // 本机测试：?server=ws://127.0.0.1:8443
   return q || ONLINE_SERVER;
 }
 
