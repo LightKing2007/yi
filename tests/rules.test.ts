@@ -146,7 +146,8 @@ describe('五子棋人机', () => {
         moves++;
       }
       expect(moves).toBeGreaterThan(8);
-      if (lv === 2) expect(worst).toBeLessThan(1500);
+      // 困难电脑单步思考的上限；CI 的机器比本机慢两三倍，放宽到 4 秒，免得时快时慢地失败
+      if (lv === 2) expect(worst).toBeLessThan(process.env.CI ? 4000 : 1500);
     }, 60000);
   }
 });
