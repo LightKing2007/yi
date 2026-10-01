@@ -15,7 +15,7 @@ app.commandLine.appendSwitch('ignore-gpu-blocklist');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 // 不显示的窗口在没有显卡的 Windows 上可能一直不出画面，截图就会卡住：设了 UI_SHOTS_VISIBLE 时用普通窗口
 const visible = !!process.env.UI_SHOTS_VISIBLE;
-setTimeout(() => { console.log('超时：三分钟还没截完'); app.exit(1); }, 180000).unref();
+setTimeout(() => { console.log("超时：十分钟还没截完"); app.exit(1); }, 600000).unref();   // 没有显卡的机器上一张图要十几秒
 
 app.whenReady().then(async () => {
   const { createServer } = await import('vite');
