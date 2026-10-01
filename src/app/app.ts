@@ -4,7 +4,7 @@ import { computeLayout, type Layout } from '../render/layout';
 import { sfx } from '../audio';
 import { ghostUpdate } from '../fx/ghost';
 import { clearParticles } from '../fx/fx';
-import { aiTick, boardClick, boardHover, bump, handleKey, newGame } from './controller';
+import { aiTick, boardClick, boardHover, bump, controllerTick, handleKey, newGame } from './controller';
 import { animK, settings } from './settings';
 import { game, screen, Screen, uiTick, view, boardView } from './state';
 import { Stage } from './stage';
@@ -80,6 +80,7 @@ export function startApp(sceneCanvas: HTMLCanvasElement, overCanvas: HTMLCanvasE
     const L = layout.value;
     view.panelT = Math.min(1, view.panelT + dt / 0.6);
     aiTick(t);
+    controllerTick();
     stage.update(L, t, dt);
     handleEvents();
     online.update(t);

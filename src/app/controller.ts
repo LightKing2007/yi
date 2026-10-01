@@ -20,7 +20,29 @@ export function newGame(type: GameType = game.type, N: number = type === GameTyp
   bump();
 }
 
-export function setVsAI(on: boolean) { game.vsAI = on; newGame(game.type, game.N); }
+/**
+ * 玩家要开新局（按钮、快捷键、换棋类路数）：如果五子棋取胜后棋子还在炸飞的状态，
+ * 先让它们飞回原位（和“查看棋局”一样），落定后再慢慢清盘、开新局（见 controllerTick）
+ */
+export function requestNewGame(type: GameType = game.type, N: number = type === GameType.Gomoku ? 15 : game.goSize) {
+  if (blowing() && boardView.blowView > 0.001) {
+    boardView.review = true;
+    boardView.newPending = { type, N };
+    bump();
+    return;
+  }
+  newGame(type, N);
+}
+
+/** 每帧：棋子飞回原位之后，开等着的那一局 */
+export function controllerTick() {
+  const p = boardView.newPending;
+  if (!p || boardView.blowView > 0.001) return;
+  boardView.nextSwitchDur = 1.4;                         // 清盘慢一些
+  newGame(p.type, p.N);
+}
+
+export function setVsAI(on: boolean) { game.vsAI = on; requestNewGame(game.type, game.N); }
 
 /** 悔棋：若其余棋子已被炸飞，先让它们倒放飞回原位，落定后再悔棋 */
 export function requestUndo() {
@@ -33,7 +55,7 @@ export function requestUndo() {
 }
 
 export function pass() { if (!game.aiToMove()) { game.pass(); bump(); } }
-export function toggleReview() { if (blowing()) { boardView.review = !boardView.review; bump(); } }
+export function toggleReview() { if (blowing() && !boardView.newPending) { boardView.review = !boardView.review; bump(); } }
 export function resumeGame() { game.resume(); bump(); }
 export function confirmScore() { game.confirmScore(); bump(); }
 
@@ -151,8 +173,8 @@ export function handleKey(e: KeyboardEvent) {
     return;
   }
   if (k === 'u') requestUndo();
-  if (k === 'n') newGame(game.type, game.N);
+  if (k === 'n') requestNewGame(game.type, game.N);
   if (k === 'p') pass();
-  if (k === '1' && game.type !== GameType.Gomoku) newGame(GameType.Gomoku, 15);
-  if (k === '2' && game.type !== GameType.Go) newGame(GameType.Go, game.goSize);
+  if (k === '1' && game.type !== GameType.Gomoku) requestNewGame(GameType.Gomoku, 15);
+  if (k === '2' && game.type !== GameType.Go) requestNewGame(GameType.Go, game.goSize);
 }

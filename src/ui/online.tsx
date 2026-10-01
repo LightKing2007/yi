@@ -156,7 +156,7 @@ function searching(h: number) {
     <div class="npanel col" style={{ height: h + 'px' }}>
       <h1 class="title" style={{ height: '60px' }}>{T(ranked ? '正在排位' : '正在匹配')}</h1>
       <div class="sub" style={{ height: '30px' }}><Fit size={14} min={10}>{summary(queueRules(st.qMode, st.qType, st.qSize))}</Fit></div>
-      {ranked && <div class="sub" style={{ height: '26px' }}>{TF('你的段位：%s', rankText(ratingOf(st.qType).points))}</div>}
+      {ranked && <div class="sub" style={{ height: '26px' }}>{TF('你的段位 %s', rankText(ratingOf(st.qType).points))}</div>}
       <div class="big-clock">{clock(Math.max(0, t - st.qSince))}</div>
       <div style={{ fontSize: '15px', height: '28px' }}>{T('正在寻找对手') + dots}</div>
       <div class="hint">{T('找到对手后双方确认即开局')}</div>
@@ -203,7 +203,7 @@ function hosting(h: number) {
       <div class="sub" style={{ height: '26px' }}><Fit size={14} min={10}>{summary({ type: u.fType, size: u.fType ? u.fSize : 15, renju, moveTime: u.fTime })}</Fit></div>
       <div class="sub" style={{ height: '20px', fontSize: '13px' }}>{T(side)}</div>
       <div class="room-code">{st.code.split('').map((c, i) => <span key={i}>{c}</span>)}</div>
-      <div style={{ fontSize: '14px', lineHeight: '22px' }}>{T('把房号告诉好友，对方在「好友 · 加入房间」里输入即可开局')}</div>
+      <div style={{ fontSize: '14px', lineHeight: '22px' }}>{T('把房号告诉好友，好友在加入房间里输入就能开局')}</div>
       <div style={{ flex: '1 1 0' }} />
       <Notice style={{ marginBottom: '10px' }} />
       <Button label={T('关闭房间')} height={44} style={{ width: '100%' }} onClick={net.closeRoom} />
@@ -249,7 +249,7 @@ function PlayerRow({ color }: { color: number }) {
   );
 }
 
-const ASK_IN: Record<string, string> = { undo: '对方申请悔棋（%d 秒）', draw: '对方申请和棋（%d 秒）', rematch: '对方申请再来一局（%d 秒）' };
+const ASK_IN: Record<string, string> = { undo: '对方申请悔棋，%d 秒', draw: '对方申请和棋，%d 秒', rematch: '对方申请再来一局，%d 秒' };
 const ASK_OUT: Record<string, string> = { undo: '已申请悔棋，等待对方回应…', draw: '已申请和棋，等待对方回应…', rematch: '已申请再来一局，等待对方回应…' };
 
 export function OnlineGamePanel({ h }: { h: number }) {
@@ -262,7 +262,7 @@ export function OnlineGamePanel({ h }: { h: number }) {
   else if (g.scoring) status = '点目';
   else if (st.toMove === st.myColor) status = '轮到你';
   else status = '等待对手';
-  const info = g.type === GameType.Go && (g.scoring || g.finished) ? TF('黑 %.0f  ·  白 %.1f（含贴 %.1f）', g.scoreB, g.scoreW, g.komi)
+  const info = g.type === GameType.Go && (g.scoring || g.finished) ? TF('黑 %.0f  ·  白 %.1f，含贴目 %.1f', g.scoreB, g.scoreW, g.komi)
     : g.type === GameType.Go ? TF('第 %d 手  ·  黑提 %d  ·  白提 %d', g.cur.moves + 1, g.cur.cap[BLACK], g.cur.cap[WHITE])
       : TF('第 %d 手', g.cur.moves + 1);
   const free = !st.askIn && !st.askOut && !st.leaveAsk;
@@ -325,7 +325,7 @@ export function OnlineGamePanel({ h }: { h: number }) {
           <Button label={T(st.agreed[st.myColor] ? '已确认' : '确认结果')} primary disabled={!free || st.agreed[st.myColor]} onClick={net.agree} />
         </div>
         <div class="faint" style={{ fontSize: '12px', marginTop: '10px', height: '22px' }}>
-          <Fit size={12} min={9}>{T(st.agreed[3 - st.myColor] ? '对方已确认结果' : '点击棋块可标记 / 取消死子，双方都确认后结束')}</Fit>
+          <Fit size={12} min={9}>{T(st.agreed[3 - st.myColor] ? '对方已确认结果' : '点击棋块可以标记或取消死子，双方都确认后结束')}</Fit>
         </div>
       </> : (
         <div class="btns">

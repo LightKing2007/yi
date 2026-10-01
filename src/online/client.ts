@@ -282,7 +282,7 @@ function alertFound() {
   setTimeout(() => sfx.clack(0.8), 140);
   if (document.hidden) {
     const old = document.title;
-    document.title = T('找到对手！');
+    document.title = T('找到对手了');
     const back = () => { document.title = old; document.removeEventListener('visibilitychange', back); };
     document.addEventListener('visibilitychange', back);
   }

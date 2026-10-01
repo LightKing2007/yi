@@ -8,7 +8,7 @@ import type { Painter } from '../render/painter';
 
 export const RW_RING_BASE = 0.30;   // 倒放涟漪收拢的时长（悔棋音按它合成，变速时改音高）
 
-export const switchK = (now: number) => Math.min(Math.max((now - boardView.switch.t0) / SWITCH_T, 0), 1);
+export const switchK = (now: number) => Math.min(Math.max((now - boardView.switch.t0) / boardView.switch.dur, 0), 1);
 
 const rwRing = () => RW_RING_BASE * animK();
 const rwLift = () => 0.38 * animK();

@@ -91,7 +91,7 @@ describe('禁手', () => {
     g.listener = view;
     expect(g.play(7, 7)).toBe(false);
     expect(g.lastReject).toBe('renju-33');
-    expect(view.msg?.key).toBe('禁手：黑棋不能下三三');
+    expect(view.msg?.key).toBe('黑棋不能下三三，这是禁手');
     g.renju = false;
     expect(g.play(7, 7)).toBe(true);
   });

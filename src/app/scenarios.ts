@@ -6,6 +6,7 @@
  *   ?scenario=gomoku-win            单个场景
  *   ?scenario=all&set=base          依次跑完全部场景，截图存进 .shots/base/
  *   ?scenario=gomoku-win&hold=1     不截图，停在最后一刻（肉眼看用）
+ * 名字以 film- 开头的是调效果用的连拍，不算在 all 里。
  */
 import { setClock } from '../core/clock';
 import { autoMarkDead } from '../core/snap';
@@ -13,7 +14,7 @@ import { BLACK, GameType, WHITE, at } from '../core/types';
 import { DEFAULTS, settings } from './settings';
 import { game, screen, Screen } from './state';
 import { devHooks } from './app';
-import { goScreen, newGame, requestUndo, toggleReview } from './controller';
+import { goScreen, newGame, requestNewGame, requestUndo, toggleReview } from './controller';
 import { Phase, st as net } from '../online/client';
 
 const STEP = 1 / 60;
@@ -37,6 +38,18 @@ function play(moves: [number, number][]) {
 }
 
 const GAME = 1.5;                          // 进入对局界面、棋罐移开之后再开始
+
+/** 摆满一片棋子，第 7 列留出连五：黑 (7,3)～(7,6)，再下 (7,7) 就连成五子 */
+function denseBoard() {
+  const s: [number, number, number][] = [];
+  for (let x = 2; x <= 12; x++) for (let y = 2; y <= 12; y++) {
+    if (x === 7 && y >= 2 && y <= 8) continue;
+    if (Math.random() < 0.55) s.push([x, y, Math.random() < 0.5 ? BLACK : WHITE]);
+  }
+  s.push([7, 3, BLACK], [7, 4, BLACK], [7, 5, BLACK], [7, 6, BLACK]);
+  place(s);
+  game.cur.moves = s.length;
+}
 
 const SCENARIOS: Record<string, Scenario> = {
   /** 开始菜单：棋罐与光影 */
@@ -131,6 +144,27 @@ const SCENARIOS: Record<string, Scenario> = {
     shots: [GAME + 0.8, GAME + 1.1, GAME + 1.5, GAME + 2.6],
   },
 
+  /** 调炸飞效果用的连拍：盘上摆满棋子，连五后每 0.1 秒截一张 */
+  'film-blow': {
+    steps: [
+      [0, () => goScreen(Screen.Game)],
+      [GAME, () => { newGame(GameType.Gomoku, 15); denseBoard(); }],
+      [GAME + 0.4, () => play([[7, 7]])],
+    ],
+    shots: Array.from({ length: 30 }, (_, i) => GAME + 0.4 + i * 0.1),
+  },
+
+  /** 调效果用的连拍：炸飞后开新局，棋子先飞回原位，再慢慢清盘 */
+  'film-newgame': {
+    steps: [
+      [0, () => goScreen(Screen.Game)],
+      [GAME, () => { newGame(GameType.Gomoku, 15); denseBoard(); }],
+      [GAME + 0.4, () => play([[7, 7]])],
+      [GAME + 3.5, () => requestNewGame(GameType.Gomoku, 15)],
+    ],
+    shots: Array.from({ length: 16 }, (_, i) => GAME + 3.4 + i * 0.2),
+  },
+
   /** 多人游戏页：找到对手时天元落下一颗白子，座位发光 */
   'online-found': {
     steps: [
@@ -141,7 +175,7 @@ const SCENARIOS: Record<string, Scenario> = {
   },
 };
 
-export const SCENARIO_NAMES = Object.keys(SCENARIOS);
+export const SCENARIO_NAMES = Object.keys(SCENARIOS).filter(n => !n.startsWith('film-'));
 
 /** 在应用启动之前调用：固定随机数、换成虚拟时钟、用默认设置、断开网络 */
 export function prepare() {
@@ -182,7 +216,7 @@ function runOne(name: string, set: string, hold: boolean): Promise<string[]> {
 
 /** 应用启动之后调用 */
 export async function run(name: string, set: string, hold: boolean) {
-  const names = name === 'all' ? SCENARIO_NAMES : [name];
+  const names = name === 'all' ? SCENARIO_NAMES : name.split(',');
   const all: string[] = [];
   for (const n of names) {
     if (screen.value !== Screen.Menu) { goScreen(Screen.Menu); await runIdle(2.5); }

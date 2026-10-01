@@ -12,8 +12,6 @@ import { BLACK, EMPTY, GameType, MAXN, WHITE, at, newBoard, newPos, type Board, 
 
 export type GameEvent = { type: 'stone'; strength: number } | { type: 'undo' } | { type: 'reset' };
 
-export const RENJU_NAMES: Record<number, string> = { [Renju.Overline]: '长连', [Renju.DoubleFour]: '四四', [Renju.DoubleThree]: '三三' };
-
 export interface NewGameOptions { renju?: boolean; vsAI?: boolean; aiColor?: number }
 
 /**

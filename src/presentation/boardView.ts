@@ -18,7 +18,7 @@ export interface FadeStone { x: number; y: number; c: number; t0: number }
 export interface RewindStone { x: number; y: number; c: number; t0: number }
 
 /** 切换棋盘 / 新局的过渡：记下旧棋盘，旧棋子由中心向外依次升起淡去 */
-export interface BoardSwitch { t0: number; N: number; b: Board; seed: Uint8Array }
+export interface BoardSwitch { t0: number; N: number; b: Board; seed: Uint8Array; dur: number }
 export const SWITCH_T = 0.7;
 
 export class BoardView implements GameListener {
@@ -32,7 +32,11 @@ export class BoardView implements GameListener {
   fades: FadeStone[] = [];
   /** 悔棋时收回、正在升起消失的棋子 */
   rw: RewindStone[] = [];
-  switch: BoardSwitch = { t0: -100, N: 15, b: newBoard(), seed: new Uint8Array(MAXN * MAXN) };
+  switch: BoardSwitch = { t0: -100, N: 15, b: newBoard(), seed: new Uint8Array(MAXN * MAXN), dur: SWITCH_T };
+  /** 下一次换棋盘过渡的时长（只用一次；炸飞后开新局时棋子先飞回原位，再慢一些地清盘） */
+  nextSwitchDur = SWITCH_T;
+  /** 炸飞状态下开新局：先让棋子飞回原位，落定后再开这一局 */
+  newPending: { type: number; N: number } | null = null;
   /** 五子连珠（或认输等结束时）的时刻，驱动胜利动画；0 表示无 */
   winT = 0;
   winBurst = 0;
@@ -60,7 +64,9 @@ export class BoardView implements GameListener {
   // ---------------- GameListener ----------------
 
   reset(prevN: number, prevB: Board, t: number) {
-    this.switch = { t0: t, N: prevN, b: prevB.slice(), seed: this.seed.slice() };
+    this.switch = { t0: t, N: prevN, b: prevB.slice(), seed: this.seed.slice(), dur: this.nextSwitchDur };
+    this.nextSwitchDur = SWITCH_T;
+    this.newPending = null;
     this.fades = []; this.rw = [];
     this.clearEnd();
     this.placeT.fill(-10); this.appearT.fill(-10);

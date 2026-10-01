@@ -1,6 +1,6 @@
 /** 右侧面板：开始菜单、对局、设置、更多 */
 import { useState } from 'preact/hooks';
-import { confirmScore, goScreen, newGame, pass, requestUndo, resumeGame, setVsAI, toggleReview } from '../app/controller';
+import { confirmScore, goScreen, newGame, pass, requestNewGame, requestUndo, resumeGame, setVsAI, toggleReview } from '../app/controller';
 import { Lang, resetSettings, setSettings, settings } from '../app/settings';
 import { game, Screen, uiTick, VERSION, boardView } from '../app/state';
 import { sfx } from '../audio';
@@ -64,7 +64,7 @@ export function GamePanel({ h }: { h: number }) {
   else status = g.cur.toMove === BLACK ? T('黑方落子') : T('白方落子');
   const info = g.over && g.type === GameType.Gomoku && g.winner !== 3 ? TF('五子连珠  ·  共 %d 手', g.cur.moves)
     : g.over && g.type === GameType.Go ? TF('胜 %.1f 目  ·  共 %d 手', Math.abs(g.scoreB - g.scoreW), g.cur.moves)
-      : g.scoring ? T('点击棋块可标记 / 取消死子') : TF('第 %d 手', g.cur.moves + 1);
+      : g.scoring ? T('点击棋块可以标记或取消死子') : TF('第 %d 手', g.cur.moves + 1);
   const capText = (c: number) => (g.cur.cap[c] || s.lang !== Lang.WY ? TF('提子 %d', g.cur.cap[c]) : '未有所提');
   const msgAge = boardView.msg ? now() - boardView.msgAt : 99;
   const foot = g.type === GameType.Go ? T('U 悔棋   P 停一手   N 新局   C 坐标   T 主题   Esc 菜单')
@@ -77,10 +77,10 @@ export function GamePanel({ h }: { h: number }) {
         <Button label={T('菜单')} height={30} style={{ width: '64px', flex: 'none' }} onClick={() => goScreen(Screen.Menu)} />
       </div>
       <div class="sub" style={{ marginTop: '4px', height: '38px' }}><Fit size={14} min={11}>{subtitle}</Fit></div>
-      <Seg items={[T('五子棋'), T('围棋')]} sel={g.type} onChange={m => newGame(m, m === GameType.Gomoku ? 15 : g.goSize)} />
+      <Seg items={[T('五子棋'), T('围棋')]} sel={g.type} onChange={m => requestNewGame(m, m === GameType.Gomoku ? 15 : g.goSize)} />
       <div style={{ height: '10px' }} />
       {g.type === GameType.Go && <>
-        <Seg items={[T('9 路'), T('13 路'), T('19 路')]} sel={g.N === 9 ? 0 : g.N === 13 ? 1 : 2} onChange={v => newGame(GameType.Go, [9, 13, 19][v])} />
+        <Seg items={[T('9 路'), T('13 路'), T('19 路')]} sel={g.N === 9 ? 0 : g.N === 13 ? 1 : 2} onChange={v => requestNewGame(GameType.Go, [9, 13, 19][v])} />
         <div style={{ height: '8px' }} />
       </>}
       <Seg items={[T('双人对弈'), T('人机对弈')]} sel={g.vsAI ? 1 : 0} onChange={v => setVsAI(v === 1)} />
@@ -115,14 +115,14 @@ export function GamePanel({ h }: { h: number }) {
         </> : g.type === GameType.Go ? <>
           <Button label={T('悔棋')} disabled={!g.hist.length} onClick={requestUndo} />
           <Button label={T('停一手')} disabled={g.over || g.aiToMove()} onClick={pass} />
-          <Button label={T('新局')} primary onClick={() => newGame(GameType.Go, g.N)} />
+          <Button label={T('新局')} primary onClick={() => requestNewGame(GameType.Go, g.N)} />
         </> : blown ? <>
           <Button label={T('悔棋')} disabled={!g.hist.length} onClick={requestUndo} />
           <Button label={boardView.review ? T('收起棋局') : T('查看棋局')} onClick={toggleReview} />
-          <Button label={T('新局')} primary onClick={() => newGame(GameType.Gomoku, 15)} />
+          <Button label={T('新局')} primary onClick={() => requestNewGame(GameType.Gomoku, 15)} />
         </> : <>
           <Button label={T('悔棋')} disabled={!g.hist.length} onClick={requestUndo} />
-          <Button label={T('新局')} primary onClick={() => newGame(GameType.Gomoku, 15)} />
+          <Button label={T('新局')} primary onClick={() => requestNewGame(GameType.Gomoku, 15)} />
         </>}
       </div>
       <div class="msg" style={{ marginTop: '22px', opacity: msgAge < 2 ? 1 : 0 }}>{boardView.msg && msgAge < 2.6 ? T(boardView.msg.key) : ''}</div>
