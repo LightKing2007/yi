@@ -13,13 +13,17 @@ app.commandLine.appendSwitch('enable-unsafe-swiftshader');
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+// 不显示的窗口在没有显卡的 Windows 上可能一直不出画面，截图就会卡住：设了 UI_SHOTS_VISIBLE 时用普通窗口
+const visible = !!process.env.UI_SHOTS_VISIBLE;
+setTimeout(() => { console.log('超时：三分钟还没截完'); app.exit(1); }, 180000).unref();
 
 app.whenReady().then(async () => {
   const { createServer } = await import('vite');
   const server = await createServer({ root: path.join(__dirname, '..'), server: { port: 0 }, logLevel: 'error' });
   await server.listen();
   const port = server.httpServer.address().port;
-  const win = new BrowserWindow({ width: 1320, height: 900, show: false, useContentSize: true, webPreferences: { offscreen: true, backgroundThrottling: false } });
+  console.log('开发服务器已启动，端口', port, visible ? '（普通窗口）' : '（不显示的窗口）');
+  const win = new BrowserWindow({ width: 1320, height: 900, x: 0, y: 0, show: visible, useContentSize: true, webPreferences: { offscreen: !visible, backgroundThrottling: false } });
   win.webContents.setFrameRate(30);
   win.webContents.on('console-message', e => { if (e.level === 'error') console.log('[页面]', e.message); });
   fs.mkdirSync(out, { recursive: true });
@@ -29,6 +33,7 @@ app.whenReady().then(async () => {
   // 不联网：联机对战页只看排版
   const url = `http://localhost:${port}/?server=ws://127.0.0.1:9`;
   await win.loadURL(url);
+  console.log('页面已载入');
   for (const [lang, tag] of [[1, 'zh'], [0, 'wy']]) {
     await js(`localStorage.setItem('yi.settings', JSON.stringify({ lang: ${lang}, nick: '棋手' })); 1`);
     await win.loadURL(url);
