@@ -3,7 +3,8 @@
  * 服务器在界面上不出现：需要时自动连接，出错时只提示“网络连接失败”。
  */
 import { signal } from '@preact/signals';
-import { useEffect } from 'preact/hooks';
+import type { ComponentChildren } from 'preact';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { goScreen, newGame, toggleReview } from '../app/controller';
 import { layout } from '../app/app';
 import { Lang, setSettings, settings } from '../app/settings';
@@ -132,7 +133,7 @@ function lobby(h: number) {
   const s = settings.value, u = ui.value;
   return (
     <div class="npanel col" style={{ height: h + 'px', ['--lw' as any]: labelW() + 'px' }}>
-      <h1 class="title" style={{ height: '60px' }}>{T('多人游戏')}</h1>
+      <h1 class="title" style={{ height: '60px' }}>{T('联机对战')}</h1>
       <UpdateNote style={{ marginTop: '-8px', marginBottom: '8px' }} />
       <Row label={T('昵称')}><Field value={s.nick} maxLength={16} placeholder={T('给自己取个名字')} onInput={v => setSettings({ nick: v })} /></Row>
       <Seg items={[T('匹配'), T('排位'), T('好友')]} sel={u.tab} onChange={v => setUi({ tab: v })} />
@@ -354,7 +355,15 @@ export function ScenePlates() {
   settings.value;
   const u = ui.value;
   const L = layout.value;
-  if (screen.value !== Screen.Online) return <div class="plates" />;
+  const on = screen.value === Screen.Online;
+  const last = useRef<ComponentChildren>(null);
+  const [, force] = useState(0);
+  useEffect(() => {                                       // 离开多人游戏页时名牌跟着面板淡出，淡完再清掉
+    if (on || !last.current) return;
+    const id = setTimeout(() => { last.current = null; force(v => v + 1); }, 350);
+    return () => clearTimeout(id);
+  }, [on]);
+  if (!on) return <div class={last.current ? 'plates off' : 'plates'}>{last.current}</div>;
   const pl = seatPlates(L), nick = settings.value.nick.trim() || T('棋手');
   const rankedView = st.phase === Phase.Queue || st.phase === Phase.Found ? st.qMode === 'ranked' : st.phase !== Phase.Hosting && u.tab === 1;
   const myType = st.phase === Phase.Queue || st.phase === Phase.Found ? st.qType : u.type;
@@ -364,10 +373,9 @@ export function ScenePlates() {
     other = st.opp.name + (st.qMode === 'ranked' && st.opp.points !== undefined ? '  ·  ' + T(rankName(st.opp.points)) : '');
     strong = true;
   } else other = T(st.phase === Phase.Queue ? '寻找对手…' : st.phase === Phase.Hosting ? '等待好友…' : '虚位以待');
-  return (
-    <div class="plates on">
-      <Plate x={pl[0].x} y={pl[0].y} strong text={me} />
-      <Plate key={strong ? 'o' : 'e'} x={pl[1].x} y={pl[1].y} strong={strong} dim={strong ? 1 : 0.8} text={other} />
-    </div>
-  );
+  last.current = <>
+    <Plate x={pl[0].x} y={pl[0].y} strong text={me} />
+    <Plate key={strong ? 'o' : 'e'} x={pl[1].x} y={pl[1].y} strong={strong} dim={strong ? 1 : 0.8} text={other} />
+  </>;
+  return <div class="plates on">{last.current}</div>;
 }

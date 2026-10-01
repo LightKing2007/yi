@@ -38,7 +38,7 @@ export function MenuPanel({ h }: { h: number }) {
       <Hair style={{ margin: '28px 0 34px' }} />
       <div class="stack">
         <Button label={T('单人游戏')} primary height={46} onClick={() => goScreen(Screen.Game)} />
-        <Button label={T('多人游戏')} height={46} onClick={() => goScreen(Screen.Online)} />
+        <Button label={T('联机对战')} height={46} onClick={() => goScreen(Screen.Online)} />
         <Button label={T('设置')} height={46} onClick={() => goScreen(Screen.Settings)} />
         <Button label={T('更多')} height={46} onClick={() => goScreen(Screen.More)} />
         {isDesktop() && <Button label={T('退出游戏')} height={46} onClick={() => native()?.quit()} />}

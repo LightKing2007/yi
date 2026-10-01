@@ -47,6 +47,7 @@ canvas { position: fixed; left: 0; top: 0; display: block; }
 .panel { position: absolute; left: 0; top: 0; zoom: var(--u); width: 300px; pointer-events: auto; }
 .panel.entering { animation: panel-in 0.3s cubic-bezier(0.2, 0.7, 0.3, 1) both; }
 .panel.leaving { animation: panel-out 0.3s ease-in both; pointer-events: none; }
+.panel.leaving * { animation: none !important; }   /* 离开时面板会重新挂载，里面的进场动画不能再放一遍，否则会闪 */
 @keyframes panel-in { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
 @keyframes panel-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(-28px); } }
 
@@ -183,6 +184,8 @@ canvas { position: fixed; left: 0; top: 0; display: block; }
 /* 棋盘上的名牌（位置是屏幕像素，尺寸随 --u 缩放） */
 .plates { position: absolute; inset: 0; pointer-events: none; }
 .plates.on { animation: fade-in 0.5s ease both; }
+.plates.off { animation: fade-out 0.3s ease-in both; }
+@keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 .plate {
   position: absolute; transform: translate(-50%, -50%); white-space: nowrap; color: var(--dim);
