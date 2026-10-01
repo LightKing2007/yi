@@ -1,4 +1,4 @@
-# 在 Windows、Linux 上把游戏的几个界面截成图（检查字体与排版），截图作为附件下载。手动运行。
+# 在 Windows、Linux 上把游戏的几个界面截成图（检查字体与排版），Windows 上再实际运行一遍安装程序截下每一页。截图作为附件下载。手动运行。
 name: UI 截图
 
 on:
@@ -11,7 +11,7 @@ jobs:
       matrix:
         os: [windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -24,6 +24,12 @@ jobs:
         env:
           UI_SHOTS_VISIBLE: '1'
         run: npx electron scripts/ui-shots.cjs ui-shots
+      - name: 安装程序截图（Windows）
+        if: runner.os == 'Windows'
+        run: |
+          npm run build
+          npx electron-builder --win --publish never
+          ./scripts/installer-shots.ps1 (Get-Item release/*-setup.exe).FullName ui-shots
       - name: 截图（Linux，没有显示器，用虚拟显示）
         if: runner.os == 'Linux'
         run: |

@@ -88,7 +88,13 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "shortcutName": "弈",
-      "uninstallDisplayName": "弈"
+      "uninstallDisplayName": "弈",
+      "installerLanguages": [
+        "zh_CN"
+      ],
+      "language": "2052",
+      "createDesktopShortcut": true,
+      "runAfterFinish": true
     },
     "linux": {
       "target": [
