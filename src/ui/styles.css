@@ -1,9 +1,14 @@
 /* 界面样式。尺寸都按设计稿（1320×900 的窗口）写，面板整体以 zoom: var(--u) 等比缩放，
    所以在任何分辨率、任何缩放比例的屏幕上都保持同样的比例，文字按实际像素清晰渲染 */
+/* 随游戏附带的字体子集（思源字体，scripts/make-fonts.mjs 生成）：系统里有中文字体时优先用系统的，没有时（精简的 Linux）用它们 */
+@font-face { font-family: "Yi Sans"; src: url("./assets/fonts/yi-sans-400.woff2") format("woff2"); font-weight: 100 800; font-display: block; }
+@font-face { font-family: "Yi Serif"; src: url("./assets/fonts/yi-serif-400.woff2") format("woff2"); font-weight: 100 600; font-display: block; }
+@font-face { font-family: "Yi Serif"; src: url("./assets/fonts/yi-serif-900.woff2") format("woff2"); font-weight: 700 900; font-display: block; }
+
 :root {
   --u: 1;
-  --sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", system-ui, sans-serif;
-  --serif: "Songti SC", "STSong", "SimSun", "Noto Serif CJK SC", "Source Han Serif SC", serif;
+  --sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Yi Sans", "Noto Sans CJK SC", "Source Han Sans SC", system-ui, sans-serif;
+  --serif: "Songti SC", "STSong", "Yi Serif", "SimSun", "Noto Serif CJK SC", "Source Han Serif SC", serif;   /* Windows 上用附带的思源宋体，不用系统强行加粗的宋体 */
   --text: rgb(38 36 33);
   --dim: rgb(125 119 111);
   --faint: rgb(172 166 158);

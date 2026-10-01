@@ -71,6 +71,9 @@ npm run dist:linux   # release/Yi-<版本>-linux-x86_64.AppImage（在 Linux 上
   用来检查字体与排版；本机也可以 `npx electron scripts/ui-shots.cjs 输出目录`。
 - **错误日志**：桌面版把出错信息写到用户数据目录下的 `logs/yi.log`（超过 1 MB 时换成 `yi.old.log`），「更多 · 关于」里有「打开日志文件夹」。只在本机，不上传。
 
+- **附带的字体**：`src/ui/assets/fonts/` 里是思源黑体、思源宋体（SIL OFL 许可）只含游戏用字的子集，约 1.4 MB。
+  系统里有中文字体时优先用系统的（macOS 完全不受影响），没有中文字体的 Linux 用它们，Windows 上的标题也用它而不用强行加粗的宋体。
+  改了界面文字之后运行 `node scripts/make-fonts.mjs` 重新生成（原始字体的下载地址写在脚本开头，放在不进仓库的 `.fonts-src/`）。
 - 开始菜单的大字「弈」是宣传片片名同款的行楷（macOS 的 Xingkai SC），预先渲染成 `src/ui/assets/title-yi.png`，程序里只带这张图、不带字体文件（系统字体不能随程序分发）。要重新生成：在 Mac 上运行 `npm run title-art`（行楷若未下载，先在「字体册」里下载）。
 - 应用图标是暖白圆角方块正中一个墨色行楷「弈」，由 [scripts/make-icon.swift](scripts/make-icon.swift) 画出：在 Mac 上运行 `npm run icon`（也可 `npm run icon -- seal` 加上红色「棋」印，或 `-- ink` 用深色底），得到 `build-res/icon.png`（打包时自动转换成各平台格式）与 `public/icon.png`（窗口图标）。
 - **macOS 签名与公证**：默认做临时（ad-hoc）签名，本机与自己的电脑可以直接运行；发给别人时，从网上下载的未公证应用会被系统拦截，
@@ -205,4 +208,5 @@ scripts/              build-node（打包主进程与服务端）、make-icon.sw
 
 Copyright 2026 LightKing All rights Reserved.
 
-使用 [Preact](https://preactjs.com)、[Electron](https://www.electronjs.org)、[ws](https://github.com/websockets/ws)（均为 MIT 许可）。
+使用 [Preact](https://preactjs.com)、[Electron](https://www.electronjs.org)、[ws](https://github.com/websockets/ws)（均为 MIT 许可），
+附带[思源黑体、思源宋体](https://github.com/notofonts/noto-cjk)的子集（SIL Open Font License 1.1）。

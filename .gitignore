@@ -15,3 +15,4 @@ yi-ratings.json.*
 .env.local
 .claude/
 .shots/
+.fonts-src/
