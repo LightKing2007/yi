@@ -12,7 +12,7 @@
 import path from 'node:path';
 import { PROTO_PORT, PROTO_VERSION } from '../src/shared/protocol';
 import { startHost } from './host';
-import { FileStore } from './store';
+import { FileStore, StoreLoadError, type StoreLog } from './store';
 
 const BUILD = `${__APP_VERSION__}（${__APP_COMMIT__}）`;
 if (process.argv.includes('--version')) { console.log(BUILD); process.exit(0); }
@@ -29,13 +29,23 @@ const log = (text: string) => {
   console.log(`[${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}] ${text}`);
 };
 
+const storeLog: StoreLog = (level, text) => log(level === 'info' ? text : `[${level}] ${text}`);
+
 const dataFile = path.resolve(process.env.YI_DATA ?? 'yi-ratings.json');
-const store = new FileStore(dataFile);
+let store: FileStore;
+try {
+  store = new FileStore(dataFile, { log: storeLog });
+} catch (e) {
+  if (!(e instanceof StoreLoadError)) throw e;
+  // 存档损坏时宁可不启动，也不以空数据覆盖原文件（DAT-050）
+  storeLog('error', e.message);
+  process.exit(e.exitCode);
+}
 
 startHost([port, ...extra], { log, store, host, latest, download, files }).then(h => {
   log(`弈 联机服务端 ${BUILD} 已启动，${host ? `地址 ${host}，` : ''}端口 ${h.ports.join('、')}（协议版本 ${PROTO_VERSION}），段位存档 ${dataFile}`
     + (latest ? `，最新客户端 ${latest}` : '') + (files ? `，安装包目录 ${files}` : ''));
-  const stop = () => { log('正在关闭…'); store.flush(); h.close().then(() => process.exit(0)); };
+  const stop = () => { log('正在关闭…'); store.close(); h.close().then(() => process.exit(0)); };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
 }).catch((e: Error) => {
