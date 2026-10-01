@@ -1,0 +1,14 @@
+#!/bin/sh
+# 提交说明的格式：类型: 说明（约定式提交，类型用英文，说明用中文），例如 feat: 安装包下载页、fix(联机): 返回时界面闪一下
+# 类型见 docs/RELEASE.md。npm install 时自动启用（package.json 的 prepare）。
+first=$(head -n 1 "$1")
+case "$first" in
+  Merge\ *|Revert\ *|fixup!\ *|squash!\ *) exit 0 ;;
+esac
+if printf '%s' "$first" | grep -Eq '^(feat|fix|perf|refactor|docs|test|ci|build|chore|revert|release)(\([^)]+\))?!?: .+'; then
+  exit 0
+fi
+echo "提交说明的第一行要写成「类型: 说明」，例如 feat: 安装包下载页" >&2
+echo "类型：feat 新功能、fix 修复、perf 性能、refactor 重构、docs 文档、test 测试、ci 自动流程、build 构建、chore 杂项、release 发版" >&2
+echo "现在是：$first" >&2
+exit 1

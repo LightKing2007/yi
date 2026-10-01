@@ -11,3 +11,5 @@ interface ImportMeta {
 
 /** 版本号（构建时从 package.json 注入） */
 declare const __APP_VERSION__: string;
+/** 构建时的提交号（只有服务端与桌面版主进程有，见 scripts/build-node.mjs） */
+declare const __APP_COMMIT__: string;

@@ -1,12 +1,19 @@
+# 每个 PR 与合并到 main 后：类型检查、测试、构建。PR 还要检查标题的格式（合并时它就是 main 上的提交说明）。
 name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       ELECTRON_SKIP_BINARY_DOWNLOAD: '1'   # 只跑类型检查与测试，不需要 Electron 本体
     steps:
@@ -20,3 +27,16 @@ jobs:
       - run: npm test
       - run: npm run build:web
       - run: npm run build:node
+
+  pr-title:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: "PR 标题写成「类型: 说明」"
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          echo "$TITLE" | grep -Eq '^(feat|fix|perf|refactor|docs|test|ci|build|chore|revert|release)(\([^)]+\))?!?: .+' && exit 0
+          echo "PR 标题要写成「类型: 说明」，例如 feat: 安装包下载页（类型见 docs/RELEASE.md），现在是：$TITLE"
+          exit 1

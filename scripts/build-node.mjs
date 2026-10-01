@@ -1,9 +1,17 @@
 /** 打包 Node 端：桌面版主进程与预加载（dist-electron/），独立联机服务端（dist-server/server.cjs，单文件、无需 npm install） */
+import { execSync } from 'node:child_process';
+import fs from 'node:fs';
 import { build } from 'esbuild';
+
+// 版本号与提交号写进程序里：服务端启动时打出来，线上跑的是哪一版一看便知
+const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+let commit = process.env.GITHUB_SHA?.slice(0, 7) ?? '';
+if (!commit) try { commit = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim(); } catch { commit = 'unknown'; }
 
 const common = {
   bundle: true, platform: 'node', target: 'node20', format: 'cjs', legalComments: 'none', logLevel: 'info',
   external: ['bufferutil', 'utf-8-validate'],            // ws 的可选加速模块，没有也能用
+  define: { __APP_VERSION__: JSON.stringify(pkg.version), __APP_COMMIT__: JSON.stringify(commit) },
 };
 
 await Promise.all([

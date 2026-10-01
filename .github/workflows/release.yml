@@ -1,4 +1,6 @@
-# 发版：推送 v* 标签时在 macOS、Windows、Linux 上分别打安装包，并建一个草稿 Release 附上全部安装包（确认后在网页上点发布）。
+# 发版：推送 v* 标签时（由 npm run release 推送），先核对标签与版本号、更新日志，跑一遍检查，
+# 再在 macOS、Windows、Linux 上分别打安装包，连同服务端（yi-server-版本.cjs）一起建一个草稿 Release，
+# 说明取自游戏里这一版的更新日志。确认后在网页上点发布，再 npm run deploy 上线。流程见 docs/RELEASE.md。
 # 也可以在 Actions 页面手动运行（只打包、作为附件下载，不建 Release）。
 # 注意：私有仓库里 macOS 机器按 10 倍计分钟数，所以只在打标签或手动时运行。
 name: Release
@@ -9,7 +11,29 @@ on:
   workflow_dispatch:
 
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: 标签与版本号、更新日志对得上
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          v=$(node -p "require('./package.json').version")
+          [ "v$v" = "$GITHUB_REF_NAME" ] || { echo "标签 $GITHUB_REF_NAME 与 package.json 的版本 $v 不一致"; exit 1; }
+          node scripts/changelog.mjs check "$v"
+      - run: npm run typecheck
+      - run: npm test
+
   build:
+    needs: verify
     strategy:
       fail-fast: false
       matrix:
@@ -33,6 +57,9 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx electron-builder ${{ matrix.target }} --publish never
+      - name: 服务端也作为附件
+        if: runner.os == 'Linux'
+        run: cp dist-server/server.cjs "release/yi-server-$(node -p "require('./package.json').version").cjs"
       - uses: actions/upload-artifact@v4
         with:
           name: installers-${{ matrix.os }}
@@ -40,6 +67,7 @@ jobs:
             release/*.dmg
             release/*.exe
             release/*.AppImage
+            release/yi-server-*.cjs
           if-no-files-found: error
 
   publish:
@@ -49,6 +77,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v5
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -58,4 +87,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           ls -la dist
-          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --draft --title "弈 ${GITHUB_REF_NAME#v}" --notes "安装包见下方附件。macOS 首次打开时在访达里右键点“打开”，或在“系统设置 · 隐私与安全性”里点“仍要打开”。Windows 首次运行时如果提示未知发布者，点“更多信息”再点“仍要运行”。"
+          node scripts/changelog.mjs notes "${GITHUB_REF_NAME#v}" > notes.md
+          cat notes.md
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --draft --title "弈 ${GITHUB_REF_NAME#v}" --notes-file notes.md

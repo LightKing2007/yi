@@ -1,0 +1,10 @@
+#!/bin/sh
+# 不直接往 main 推送：改动都走分支和 PR，CI 通过后合并。
+# 唯一的例外是发版脚本（scripts/release.mjs）推送版本号提交与标签，它会设 YI_RELEASE=1。
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [ "$remote_ref" = "refs/heads/main" ] && [ "$YI_RELEASE" != "1" ]; then
+    echo "不能直接推送到 main。请在分支上提交，推送分支后开 PR（见 docs/RELEASE.md）。" >&2
+    exit 1
+  fi
+done
+exit 0

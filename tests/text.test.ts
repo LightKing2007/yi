@@ -1,0 +1,56 @@
+/** 游戏里的说明文字（规则、帮助、更新日志、关于）：都有文言和英文译文，标点合乎约定，更新日志的版本号与 package.json 对得上 */
+import fs from 'node:fs';
+import { describe, expect, it } from 'vitest';
+import { TABLE } from '../src/i18n/table';
+import { INFO_PAGES } from '../src/ui/info';
+// @ts-expect-error 纯 JS 脚本，没有类型声明
+import { changelog } from '../scripts/changelog.mjs';
+
+const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+const keys = new Set(TABLE.map(r => r[0]));
+const han = (s: string) => /[一-鿿]/.test(s);
+const cmp = (a: string, b: string) => {
+  const x = a.split('.').map(Number), y = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i];
+  return 0;
+};
+
+describe('说明文字', () => {
+  it('每一条都有文言和英文译文', () => {
+    const missing: string[] = [];
+    for (const page of INFO_PAGES) for (const l of page.lines) {
+      for (const s of l.slice(1) as string[]) if (han(s) && !keys.has(s)) missing.push(s);
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it('段落只用顿号、逗号、句号这几种标点，不用括号、破折号、分号、冒号、引号、斜杠', () => {
+    const bad: string[] = [];
+    for (const page of INFO_PAGES) for (const l of page.lines) {
+      if (l[0] === 'P' && /[（）()—；;：「」“”‘’/]/.test(l[1])) bad.push(l[1]);
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it('英文译文里没有长破折号', () => {
+    const bad = TABLE.filter(r => /[—–]/.test(r[2])).map(r => r[2]);
+    expect(bad).toEqual([]);
+  });
+});
+
+describe('更新日志', () => {
+  const log: { version: string; lines: string[] }[] = changelog();
+
+  it('版本号从新到旧排列，每一节都有内容', () => {
+    for (let i = 0; i < log.length; i++) {
+      expect(log[i].version).toMatch(/^\d+\.\d+\.\d+$/);
+      expect(log[i].lines.length, log[i].version).toBeGreaterThan(0);
+      if (i) expect(cmp(log[i - 1].version, log[i].version), `${log[i - 1].version} 应在 ${log[i].version} 之后`).toBeGreaterThan(0);
+    }
+  });
+
+  it('最上面一节是当前版本，或者是正在准备的下一个版本', () => {
+    expect(cmp(log[0].version, pkg.version)).toBeGreaterThanOrEqual(0);
+    expect(log.some(s => s.version === pkg.version), `更新日志里没有当前版本 ${pkg.version}`).toBe(true);
+  });
+});
