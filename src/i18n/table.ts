@@ -1,5 +1,8 @@
 /** 界面文字的译文表：[中文原文（也是查表的键）, 文言, English]。新增界面文字时在这里补一行 */
 export const TABLE: [string, string, string][] = [
+  ["换了新图标，右下角加了一方红色的棋字印章。", "易以新图标，右下添朱红棋字印一方。", "New app icon, with a small red seal in the lower right corner."],
+  ["Windows 安装程序换成中文界面，配上新的插图，开头多了一页欢迎页。", "Windows 安装之程改为中文，配以新图，首添迎客一页。", "The Windows installer is now in Chinese, with new artwork and a welcome page."],
+  ["有新版本时，点提示会打开下载页，可以直接下载各个系统的安装包。", "有新版时，点其提示即开下载之页，诸系统之安装包皆可径取。", "When a new version is out, clicking the notice opens a download page with installers for every system."],
   ["附带的中文字体，SIL OFL 许可", "附带汉字之体，SIL OFL 许可", "Bundled Chinese fonts, SIL OFL license"],
   ["思源字体", "思源字体", "Source Han fonts"],
   ["游戏自带中文字体，在没有装中文字体的电脑上也能正常显示文字，Windows 上的标题也更好看。", "戏中自带汉字之体，未装汉字之机亦能正常显字，Windows 上题字亦更可观。", "The game now ships its own Chinese fonts, so text shows correctly on computers without Chinese fonts, and titles look better on Windows."],
