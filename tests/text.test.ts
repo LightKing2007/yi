@@ -1,4 +1,4 @@
-/** 游戏里的说明文字（规则、帮助、更新日志、关于）：都有文言和英文译文，标点合乎 GB/T 15834，更新日志的版本号与 package.json 对得上（写法见 docs/STYLE.md） */
+/** 游戏里的说明文字（规则、帮助、更新日志、关于）：都有文言和英文译文，标点合乎 GB/T 15834，更新日志的版本号与 package.json 对得上（实现 I18N-060、I18N-061、I18N-064、I18N-070、I18N-082 及 I18N-010 的一部分，见 docs/standards/09-text-and-i18n.md） */
 import fs from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { TABLE } from '../src/i18n/table';
@@ -54,7 +54,7 @@ describe('更新日志', () => {
     }
   });
 
-  it('每一条以表明变更类别的动词开头（见 docs/STYLE.md 第 4.4 条）', () => {
+  it('每一条以表明变更类别的动词开头（I18N-070）', () => {
     const bad = log.flatMap(s => s.lines).filter(l => !/^(新增|优化|改进|增强|调整|更新|重新|修复|发布)/.test(l));
     expect(bad).toEqual([]);
   });

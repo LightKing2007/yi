@@ -1,6 +1,6 @@
 # 发版：推送 v* 标签时（由 npm run release 推送），先核对标签与版本号、更新日志，跑一遍检查，
 # 再在 macOS、Windows、Linux 上分别打安装包，连同服务端（yi-server-版本.cjs）一起建一个草稿 Release，
-# 说明取自游戏里这一版的更新日志。确认后在网页上点发布，再 npm run deploy 上线。流程见 docs/RELEASE.md。
+# 说明取自游戏里这一版的更新日志。确认后在网页上点发布，再 npm run deploy 上线。流程见 docs/procedures/release.md，规则见 OPS-020 至 OPS-033。
 # 也可以在 Actions 页面手动运行（只打包、作为附件下载，不建 Release）。
 # 注意：私有仓库里 macOS 机器按 10 倍计分钟数，所以只在打标签或手动时运行。
 name: Release
