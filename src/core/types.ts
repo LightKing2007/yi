@@ -53,4 +53,3 @@ export class Rng {
 export const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 export const smooth01 = (x: number) => { x = clamp01(x); return x * x * (3 - 2 * x); };
 export const easeOut = (t: number) => { t = clamp01(t); return 1 - (1 - t) ** 3; };
-export const lerp = (a: number, b: number, u: number) => a + (b - a) * u;
