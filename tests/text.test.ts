@@ -1,4 +1,4 @@
-/** 游戏里的说明文字（规则、帮助、更新日志、关于）：都有文言和英文译文，标点合乎约定，更新日志的版本号与 package.json 对得上 */
+/** 游戏里的说明文字（规则、帮助、更新日志、关于）：都有文言和英文译文，标点合乎 GB/T 15834，更新日志的版本号与 package.json 对得上（写法见 docs/STYLE.md） */
 import fs from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { TABLE } from '../src/i18n/table';
@@ -24,10 +24,15 @@ describe('说明文字', () => {
     expect(missing).toEqual([]);
   });
 
-  it('段落只用顿号、逗号、句号这几种标点，不用括号、破折号、分号、冒号、引号、斜杠', () => {
+  it('中文标点合乎 GB/T 15834：不混用半角标点，引号与括号成对，段落以句号结尾', () => {
     const bad: string[] = [];
     for (const page of INFO_PAGES) for (const l of page.lines) {
-      if (l[0] === 'P' && /[（）()—；;：「」“”‘’/]/.test(l[1])) bad.push(l[1]);
+      for (const s of l.slice(1) as string[]) {
+        if (!han(s)) continue;
+        if (/[,;:!?()"']/.test(s)) bad.push(`半角标点：${s}`);
+        if (s.split('“').length !== s.split('”').length || s.split('（').length !== s.split('）').length) bad.push(`不成对：${s}`);
+      }
+      if (l[0] === 'P' && han(l[1]) && !l[1].endsWith('。')) bad.push(`没有以句号结尾：${l[1]}`);
     }
     expect(bad).toEqual([]);
   });
@@ -47,6 +52,11 @@ describe('更新日志', () => {
       expect(log[i].lines.length, log[i].version).toBeGreaterThan(0);
       if (i) expect(cmp(log[i - 1].version, log[i].version), `${log[i - 1].version} 应在 ${log[i].version} 之后`).toBeGreaterThan(0);
     }
+  });
+
+  it('每一条以表明变更类别的动词开头（见 docs/STYLE.md 第 4.4 条）', () => {
+    const bad = log.flatMap(s => s.lines).filter(l => !/^(新增|优化|改进|增强|调整|更新|重新|修复|发布)/.test(l));
+    expect(bad).toEqual([]);
   });
 
   it('最上面一节是当前版本，或者是正在准备的下一个版本', () => {
