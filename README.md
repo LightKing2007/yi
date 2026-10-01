@@ -70,14 +70,14 @@ npm run dist:linux   # release/Yi-<版本>-linux-x86_64.AppImage（在 Linux 上
   挑没人下棋的时候重启服务端，客户端就会提示更新、点一下打开下载页。
   不打标签时也可以在 Actions 页面手动运行 Release，只打包、作为附件下载。私有仓库里 macOS 机器按 10 倍计分钟数，所以平时不自动跑。
 - **各平台的界面截图**：在 Actions 页面手动运行“UI 截图”，会在 Windows、Linux 上截开始菜单、对局、设置、更多、联机对战（中文与文言），
-  用来检查字体与排版；本机也可以 `npx electron scripts/ui-shots.cjs 输出目录`。
+  用来检查字体与排版；Windows 上还会实际运行一遍安装程序，截下每一页（[scripts/installer-shots.ps1](scripts/installer-shots.ps1)）。本机也可以 `npx electron scripts/ui-shots.cjs 输出目录`。
 - **错误日志**：桌面版把出错信息写到用户数据目录下的 `logs/yi.log`（超过 1 MB 时换成 `yi.old.log`），「更多 · 关于」里有「打开日志文件夹」。只在本机，不上传。
 
 - **附带的字体**：`src/ui/assets/fonts/` 里是思源黑体、思源宋体（SIL OFL 许可）只含游戏用字的子集，约 1.4 MB。
   系统里有中文字体时优先用系统的（macOS 完全不受影响），没有中文字体的 Linux 用它们，Windows 上的标题也用它而不用强行加粗的宋体。
   改了界面文字之后运行 `node scripts/make-fonts.mjs` 重新生成（原始字体的下载地址写在脚本开头，放在不进仓库的 `.fonts-src/`）。
 - 开始菜单的大字「弈」是宣传片片名同款的行楷（macOS 的 Xingkai SC），预先渲染成 `src/ui/assets/title-yi.png`，程序里只带这张图、不带字体文件（系统字体不能随程序分发）。要重新生成：在 Mac 上运行 `npm run title-art`（行楷若未下载，先在「字体册」里下载）。
-- 应用图标是暖白圆角方块正中一个墨色行楷「弈」，由 [scripts/make-icon.swift](scripts/make-icon.swift) 画出：在 Mac 上运行 `npm run icon`（也可 `npm run icon -- seal` 加上红色「棋」印，或 `-- ink` 用深色底），得到 `build-res/icon.png`（打包时自动转换成各平台格式）与 `public/icon.png`（窗口图标）。
+- 应用图标是暖白圆角方块正中一个墨色行楷「弈」，右下角一方红色「棋」印，由 [scripts/make-icon.swift](scripts/make-icon.swift) 画出：在 Mac 上运行 `npm run icon`（也可 `npm run icon -- paper` 不带印，或 `-- ink` 用深色底），得到 `build-res/icon.png`（打包时自动转换成各平台格式）、`public/icon.png`（窗口图标），以及 Windows 安装程序左侧的竖图 `build-res/installerSidebar.bmp` 与右上角的小图 `installerHeader.bmp`。安装程序开头的欢迎页写在 `build-res/installer.nsh`。
 - **macOS 签名与公证**：默认做临时（ad-hoc）签名，本机与自己的电脑可以直接运行；发给别人时，从网上下载的未公证应用会被系统拦截，
   对方第一次打开要在 Finder 里右键「打开」，或到「系统设置 · 隐私与安全性」里点「仍要打开」。
   正式发行需要 Apple 开发者账号：在钥匙串里装好「Developer ID Application」证书，把 `package.json` 里 `build.mac.identity` 的 `"-"` 删掉（让 electron-builder 自动找证书），
