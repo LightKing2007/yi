@@ -1,4 +1,7 @@
 /** 联机服务端：匹配 / 排位、配对确认、好友房间、段位、对局中的各种请求、断线重连、超时（用假时钟直接驱动 RoomServer），以及真实的 WebSocket 连接 */
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { MemoryStore, RoomServer, type Conn, type RoomServerOptions, type Session } from '../server/rooms';
@@ -423,6 +426,45 @@ describe('WebSocket 传输', () => {
     } finally {
       await host.close();
     }
+  });
+});
+
+describe('安装包下载', () => {
+  it('同一个端口上：下载页只列出每个平台最新的安装包，可以断点续传，其他文件拿不到', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-files-'));
+    fs.writeFileSync(path.join(dir, 'Yi-2.0.0-win-x64-setup.exe'), 'old');
+    fs.writeFileSync(path.join(dir, 'Yi-2.0.1-win-x64-setup.exe'), '0123456789');
+    fs.writeFileSync(path.join(dir, 'Yi-2.0.1-mac-arm64.dmg'), 'mac');
+    fs.writeFileSync(path.join(dir, 'secret.txt'), 'no');
+    const host = await startHost(0, { host: '127.0.0.1', files: dir });
+    const base = `http://127.0.0.1:${host.port}`;
+    try {
+      const page = await (await fetch(base + '/')).text();
+      expect(page).toContain('Yi-2.0.1-win-x64-setup.exe');
+      expect(page).toContain('Yi-2.0.1-mac-arm64.dmg');
+      expect(page).not.toContain('2.0.0');
+      expect(page).not.toContain('secret');
+      const whole = await fetch(base + '/Yi-2.0.1-win-x64-setup.exe');
+      expect(whole.status).toBe(200);
+      expect(await whole.text()).toBe('0123456789');
+      const part = await fetch(base + '/Yi-2.0.1-win-x64-setup.exe', { headers: { Range: 'bytes=4-' } });
+      expect(part.status).toBe(206);
+      expect(part.headers.get('content-range')).toBe('bytes 4-9/10');
+      expect(await part.text()).toBe('456789');
+      for (const bad of ['/secret.txt', '/Yi-2.0.0-win-x64-setup.exe', '/..%2Fetc%2Fpasswd', '/Yi-2.0.1-win-x64-setup.exe/x']) expect((await fetch(base + bad)).status).toBe(404);
+      expect((await fetch(base + '/', { method: 'POST' })).status).toBe(405);
+      const ws = new WebSocket(`ws://127.0.0.1:${host.port}`);  // 联机照常
+      await new Promise((res, rej) => { ws.on('open', res); ws.on('error', rej); });
+      ws.close();
+    } finally {
+      await host.close();
+      fs.rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('没设安装包目录时网页请求一律 404', async () => {
+    const host = await startHost(0, { host: '127.0.0.1' });
+    try { expect((await fetch(`http://127.0.0.1:${host.port}/`)).status).toBe(404); } finally { await host.close(); }
   });
 });
 

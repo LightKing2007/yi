@@ -7,6 +7,7 @@
  *   YI_DATA       段位存档（默认当前目录下的 yi-ratings.json）
  *   YI_LATEST     最新的客户端版本号（例如 2.0.1），客户端版本较旧时提示更新
  *   YI_DOWNLOAD   新版本的下载地址
+ *   YI_FILES      安装包所在的目录：设了就在同一个端口上提供下载页（http://地址:端口/）
  */
 import path from 'node:path';
 import { PROTO_PORT, PROTO_VERSION } from '../src/shared/protocol';
@@ -18,6 +19,7 @@ const extra = (process.env.EXTRA_PORTS ?? '').split(',').map(s => Number(s.trim(
 const host = process.env.HOST || undefined;
 const latest = process.env.YI_LATEST || undefined;
 const download = process.env.YI_DOWNLOAD || undefined;
+const files = process.env.YI_FILES ? path.resolve(process.env.YI_FILES) : undefined;
 
 const log = (text: string) => {
   const d = new Date(), p = (n: number) => String(n).padStart(2, '0');
@@ -27,9 +29,9 @@ const log = (text: string) => {
 const dataFile = path.resolve(process.env.YI_DATA ?? 'yi-ratings.json');
 const store = new FileStore(dataFile);
 
-startHost([port, ...extra], { log, store, host, latest, download }).then(h => {
+startHost([port, ...extra], { log, store, host, latest, download, files }).then(h => {
   log(`弈 联机服务端已启动，${host ? `地址 ${host}，` : ''}端口 ${h.ports.join('、')}（协议版本 ${PROTO_VERSION}），段位存档 ${dataFile}`
-    + (latest ? `，最新客户端 ${latest}` : ''));
+    + (latest ? `，最新客户端 ${latest}` : '') + (files ? `，安装包目录 ${files}` : ''));
   const stop = () => { log('正在关闭…'); store.flush(); h.close().then(() => process.exit(0)); };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);

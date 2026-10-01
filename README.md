@@ -65,7 +65,9 @@ npm run dist:linux   # release/Yi-<版本>-linux-x86_64.AppImage（在 Linux 上
 - **版本号**只写在 `package.json` 的 `version` 一处，游戏里显示的版本号在构建时从这里取。
 - **发版**（在 GitHub 上自动打三个平台的安装包）：改好 `package.json` 的版本号并提交，然后
   `git tag v<版本> && git push origin v<版本>`。Actions 里的 Release 会在 macOS、Windows、Linux 上分别打包，
-  建一个草稿 Release 附上全部安装包，在网页上确认后点发布。最后把服务端的 `YI_LATEST` 改成新版本号，提示大家更新。
+  建一个草稿 Release 附上全部安装包，在网页上确认后点发布。然后 `scripts/upload-release.sh <版本>` 把安装包传到服务器的下载页
+  （<http://47.108.181.240:8443/>，私有仓库的 Release 别人下载不了，大家从这里下），并把服务端的 `YI_LATEST` 改成新版本号；
+  挑没人下棋的时候重启服务端，客户端就会提示更新、点一下打开下载页。
   不打标签时也可以在 Actions 页面手动运行 Release，只打包、作为附件下载。私有仓库里 macOS 机器按 10 倍计分钟数，所以平时不自动跑。
 - **各平台的界面截图**：在 Actions 页面手动运行“UI 截图”，会在 Windows、Linux 上截开始菜单、对局、设置、更多、联机对战（中文与文言），
   用来检查字体与排版；本机也可以 `npx electron scripts/ui-shots.cjs 输出目录`。
@@ -104,7 +106,8 @@ node dist-server/server.cjs 8443   # 端口默认 8443
 | `HOST` | 监听地址，默认所有网卡；放在反向代理后面时设为 `127.0.0.1` |
 | `YI_DATA` | 段位存档的路径 |
 | `YI_LATEST` | 最新的客户端版本号，例如 `2.0.1`。客户端版本较旧时，开始菜单和联机对战页会提示有新版本 |
-| `YI_DOWNLOAD` | 新版本的下载地址（`https://`），提示可以点开 |
+| `YI_DOWNLOAD` | 新版本的下载地址（`http://` 或 `https://`），提示可以点开 |
+| `YI_FILES` | 安装包所在的目录。设了就在同一个端口上提供下载页：`http://地址:端口/` 列出每个平台最新的 `Yi-版本-平台` 安装包，支持断点续传；每个 IP 同时最多 2 个下载、全服最多 8 个 |
 
 同一个 IP 最多同时 8 条连接；同一条连接一分钟内加入房间失败 5 次后，暂时不能再试。
 
@@ -114,6 +117,7 @@ node dist-server/server.cjs 8443   # 端口默认 8443
 |---|---|
 | `/opt/node/` | Node 24 官方二进制包（从 npmmirror 下载、校验后解压，不动系统软件包） |
 | `/opt/yi/server.cjs` | 服务端（root 所有，只读） |
+| `/opt/yi/download/` | 下载页上的安装包（root 所有，服务端只读），用 `scripts/upload-release.sh` 更新 |
 | `/var/lib/yi/` | 段位存档，归系统用户 `yi` 所有（`useradd --system --no-create-home --shell /usr/sbin/nologin yi`） |
 | `/etc/systemd/system/yi.service` | 常驻服务，开机自启，崩溃后 3 秒自动重启 |
 
@@ -132,6 +136,8 @@ ExecStart=/opt/node/bin/node /opt/yi/server.cjs 8443
 Environment=NODE_ENV=production
 Environment=YI_DATA=/var/lib/yi/yi-ratings.json
 Environment=YI_LATEST=2.0.1
+Environment=YI_FILES=/opt/yi/download
+Environment=YI_DOWNLOAD=http://47.108.181.240:8443/
 Restart=always
 RestartSec=3
 NoNewPrivileges=true
@@ -156,7 +162,7 @@ npm run build:node && scp dist-server/server.cjs root@47.108.181.240:/opt/yi/ser
 
 域名 `yi.lightking.com.cn` 已解析到这台服务器，等 ICP 备案通过后再配 `wss://`（备案前阿里云会拦截未备案域名在 80 / 443 上的访问）。
 到时用 Caddy 反向代理并自动申请证书：`yi.lightking.com.cn { reverse_proxy 127.0.0.1:8443 }`；
-这时给服务端设环境变量 `HOST=127.0.0.1`（systemd 里加一行 `Environment=HOST=127.0.0.1`），让它只接受本机反向代理的连接，并在安全组里关掉 8443，只开放 443。
+这时给服务端设环境变量 `HOST=127.0.0.1`（systemd 里加一行 `Environment=HOST=127.0.0.1`），让它只接受本机反向代理的连接，并在安全组里关掉 8443，只开放 443。下载页也随之换成 `https://yi.lightking.com.cn/`，记得同时改 `YI_DOWNLOAD`。
 
 ## 语言
 
@@ -190,7 +196,7 @@ src/
   shared/protocol.ts  联机协议（客户端与服务端共用）与段位表；reject.ts 不合法着法的提示文字
   ui/                 Preact 界面：panels（菜单 / 对局 / 设置 / 更多）、online（联机对战：匹配 · 排位 · 好友）、widgets、styles.css、info（“更多”的文字）
   i18n/               多语言
-server/               rooms.ts 队列、配对、房间、对局与段位（与传输无关）、store.ts 段位存档、host.ts 接到 WebSocket（可同时监听几个端口）、main.ts 入口
+server/               rooms.ts 队列、配对、房间、对局与段位（与传输无关）、store.ts 段位存档、host.ts 接到 WebSocket（可同时监听几个端口）、files.ts 同一端口上的安装包下载页、main.ts 入口
 electron/             桌面版主进程（窗口、只允许一个实例、匹配成功时的任务栏提醒、错误日志）与预加载
 tests/                vitest：rules（规则与人机）、record（规则层与棋谱）、session（会话与座位）、server（联机服务端）、client（联机客户端：断线、重连、服务器重启）、
                       layers（依赖方向：模块之间没有互相引用，各层只朝允许的方向依赖）
