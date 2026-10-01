@@ -63,12 +63,9 @@ npm run dist:linux   # release/Yi-<版本>-linux-x86_64.AppImage（在 Linux 上
 ```
 
 - **版本号**只写在 `package.json` 的 `version` 一处，游戏里显示的版本号在构建时从这里取。
-- **发版**（在 GitHub 上自动打三个平台的安装包）：改好 `package.json` 的版本号并提交，然后
-  `git tag v<版本> && git push origin v<版本>`。Actions 里的 Release 会在 macOS、Windows、Linux 上分别打包，
-  建一个草稿 Release 附上全部安装包，在网页上确认后点发布。然后 `scripts/upload-release.sh <版本>` 把安装包传到服务器的下载页
-  （<http://47.108.181.240:8443/>，私有仓库的 Release 别人下载不了，大家从这里下），并把服务端的 `YI_LATEST` 改成新版本号；
-  挑没人下棋的时候重启服务端，客户端就会提示更新、点一下打开下载页。
-  不打标签时也可以在 Actions 页面手动运行 Release，只打包、作为附件下载。私有仓库里 macOS 机器按 10 倍计分钟数，所以平时不自动跑。
+- **开发与发版流程**见 [docs/RELEASE.md](docs/RELEASE.md)：分支开发 → PR（CI 检查）→ 合并到 main → `npm run release -- 版本号` → 自动打包 → 确认发布 → `npm run deploy -- 版本号` 上线。
+  私有仓库的 Release 别人下载不了，大家从服务器上的下载页 <http://47.108.181.240:8443/> 下载。
+  也可以在 Actions 页面手动运行 Release，只打包、作为附件下载。私有仓库里 macOS 机器按 10 倍计分钟数，所以平时不自动跑。
 - **错误日志**：桌面版把出错信息写到用户数据目录下的 `logs/yi.log`（超过 1 MB 时换成 `yi.old.log`），「更多 · 关于」里有「打开日志文件夹」。只在本机，不上传。
 
 - **附带的字体**：`src/ui/assets/fonts/` 里是思源黑体、思源宋体（SIL OFL 许可）只含游戏用字的子集，约 1.4 MB。
@@ -116,7 +113,7 @@ node dist-server/server.cjs 8443   # 端口默认 8443
 |---|---|
 | `/opt/node/` | Node 24 官方二进制包（从 npmmirror 下载、校验后解压，不动系统软件包） |
 | `/opt/yi/server.cjs` | 服务端（root 所有，只读） |
-| `/opt/yi/download/` | 下载页上的安装包（root 所有，服务端只读），用 `scripts/upload-release.sh` 更新 |
+| `/opt/yi/download/` | 下载页上的安装包（root 所有，服务端只读），发版时由 `npm run deploy` 更新 |
 | `/var/lib/yi/` | 段位存档，归系统用户 `yi` 所有（`useradd --system --no-create-home --shell /usr/sbin/nologin yi`） |
 | `/etc/systemd/system/yi.service` | 常驻服务，开机自启，崩溃后 3 秒自动重启 |
 
@@ -149,11 +146,8 @@ ReadWritePaths=/var/lib/yi
 WantedBy=multi-user.target
 ```
 
-更新服务端（在本机项目目录里）：
-
-```bash
-npm run build:node && scp dist-server/server.cjs root@47.108.181.240:/opt/yi/server.cjs && ssh root@47.108.181.240 'systemctl restart yi && journalctl -u yi -n 3 --no-pager'
-```
+更新服务端：随发版一起，用 `npm run deploy -- 版本号` 换上那个 Release 里的 `yi-server-版本.cjs`，上一版留作 `/opt/yi/server.cjs.prev`，
+`npm run deploy -- rollback` 换回（见 [docs/RELEASE.md](docs/RELEASE.md)）。`node /opt/yi/server.cjs --version` 可以看线上是哪个版本。
 
 查看日志：`ssh root@47.108.181.240 journalctl -u yi -f`（上线、建房、开局、结束……）。改了 service 文件后执行 `systemctl daemon-reload && systemctl restart yi`。
 阿里云安全组要放行 TCP 8443。重启服务端会中断正在进行的对局，尽量挑没人下棋的时候。
@@ -199,7 +193,7 @@ server/               rooms.ts 队列、配对、房间、对局与段位（与�
 electron/             桌面版主进程（窗口、只允许一个实例、匹配成功时的任务栏提醒、错误日志）与预加载
 tests/                vitest：rules（规则与人机）、record（规则层与棋谱）、session（会话与座位）、server（联机服务端）、client（联机客户端：断线、重连、服务器重启）、
                       layers（依赖方向：模块之间没有互相引用，各层只朝允许的方向依赖）
-scripts/              build-node（打包主进程与服务端）、make-fonts（生成附带的字体子集）、upload-release.sh（把安装包传到服务器的下载页）、
+scripts/              build-node（打包主进程与服务端）、make-fonts（生成附带的字体子集）、changelog（读取更新日志）、release（发版）、deploy.sh（上线）、
                       shots.cjs 与 compare-shots.mjs（场景截图与逐像素对比）
 ```
 

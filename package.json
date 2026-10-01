@@ -12,6 +12,7 @@
     "node": ">=22.13"
   },
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks || true",
     "dev": "vite",
     "typecheck": "tsc --noEmit",
     "build:web": "vite build",
@@ -22,6 +23,8 @@
     "server": "node dist-server/server.cjs",
     "app": "npm run build && electron .",
     "app:dev": "npm run build:node && YI_DEV_URL=http://localhost:5173 electron .",
+    "release": "node scripts/release.mjs",
+    "deploy": "sh scripts/deploy.sh",
     "dist": "npm run build && electron-builder",
     "dist:mac": "npm run build && electron-builder --mac",
     "dist:win": "npm run build && electron-builder --win",

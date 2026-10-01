@@ -1,5 +1,5 @@
 /**
- * 弈 · 联机服务端：node server.cjs [端口]（默认 8443）。
+ * 弈 · 联机服务端：node server.cjs [端口]（默认 8443）；node server.cjs --version 只打出版本号与提交号。
  * 环境变量：
  *   PORT          端口
  *   EXTRA_PORTS   另外同时监听的端口，逗号分隔（换端口的过渡期让老版本客户端照常连上，例如 7700）
@@ -13,6 +13,9 @@ import path from 'node:path';
 import { PROTO_PORT, PROTO_VERSION } from '../src/shared/protocol';
 import { startHost } from './host';
 import { FileStore } from './store';
+
+const BUILD = `${__APP_VERSION__}（${__APP_COMMIT__}）`;
+if (process.argv.includes('--version')) { console.log(BUILD); process.exit(0); }
 
 const port = Number(process.argv[2] ?? process.env.PORT ?? PROTO_PORT);
 const extra = (process.env.EXTRA_PORTS ?? '').split(',').map(s => Number(s.trim())).filter(n => n > 0 && n !== port);
@@ -30,7 +33,7 @@ const dataFile = path.resolve(process.env.YI_DATA ?? 'yi-ratings.json');
 const store = new FileStore(dataFile);
 
 startHost([port, ...extra], { log, store, host, latest, download, files }).then(h => {
-  log(`弈 联机服务端已启动，${host ? `地址 ${host}，` : ''}端口 ${h.ports.join('、')}（协议版本 ${PROTO_VERSION}），段位存档 ${dataFile}`
+  log(`弈 联机服务端 ${BUILD} 已启动，${host ? `地址 ${host}，` : ''}端口 ${h.ports.join('、')}（协议版本 ${PROTO_VERSION}），段位存档 ${dataFile}`
     + (latest ? `，最新客户端 ${latest}` : '') + (files ? `，安装包目录 ${files}` : ''));
   const stop = () => { log('正在关闭…'); store.flush(); h.close().then(() => process.exit(0)); };
   process.on('SIGINT', stop);

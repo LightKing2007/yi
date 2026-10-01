@@ -490,7 +490,8 @@ export interface Seat {
 **验收**：推一个测试标签，Release 页面自动出现三个平台的安装包；Windows 实测清单全部通过。
 
 **结果**：v2.0.1 标签自动打出四个安装包（macOS 两个芯片各一个）。思源黑体、宋体子集随程序附带，在 Windows、Linux 上截图检查过界面与安装程序。
-私有仓库的 Release 别人下载不了，所以服务端在 8443 端口上顺带提供下载页（`YI_FILES`），发版后用 `scripts/upload-release.sh` 上传，客户端的新版本提示直接打开这个页面。
+私有仓库的 Release 别人下载不了，所以服务端在 8443 端口上顺带提供下载页（`YI_FILES`），发版后用 `npm run deploy` 上线，客户端的新版本提示直接打开这个页面。
+之后把开发与发版流程规范化，写在 [RELEASE.md](RELEASE.md)。
 
 ---
 
@@ -918,7 +919,7 @@ server/
   admin/{cli.ts, commands/*.ts}
   data/badwords.txt
 electron/          main（单实例、日志）、preload（log、secret.get/set）
-scripts/           build-node、make-fonts、upload-release.sh、shots、compare-shots
+scripts/           build-node、make-fonts、changelog、release、deploy.sh、shots、compare-shots
 tests/             rules、record、match、client、server、auth、anticheat、db、e2e
 docs/              PLAN.md（本文）、PROTOCOL.md（v4 详细说明）、OPS.md（部署、备份、维护、管理）
 .github/workflows/ ci.yml、release.yml
@@ -956,7 +957,7 @@ docs/              PLAN.md（本文）、PROTOCOL.md（v4 详细说明）、OPS.
 - 日志：继续输出到 stdout，由 journald 收集；加上 `[auth]`、`[anticheat]`、`[admin]` 前缀方便过滤。
 - 每日任务：备份、清理过期会话和验证码、清空过期 IP、解除到期处罚。
 - **升级步骤**：`admin maintenance on --wait 30` → 等对局结束 → 备份数据库 → 替换 `server.cjs` → `systemctl restart yi`（启动时自动执行迁移）→ 更新 `YI_LATEST`。
-- **发版步骤**：改 `package.json` 版本 → 打标签推送 → CI 自动出三平台包到 Release → 更新服务端 `YI_LATEST`、`YI_DOWNLOAD`。
+- **发版步骤**：见 [RELEASE.md](RELEASE.md)。
 
 ---
 
