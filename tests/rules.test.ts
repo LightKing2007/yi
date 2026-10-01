@@ -171,7 +171,7 @@ describe('围棋人机', () => {
       const g = go9();
       let moves = 0;
       while (!g.scoring && moves < 150) {
-        const m = goThink(goSnap(g), lv, { timeScale: 0.03 });
+        const m = goThink(goSnap(g), lv, { iterations: 400, seed: moves + 1 });   // 固定模拟次数与种子：结果不随机器快慢变化
         if (m.x < 0) g.pass(); else expect(g.play(m.x, m.y)).toBe(true);
         moves++;
       }

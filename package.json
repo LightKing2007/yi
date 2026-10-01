@@ -47,7 +47,7 @@
   "build": {
     "appId": "com.lightking.yi",
     "productName": "弈",
-    "copyright": "Copyright 2026 LightKing All rights Reserved.",
+    "copyright": "Copyright © 2026 LightKing. All rights reserved.",
     "directories": {
       "output": "release",
       "buildResources": "build-res"

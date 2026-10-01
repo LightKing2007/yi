@@ -1,8 +1,9 @@
 /**
  * 读取游戏里的更新日志（src/ui/info.ts 的 LOG），发版脚本与 GitHub 上的出包流程都用它：
  *   node scripts/changelog.mjs check 2.0.2   检查最上面一节是不是这个版本、写了内容、每一条都有文言和英文译文
- *   node scripts/changelog.mjs notes 2.0.2   输出这个版本的 Release 说明（Markdown）
+ *   node scripts/changelog.mjs notes 2.0.2   输出这个版本的发布说明（Markdown，GitHub Release 用）
  */
+import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -40,20 +41,50 @@ export function check(version) {
   return problems;
 }
 
-/** GitHub Release 的说明：这一版改了什么，再加上首次打开的提示 */
+/** 某个版本的发布日期与联机协议版本：已打标签的取标签上的，否则取当前的 */
+function facts(version) {
+  const tag = `v${version}`;
+  let date = new Date().toISOString().slice(0, 10), proto = read('src/shared/protocol.ts');
+  try {
+    date = execSync(`git log -1 --format=%cs ${tag}`, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || date;
+    proto = execSync(`git show ${tag}:src/shared/protocol.ts`, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  } catch { /* 还没打标签 */ }
+  return { date, proto: Number(/PROTO_VERSION = (\d+)/.exec(proto)?.[1]) };
+}
+
+/** GitHub Release 的说明（发布说明）：概要、变更内容（按新增、改进、修复分类）、兼容性、安装 */
 export function notes(version) {
   const sec = changelog().find(s => s.version === version);
   if (!sec) throw new Error(`更新日志里没有 ${version}`);
+  const [, minor, patch] = version.split('.').map(Number);
+  const kind = patch ? '修订版本' : minor ? '次版本' : '主版本';
+  const { date, proto } = facts(version);
+  const groups = [['新增', []], ['改进', []], ['修复', []]];
+  for (const l of sec.lines) (l.startsWith('新增') ? groups[0] : l.startsWith('修复') ? groups[2] : groups[1])[1].push(l);
+  const changes = groups.filter(g => g[1].length).flatMap(([name, ls], i) => [`### 1.${i + 1} ${name}`, '', ...ls.map(l => `- ${l}`), '']);
   return [
-    `## 弈 ${version}`,
+    `# 弈 ${version} 发布说明`,
     '',
-    ...sec.lines.map(l => `- ${l}`),
+    '| 项目 | 内容 |',
+    '|---|---|',
+    `| 版本号 | ${version} |`,
+    `| 版本类型 | ${kind} |`,
+    `| 发布日期 | ${date} |`,
+    `| 联机协议 | 第 ${proto} 版 |`,
+    `| 支持平台 | macOS（Apple 芯片、Intel 芯片）、Windows（x64）、Linux（x86_64） |`,
     '',
-    '## 安装',
+    '## 1 变更内容',
     '',
-    '- 安装包见下方附件，也可以在 http://47.108.181.240:8443/ 下载。',
-    '- macOS 第一次打开时，在访达里右键点这个程序再点打开，或者到系统设置的隐私与安全性里点仍要打开。',
-    '- Windows 第一次运行时如果提示未知发布者，点更多信息，再点仍要运行。',
+    ...changes,
+    '## 2 兼容性',
+    '',
+    `本版本使用第 ${proto} 版联机协议，可与使用同一协议版本的客户端进行联机对战。段位及本机设置在升级后予以保留。`,
+    '',
+    '## 3 获取与安装',
+    '',
+    '- 安装程序见本页附件，亦可从官方下载页面 <http://47.108.181.240:8443/> 获取。',
+    '- macOS：首次打开时，请在“访达”中按住 Control 键点按该应用程序并选择“打开”，或前往“系统设置”中的“隐私与安全性”，点按“仍要打开”。',
+    '- Windows：首次运行时如出现“Windows 已保护你的电脑”提示，请点击“更多信息”，再点击“仍要运行”。',
     '',
   ].join('\n');
 }
