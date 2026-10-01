@@ -168,7 +168,9 @@ src/
     renju.ts            五子棋禁手判定（三三、四四、长连）
     gomokuAI.ts         五子棋人机；goAI.ts 围棋人机（蒙特卡洛树搜索、估死子）
   app/                app（主循环、布局、输入）、stage（每帧的场景更新与绘制顺序）、controller（对局操作与快捷键）、
-                      state（界面与对局状态）、settings（设置，存在本地存储）、ai.worker（电脑在后台线程思考）、native（桌面版的系统功能与错误日志）
+                      state（界面与对局状态）、settings（设置，存在本地存储）、native（桌面版的系统功能与错误日志）、scenarios（开发用的场景脚本）
+  session/            对局会话：session（三种模式下谁来落子、悔棋退几手）、seats（人、电脑、联机的一方）、
+                      think 与 computer.worker（电脑在后台线程里想棋、估死子，可以随时取消）
   presentation/       boardView（棋盘的动画状态：落子、提子、悔棋倒放、换棋盘、胜负动画、提示）
   render/             gl（WebGL2 批量绘制）、shaders（全部着色器）、painter（绘制原语）、board、layout（自动缩放的布局）、theme
   fx/                 终局特效：gomokuWin、blow（炸飞与倒放）、goEnd、rewind、ghost（落子预览）、gather
@@ -181,7 +183,7 @@ src/
   i18n/               多语言
 server/               rooms.ts 队列、配对、房间、对局与段位（与传输无关）、store.ts 段位存档、host.ts 接到 WebSocket（可同时监听几个端口）、main.ts 入口
 electron/             桌面版主进程（窗口、只允许一个实例、匹配成功时的任务栏提醒、错误日志）与预加载
-tests/                vitest：rules（规则与人机）、record（规则层与棋谱）、server（联机服务端）、client（联机客户端：断线、重连、服务器重启）
+tests/                vitest：rules（规则与人机）、record（规则层与棋谱）、session（会话与座位）、server（联机服务端）、client（联机客户端：断线、重连、服务器重启）
 scripts/              build-node（打包主进程与服务端）、make-icon.swift（生成图标）、make-title.swift（生成开始菜单的标题字）、
                       shots.cjs 与 compare-shots.mjs（场景截图与逐像素对比）
 ```

@@ -12,7 +12,7 @@ import { BLACK, EMPTY, GameType, MAXN, WHITE, at, newBoard, newPos, type Board, 
 
 export type GameEvent = { type: 'stone'; strength: number } | { type: 'undo' } | { type: 'reset' };
 
-export interface NewGameOptions { renju?: boolean; vsAI?: boolean; aiColor?: number }
+export interface NewGameOptions { renju?: boolean }
 
 /**
  * 对局的旁观者：画面层（presentation/boardView.ts）在这里接收落子、悔棋、终局等消息，驱动动画与提示。
@@ -39,8 +39,6 @@ export class Game {
   type = GameType.Gomoku;
   N = 15;
   goSize = 19;
-  vsAI = false;
-  aiColor = WHITE;
   /** 本局五子棋是否执行黑棋禁手 */
   renju = true;
   cur: Pos = newPos();
@@ -61,6 +59,8 @@ export class Game {
   scoreB = 0;
   scoreW = 0;
   komi = 7.5;
+  /** 局面每变一次（落子、停着、悔棋、开新局、标记死子、恢复对局）就加一：电脑用它认出“这是不是我想的那个局面” */
+  ver = 0;
   /** 画面层；服务端为 null */
   listener: GameListener | null = null;
 
@@ -82,6 +82,7 @@ export class Game {
 
   newGame(type: GameType, N: number, opt: NewGameOptions = {}) {
     this.listener?.reset(this.N, this.cur.b, now());
+    this.ver++;
     this.cur = newPos();
     this.type = type;
     this.N = N;
@@ -92,13 +93,8 @@ export class Game {
     this.scoring = this.finished = false;
     this.komi = 7.5;
     if (opt.renju !== undefined) this.renju = opt.renju;
-    if (opt.vsAI !== undefined) this.vsAI = opt.vsAI;
-    if (opt.aiColor !== undefined) this.aiColor = opt.aiColor;
     this.dead.fill(0); this.terr.fill(0);
   }
-
-  /** 人机对弈且此刻轮到电脑落子 */
-  aiToMove() { return this.vsAI && !this.over && !this.scoring && this.cur.toMove === this.aiColor; }
 
   /** 当前局面下黑棋在 (x, y) 是否为禁手（按局面缓存整盘） */
   forbiddenAt(x: number, y: number): Renju {
@@ -131,6 +127,7 @@ export class Game {
     const r = applyMove(this.cfg, this.cur, m, this.hist.length ? this.hist[this.hist.length - 1].b : null);
     if (!r.ok) { this.lastReject = r.why; return null; }
     this.lastReject = null;
+    this.ver++;
     this.hist.push(this.cur);
     this.moves.push({ m });
     this.cur = r.v.pos;
@@ -170,10 +167,10 @@ export class Game {
     this.listener?.passed(who, v.scoring, now());
   }
 
-  undo() {
+  /** 悔棋：退 steps 手（人机对弈时退几手由会话决定，见 session.undoSteps） */
+  undo(steps = 1) {
     if (this.hist.length === 0) return;
-    // 人机对弈：若轮到玩家，要连电脑那一手一起退，退完仍是玩家落子
-    const steps = this.vsAI && this.cur.toMove !== this.aiColor && this.hist.length >= 2 ? 2 : 1;
+    this.ver++;
     const old = this.cur, wasFinished = this.finished;
     for (let i = 0; i < steps && this.hist.length > 0; i++) { this.cur = this.hist.pop()!; this.moves.pop(); }
     this.listener?.undone(old, this.cur, wasFinished, this.dead, now());
@@ -185,6 +182,7 @@ export class Game {
   }
 
   toggleDead(x: number, y: number) {
+    this.ver++;
     if (!this.inB(x, y) || this.b(x, y) === EMPTY) return;
     const g = group(this.cur.b, this.N, x, y), v = this.dead[at(x, y)] ? 0 : 1;
     for (let i = 0; i < g.xs.length; i++) this.dead[at(g.xs[i], g.ys[i])] = v;
@@ -201,6 +199,7 @@ export class Game {
   }
 
   resume() {
+    this.ver++;
     this.scoring = false;
     this.cur.passes = 0;
     this.dead.fill(0); this.terr.fill(0);

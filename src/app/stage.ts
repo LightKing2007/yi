@@ -5,7 +5,7 @@
  *   最上层 glow（黑底、滤色叠加）：粒子发光的内核、冲击时的闪光
  */
 import { settings } from './settings';
-import { bowlsShown, game, screen, Screen, view, boardView } from './state';
+import { bowlsShown, screen, Screen, view, boardView } from './state';
 import { smooth01 } from '../core/types';
 import { clearParticles, drawFlash, drawParticles, updateParticles, winShake } from '../fx/fx';
 import { buildDebris, drawDebris } from '../fx/blow';
@@ -51,13 +51,12 @@ export class Stage {
   }
 
   update(L: Layout, now: number, dt: number) {
-    const g = game, scr = screen.value;
+    const scr = screen.value;
     winUpdate(L, now, dt);
     goEndUpdate(L, now, dt);
     updateParticles(now, dt);
     view.onlineK = approach(view.onlineK, scr === Screen.Online ? 1 : 0, dt, 0.5);
     boardView.blowView = approach(boardView.blowView, boardView.review ? 0 : 1, dt, 0.75);        // 查看 / 收起棋局
-    if (boardView.undoPending && boardView.blowView <= 0.001) g.undo();                   // 棋子已飞回原位，再悔棋
     view.bowlK = approach(view.bowlK, bowlsShown(scr) ? 1 : 0, dt, 1.2);  // 棋罐缓缓移出 / 移回
     view.duskK += ((settings.value.light ? 1 : 0) - view.duskK) * (1 - Math.exp(-dt * 4));
   }

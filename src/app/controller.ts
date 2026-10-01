@@ -1,22 +1,19 @@
 /** 对局与界面的操作：界面按钮、快捷键、棋盘点击都走这里 */
-import { autoMarkDead, goSnap, gomokuSnap } from '../core/snap';
 import { GameType } from '../core/types';
 import { now } from '../core/clock';
 import { sfx } from '../audio';
 import { blowing } from '../fx/blow';
 import { startGather } from '../fx/gather';
-import type { AiReply, AiRequest } from './ai.worker';
 import { aiColor, setSettings, settings } from './settings';
-import { bowlsShown, game, screen, Screen, uiTick, view, boardView } from './state';
+import { bowlsShown, game, screen, Screen, uiTick, view, boardView, session } from './state';
 import { online } from '../online/client';
-import { logError } from './native';
 
 export function bump() { uiTick.value++; }
 
-/** 新局：人机设置、禁手取自设置 */
+/** 新局（单机）：禁手、人机执子取自设置，双人还是人机按会话里选的 */
 export function newGame(type: GameType = game.type, N: number = type === GameType.Gomoku ? 15 : game.goSize) {
-  game.newGame(type, N, { renju: settings.value.renju, aiColor: aiColor() });
-  cancelAi();
+  game.newGame(type, N, { renju: settings.value.renju });
+  session.configure(session.localMode, { computerColor: aiColor() });
   bump();
 }
 
@@ -34,27 +31,24 @@ export function requestNewGame(type: GameType = game.type, N: number = type === 
   newGame(type, N);
 }
 
-/** 每帧：棋子飞回原位之后，开等着的那一局 */
-export function controllerTick() {
-  const p = boardView.newPending;
-  if (!p || boardView.blowView > 0.001) return;
-  boardView.nextSwitchDur = 1.4;                         // 清盘慢一些
-  newGame(p.type, p.N);
+export function setVsAI(on: boolean) { session.localMode = on ? 'computer' : 'local'; requestNewGame(game.type, game.N); }
+
+/** 悔棋：联机时向对方申请；单机时若其余棋子已被炸飞，先让它们倒放飞回原位，落定后再悔棋（见 controllerTick） */
+export function requestUndo() {
+  if (session.mode === 'online') { online.undo(); return; }
+  if (!game.hist.length || boardView.undoPending) return;
+  if (blowing() && boardView.blowView > 0.001) { boardView.review = true; boardView.undoPending = true; bump(); return; }
+  undoNow();
 }
 
-export function setVsAI(on: boolean) { game.vsAI = on; requestNewGame(game.type, game.N); }
-
-/** 悔棋：若其余棋子已被炸飞，先让它们倒放飞回原位，落定后再悔棋 */
-export function requestUndo() {
-  const g = game;
-  if (!g.hist.length || boardView.undoPending) return;
-  if (blowing() && boardView.blowView > 0.001) { boardView.review = true; boardView.undoPending = true; bump(); return; }
-  g.undo();
-  cancelAi();
+function undoNow() {
+  game.undo(session.undoSteps());
+  session.cancel();
   bump();
 }
 
-export function pass() { if (!game.aiToMove()) { game.pass(); bump(); } }
+/** 停一手：轮到本机的人时才算（联机时发给服务端） */
+export function pass() { session.pass(); bump(); }
 export function toggleReview() { if (blowing() && !boardView.newPending) { boardView.review = !boardView.review; bump(); } }
 export function resumeGame() { game.resume(); bump(); }
 export function confirmScore() { game.confirmScore(); bump(); }
@@ -83,8 +77,7 @@ export function boardHover(L: { ox: number; oy: number; cell: number }) {
   const g = game, m = view.mouse;
   const hx = Math.floor((m.x - L.ox) / L.cell + 0.5), hy = Math.floor((m.y - L.oy) / L.cell + 0.5);
   const onBoard = m.inside && screen.value === Screen.Game && g.inB(hx, hy) && view.panelT >= 1;
-  const onl = online.inGame();
-  const humanTurn = onl ? online.myTurn() : !(g.vsAI && g.cur.toMove === g.aiColor);
+  const humanTurn = session.humanTurn();
   const canPlace = onBoard && !g.over && !g.scoring && humanTurn && g.b(hx, hy) === 0 && !g.forbiddenAt(hx, hy);
   return { hx, hy, onBoard, humanTurn, canPlace };
 }
@@ -92,62 +85,27 @@ export function boardHover(L: { ox: number; oy: number; cell: number }) {
 export function boardClick(L: { ox: number; oy: number; cell: number }) {
   const g = game, h = boardHover(L);
   if (!h.onBoard) return;
-  if (online.inGame()) {                                  // 联机：只把意图发给服务端，确认后再在本地落子
-    if (g.scoring && !online.state.over) online.mark(h.hx, h.hy);
-    else if (h.canPlace) online.move(h.hx, h.hy);
+  if (g.scoring) {                                        // 点目时标记死子；联机时先发给服务端，确认后再标
+    if (session.mode !== 'online') { g.toggleDead(h.hx, h.hy); bump(); }
+    else if (!online.state.over) online.mark(h.hx, h.hy);
     return;
   }
-  if (g.scoring) { g.toggleDead(h.hx, h.hy); bump(); }
-  else if (h.canPlace && g.play(h.hx, h.hy)) { boardView.aiAt = now() + 0.35; bump(); }
+  if (h.canPlace && session.play(h.hx, h.hy)) bump();      // 联机时只是发给服务端，确认后由联机模块落子
   else if (boardView.msg) bump();
 }
 
-// ---------------- 电脑 ----------------
+// ---------------- 每帧 ----------------
 
-let worker: Worker | null = null;
-let reqId = 0;
-let pending: { id: number; stamp: string } | null = null;
-let result: { stamp: string; x: number; y: number } | null = null;
-
-function stampOf() { const g = game; return `${g.type}:${g.N}:${g.cur.moves}:${g.hist.length}:${g.cur.toMove}:${g.cur.passes}`; }
-
-function ensureWorker() {
-  if (worker) return worker;
-  worker = new Worker(new URL('./ai.worker.ts', import.meta.url), { type: 'module' });
-  worker.onerror = e => { logError('电脑思考', e.message); cancelAi(); worker = null; boardView.aiAt = now() + 2; };   // 出错就丢掉这个线程，稍后重新开
-  worker.onmessage = (e: MessageEvent<AiReply>) => {
-    if (pending && e.data.id === pending.id) { result = { stamp: pending.stamp, x: e.data.x, y: e.data.y }; pending = null; }
-  };
-  return worker;
-}
-
-export function cancelAi() { pending = null; result = null; view.aiThinking = false; }
-
-let wasScoring = false;
-
-/** 每帧：轮到电脑就在后台想，想好了才落子 */
-export function aiTick(t: number) {
-  const g = game;
-  if (screen.value === Screen.Game && !online.inGame() && g.aiToMove() && t >= boardView.aiAt) {
-    const stamp = stampOf();
-    if (result && result.stamp === stamp) {
-      const { x, y } = result;
-      result = null;
-      if (g.type === GameType.Gomoku) { if (x >= 0) g.play(x, y); }
-      else if (x < 0 || !g.play(x, y)) g.pass();
-      view.aiThinking = false;
-      bump();
-    } else if (!pending || pending.stamp !== stamp) {
-      const id = ++reqId, level = settings.value.aiLevel;
-      pending = { id, stamp };
-      view.aiThinking = true;
-      const msg: AiRequest = g.type === GameType.Go ? { id, kind: 'go', snap: goSnap(g), level } : { id, kind: 'gomoku', snap: gomokuSnap(g), level };
-      ensureWorker().postMessage(msg);
-    }
-  } else if (view.aiThinking && !g.aiToMove()) view.aiThinking = false;
-  // 人机下围棋：双方停着进入点目时，电脑先估出死子，玩家可以再改
-  if (g.scoring && !wasScoring && g.vsAI && g.type === GameType.Go) { autoMarkDead(g); bump(); }
-  wasScoring = g.scoring;
+/** 每帧：电脑想棋落子（只在对局界面）；炸飞的棋子飞回原位之后，做等着的悔棋或开新局 */
+export function controllerTick(t: number) {
+  if (screen.value === Screen.Game) session.tick(t);
+  if (boardView.blowView > 0.001) return;
+  if (boardView.undoPending) { boardView.undoPending = false; undoNow(); }
+  const p = boardView.newPending;
+  if (p) {
+    boardView.nextSwitchDur = 1.4;                       // 清盘慢一些
+    newGame(p.type, p.N);
+  }
 }
 
 // ---------------- 快捷键 ----------------
@@ -158,23 +116,19 @@ export function handleKey(e: KeyboardEvent) {
   const k = e.key.toLowerCase(), scr = screen.value, ctrl = e.ctrlKey || e.metaKey;
   if (k === 'escape') {
     if (online.handleEscape(scr)) return;
-    if (scr === Screen.Game && online.inGame()) online.askLeave();
+    if (scr === Screen.Game && session.mode === 'online') online.askLeave();
     else if (scr !== Screen.Menu) goScreen(Screen.Menu);
     return;
   }
-  if (ctrl) { if (k === 'z' && scr === Screen.Game) { online.inGame() ? online.undo() : requestUndo(); e.preventDefault(); } return; }
+  if (ctrl) { if (k === 'z' && scr === Screen.Game) { requestUndo(); e.preventDefault(); } return; }
   if (k === 't') { setSettings({ theme: settings.value.theme ? 0 : 1 }); return; }
   if (scr !== Screen.Game) return;
   if (k === 'c') setSettings({ coords: !settings.value.coords });
   if (k === 'v') toggleReview();
-  if (online.inGame()) {
-    if (k === 'u') online.undo();
-    if (k === 'p') online.pass();
-    return;
-  }
   if (k === 'u') requestUndo();
-  if (k === 'n') requestNewGame(game.type, game.N);
   if (k === 'p') pass();
+  if (session.mode === 'online') return;                  // 联机时不能自己开新局、换棋类
+  if (k === 'n') requestNewGame(game.type, game.N);
   if (k === '1' && game.type !== GameType.Gomoku) requestNewGame(GameType.Gomoku, 15);
   if (k === '2' && game.type !== GameType.Go) requestNewGame(GameType.Go, game.goSize);
 }

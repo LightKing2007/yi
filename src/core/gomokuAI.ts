@@ -2,7 +2,7 @@
  * 五子棋人机，三档难度：
  *   简单：一步评分后在前几名里按权重随机挑，偶尔漏看对方的冲四
  *   普通：一步评分取最高，进攻与防守兼顾
- *   困难：在评分最高的若干候选点上做 alpha-beta 搜索（双方合计六层），
+ *   困难：在评分最高的若干候选点上做 alpha-beta 搜索，逐层加深到双方合计六层，限时 1.2 秒（来不及就用已算完的最深一层），
  *         局面按双方所有五元组的得分差评估，能提前看出四三、双活三等杀棋，也会提前防守
  * 三档都会先抓住自己的连五，普通与困难必定挡住对方的连五。
  * 热点循环都用一维下标与预先分配的数组，不在搜索中途分配对象。
@@ -16,6 +16,8 @@ const DX = [1, 0, 1, 1], DY = [0, 1, 1, -1];
 const STEP = [MAXN, 1, MAXN + 1, MAXN - 1];            // 四个方向在一维下标里的步长
 const WIN_SCORE = 1e9;
 const HARD_DEPTH = 6;
+const HARD_BUDGET_MS = 1200;          // 困难一步最多想多久：慢电脑上也不会一步想好几秒
+const ABORT = { abort: true };        // 超时时从搜索里抛出来
 
 const MY = [7, 35, 800, 15000, 800000];
 const OP = [7, 15, 400, 1800, 100000];
@@ -29,6 +31,9 @@ class Cands {
 
 class Searcher {
   private levels: Cands[] = [];
+  /** 超过这个时刻（performance.now）就放弃当前这一层搜索；Infinity 表示不限时 */
+  deadline = Infinity;
+  private nodes = 0;
   constructor(readonly b: Board, readonly N: number, readonly renju: boolean) {
     for (let i = 0; i <= HARD_DEPTH + 2; i++) this.levels.push(new Cands());
   }
@@ -102,6 +107,7 @@ class Searcher {
   }
 
   negamax(me: number, depth: number, alpha: number, beta: number): number {
+    if ((++this.nodes & 1023) === 0 && performance.now() > this.deadline) throw ABORT;
     if (depth === 0) return this.evaluate(me);
     const c = this.candidates(me, 10, depth);
     const n = c.n;
@@ -128,7 +134,7 @@ class Searcher {
 }
 
 /** 为轮到的一方选一手。level：0 简单，1 普通，2 困难。棋盘已满时返回 null */
-export function gomokuMove(snap: GomokuSnap, level: number, random: () => number = Math.random): { x: number; y: number } | null {
+export function gomokuMove(snap: GomokuSnap, level: number, random: () => number = Math.random, budgetMs = HARD_BUDGET_MS): { x: number; y: number } | null {
   const { N, me } = snap, op = 3 - me;
   const s = new Searcher(snap.b.slice(), N, snap.renju);
   const top = s.candidates(me, 16, HARD_DEPTH + 1);
@@ -153,16 +159,28 @@ export function gomokuMove(snap: GomokuSnap, level: number, random: () => number
     for (let i = 0; i < n; i++) { const v = top.s[i] + Math.floor(random() * 7); if (v > best) { best = v; pick = i; } }
     return cand(pick);
   }
-  // 困难：对前 12 个候选点做 HARD_DEPTH 层搜索
-  const m = Math.min(n, 12), xs = top.x.slice(0, m), ys = top.y.slice(0, m);
-  let pick = 0, best = -WIN_SCORE * 4, alpha = -WIN_SCORE * 4;
-  for (let i = 0; i < m; i++) {
-    const p = xs[i] * MAXN + ys[i];
-    s.b[p] = me;
-    const v = -s.negamax(op, HARD_DEPTH - 1, -WIN_SCORE * 4, -alpha);
-    s.b[p] = EMPTY;
-    if (v > best) { best = v; pick = i; }
-    if (v > alpha) alpha = v;
+  // 困难：对前 12 个候选点逐层加深搜索（2、4、6 层），上一层最好的点放到最前面先算；超时就用已经算完的最深一层
+  const m = Math.min(n, 12), xs = top.x.slice(0, m), ys = top.y.slice(0, m), order = Array.from({ length: m }, (_, i) => i);
+  let pick = 0;
+  s.deadline = performance.now() + budgetMs;
+  for (const depth of [2, 4, HARD_DEPTH]) {
+    let bestI = order[0], best = -WIN_SCORE * 4, alpha = -WIN_SCORE * 4;
+    try {
+      for (const i of order) {
+        const p = xs[i] * MAXN + ys[i];
+        s.b[p] = me;
+        const v = -s.negamax(op, depth - 1, -WIN_SCORE * 4, -alpha);
+        s.b[p] = EMPTY;
+        if (v > best) { best = v; bestI = i; }
+        if (v > alpha) alpha = v;
+      }
+    } catch (e) {
+      if (e !== ABORT) throw e;
+      break;                                               // 这一层没算完：不用它的结果（棋盘副本也不再用）
+    }
+    pick = bestI;
+    order.splice(order.indexOf(bestI), 1);
+    order.unshift(bestI);
   }
   return { x: xs[pick], y: ys[pick] };
 }

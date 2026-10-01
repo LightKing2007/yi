@@ -1,5 +1,6 @@
 /** 界面文字的译文表：[中文原文（也是查表的键）, 文言, English]。新增界面文字时在这里补一行 */
 export const TABLE: [string, string, string][] = [
+  ["电脑思考时悔棋或开新局，电脑会立刻停下，新的一局不用再等。困难难度的五子棋每一步最多想一秒多。人机下围棋点目时不再卡一下。修复了悔棋后电脑偶尔下出上一个局面的应手的问题。", "机思之时悔着或开新局，机即止思，新局无须久候。难等连珠每着至多思一秒有余。与机弈围棋计目时不复一滞。修悔着后机偶以旧局之应着落子之误。", "Undoing or starting a new game while the computer is thinking now stops it right away, so the new game doesn't have to wait. Hard Gomoku thinks for at most a little over a second per move. Counting in Go against the computer no longer stutters. Fixed the computer occasionally answering an earlier position after an undo."],
   ["五子棋取胜后被炸飞的棋子更有分量，飞起的高度各不相同，落地后会再弹一两下，在飞散的过程中慢慢消失。炸飞后开新局时，棋子先飞回原位，再慢慢清盘。", "连珠胜后被炸飞之子更显沉重，飞起高低不一，落地复跃一二，且飞且没。炸飞后开新局，诸子先飞回原位，乃徐徐清枰。", "After a Gomoku win the blasted stones feel heavier, fly to different heights, bounce once or twice when they land and fade away as they scatter. Starting a new game after that flies them back to their places first, then slowly clears the board."],
   ["你的段位 %s", "君之段位 %s", "Your rank %s"],
   ["把房号告诉好友，好友在加入房间里输入就能开局", "以席号告良友，良友入席时书之即可开局", "Tell your friend the room number, they enter it under Join room to start"],

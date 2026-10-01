@@ -12,9 +12,9 @@ import { setClock } from '../core/clock';
 import { autoMarkDead } from '../core/snap';
 import { BLACK, GameType, WHITE, at } from '../core/types';
 import { DEFAULTS, settings } from './settings';
-import { game, screen, Screen } from './state';
+import { game, screen, Screen, session } from './state';
 import { devHooks } from './app';
-import { goScreen, newGame, requestNewGame, requestUndo, toggleReview } from './controller';
+import { goScreen, newGame, requestNewGame, requestUndo, setVsAI, toggleReview } from './controller';
 import { Phase, st as net } from '../online/client';
 
 const STEP = 1 / 60;
@@ -163,6 +163,18 @@ const SCENARIOS: Record<string, Scenario> = {
       [GAME + 3.5, () => requestNewGame(GameType.Gomoku, 15)],
     ],
     shots: Array.from({ length: 16 }, (_, i) => GAME + 3.4 + i * 0.2),
+  },
+
+  /** 检查人机对弈（用真的后台线程）：五子棋人下一手电脑应一手；围棋电脑想到一半时悔棋，电脑停下、不会落下过时的一手 */
+  'film-ai': {
+    steps: [
+      [0, () => goScreen(Screen.Game)],
+      [GAME, () => { setVsAI(true); newGame(GameType.Gomoku, 15); session.play(7, 7); }],
+      [GAME + 2.0, () => { console.info('[scenario] 五子棋电脑应了一手：' + (game.cur.moves === 2)); newGame(GameType.Go, 9); session.play(4, 4); }],
+      [GAME + 2.5, () => { console.info('[scenario] 围棋电脑在想：' + session.thinking); requestUndo(); }],
+      [GAME + 4.5, () => { console.info('[scenario] 悔棋后盘面空、电脑没落子：' + (game.cur.moves === 0 && !session.thinking)); setVsAI(false); }],
+    ],
+    shots: [GAME + 1.9, GAME + 4.4],
   },
 
   /** 多人游戏页：找到对手时天元落下一颗白子，座位发光 */

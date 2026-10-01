@@ -20,7 +20,7 @@ app.whenReady().then(async () => {
     webPreferences: { offscreen: true, backgroundThrottling: false },
   });
   win.webContents.setFrameRate(60);
-  win.webContents.on('console-message', e => { if (e.level === 'warning' || e.level === 'error' || e.message.startsWith('[scenario] 没有')) console.log(e.message); });
+  win.webContents.on('console-message', e => { if (e.level === 'warning' || e.level === 'error' || (e.message.startsWith('[scenario] ') && !e.message.startsWith('[scenario] 完成'))) console.log(e.message); });
   await win.loadURL(`http://localhost:${port}/?scenario=${encodeURIComponent(only)}&set=${set}`);
   const t0 = Date.now();
   let info = null;

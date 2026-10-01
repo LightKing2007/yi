@@ -4,9 +4,9 @@ import { computeLayout, type Layout } from '../render/layout';
 import { sfx } from '../audio';
 import { ghostUpdate } from '../fx/ghost';
 import { clearParticles } from '../fx/fx';
-import { aiTick, boardClick, boardHover, bump, controllerTick, handleKey, newGame } from './controller';
+import { boardClick, boardHover, bump, controllerTick, handleKey, newGame } from './controller';
 import { animK, settings } from './settings';
-import { game, screen, Screen, uiTick, view, boardView } from './state';
+import { game, screen, Screen, uiTick, view, boardView, session } from './state';
 import { Stage } from './stage';
 import { online } from '../online/client';
 import { signal } from '@preact/signals';
@@ -69,7 +69,7 @@ export function startApp(sceneCanvas: HTMLCanvasElement, overCanvas: HTMLCanvasE
   let lastKey = '';
   const uiKey = () => {
     const g = game;
-    return `${screen.value}|${g.type}|${g.N}|${g.cur.moves}|${g.cur.toMove}|${g.over}|${g.winner}|${g.scoring}|${g.finished}|${boardView.review}|${g.hist.length}|${boardView.msg?.key}|${boardView.msgAt}|${view.aiThinking}|${g.vsAI}|${g.scoreB}|${g.scoreW}`;
+    return `${screen.value}|${g.type}|${g.N}|${g.cur.moves}|${g.cur.toMove}|${g.over}|${g.winner}|${g.scoring}|${g.finished}|${boardView.review}|${g.hist.length}|${boardView.msg?.key}|${boardView.msgAt}|${session.thinking}|${session.localMode}|${session.mode}|${g.scoreB}|${g.scoreW}`;
   };
 
   let last = now();
@@ -79,8 +79,7 @@ export function startApp(sceneCanvas: HTMLCanvasElement, overCanvas: HTMLCanvasE
     relayout();
     const L = layout.value;
     view.panelT = Math.min(1, view.panelT + dt / 0.6);
-    aiTick(t);
-    controllerTick();
+    controllerTick(t);
     stage.update(L, t, dt);
     handleEvents();
     online.update(t);

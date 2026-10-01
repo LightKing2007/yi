@@ -2,7 +2,7 @@
 import { useState } from 'preact/hooks';
 import { confirmScore, goScreen, newGame, pass, requestNewGame, requestUndo, resumeGame, setVsAI, toggleReview } from '../app/controller';
 import { Lang, resetSettings, setSettings, settings } from '../app/settings';
-import { game, Screen, uiTick, VERSION, boardView } from '../app/state';
+import { game, Screen, uiTick, VERSION, boardView, session } from '../app/state';
 import { sfx } from '../audio';
 import { now } from '../core/clock';
 import { BLACK, GameType, WHITE } from '../core/types';
@@ -53,14 +53,14 @@ export function MenuPanel({ h }: { h: number }) {
 
 export function GamePanel({ h }: { h: number }) {
   uiTick.value;
-  const g = game, s = settings.value, blown = blowing();
+  const g = game, s = settings.value, blown = blowing(), vsComputer = session.localMode === 'computer';
   const subtitle = g.type === GameType.Gomoku ? TF('%d 路  ·  五子连珠为胜%s', g.N, g.renju ? T('  ·  黑棋禁手') : '') : TF('%d 路  ·  数子法  ·  贴 %.1f 目', g.N, g.komi);
   let status: string, icon = g.cur.toMove;
   if (g.over) {
     icon = g.winner === 3 ? 0 : g.winner;
     status = g.winner === BLACK ? T('黑棋胜') : g.winner === WHITE ? T('白棋胜') : T('和棋');
   } else if (g.scoring) { status = T('点目'); icon = 0; }
-  else if (g.aiToMove()) status = T('电脑思考中…');
+  else if (session.computerTurn()) status = T('电脑思考中…');
   else status = g.cur.toMove === BLACK ? T('黑方落子') : T('白方落子');
   const info = g.over && g.type === GameType.Gomoku && g.winner !== 3 ? TF('五子连珠  ·  共 %d 手', g.cur.moves)
     : g.over && g.type === GameType.Go ? TF('胜 %.1f 目  ·  共 %d 手', Math.abs(g.scoreB - g.scoreW), g.cur.moves)
@@ -83,12 +83,12 @@ export function GamePanel({ h }: { h: number }) {
         <Seg items={[T('9 路'), T('13 路'), T('19 路')]} sel={g.N === 9 ? 0 : g.N === 13 ? 1 : 2} onChange={v => requestNewGame(GameType.Go, [9, 13, 19][v])} />
         <div style={{ height: '8px' }} />
       </>}
-      <Seg items={[T('双人对弈'), T('人机对弈')]} sel={g.vsAI ? 1 : 0} onChange={v => setVsAI(v === 1)} />
-      {g.vsAI && <>
+      <Seg items={[T('双人对弈'), T('人机对弈')]} sel={vsComputer ? 1 : 0} onChange={v => setVsAI(v === 1)} />
+      {vsComputer && <>
         <div style={{ height: '8px' }} />
         <Seg height={34} items={[T('简单'), T('普通'), T('困难')]} sel={s.aiLevel} onChange={v => setSettings({ aiLevel: v })} />
       </>}
-      <Hair style={{ margin: `${g.vsAI ? 28 : 32}px 0 30px` }} />
+      <Hair style={{ margin: `${vsComputer ? 28 : 32}px 0 30px` }} />
       <div class="status">
         {icon ? <StoneIcon color={icon} /> : null}
         <Fit size={22} min={14}>{status}</Fit>
@@ -114,7 +114,7 @@ export function GamePanel({ h }: { h: number }) {
           <Button label={T('确认结果')} primary onClick={confirmScore} />
         </> : g.type === GameType.Go ? <>
           <Button label={T('悔棋')} disabled={!g.hist.length} onClick={requestUndo} />
-          <Button label={T('停一手')} disabled={g.over || g.aiToMove()} onClick={pass} />
+          <Button label={T('停一手')} disabled={g.over || !session.humanTurn()} onClick={pass} />
           <Button label={T('新局')} primary onClick={() => requestNewGame(GameType.Go, g.N)} />
         </> : blown ? <>
           <Button label={T('悔棋')} disabled={!g.hist.length} onClick={requestUndo} />
@@ -183,7 +183,7 @@ export function SettingsPanel({ h }: { h: number }) {
         <Row label={T('电脑难度')}><Seg height={34} items={[T('简单'), T('普通'), T('困难')]} sel={s.aiLevel} onChange={v => setSettings({ aiLevel: v })} /></Row>
         <Row label={T('人机执子')}><Seg height={34} items={[T('执黑先行'), T('执白后行')]} sel={s.humanWhite ? 1 : 0} onChange={v => {
           setSettings({ humanWhite: v === 1 });
-          if (game.vsAI) newGame(game.type, game.N);                                  // 换边从新局开始
+          if (session.localMode === 'computer') newGame(game.type, game.N);                                  // 换边从新局开始
         }} /></Row>
       </>}
       <div style={{ position: 'absolute', left: 0, right: 0, top: 4 + 56 + 38 + 38 + 22 + 7 * 46 + 16 + 'px' }}>
@@ -192,7 +192,7 @@ export function SettingsPanel({ h }: { h: number }) {
           <Button label={T('恢复默认')} height={44} onClick={() => {
             const white = s.humanWhite;
             resetSettings();
-            if (white !== settings.value.humanWhite && game.vsAI) newGame(game.type, game.N);
+            if (white !== settings.value.humanWhite && session.localMode === 'computer') newGame(game.type, game.N);
           }} />
           <Button label={T('返回')} primary height={44} onClick={() => goScreen(Screen.Menu)} />
         </div>

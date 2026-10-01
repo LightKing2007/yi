@@ -10,7 +10,7 @@ import { GameType } from '../core/types';
 import { T, TF } from '../i18n';
 import { sfx } from '../audio';
 import { setSettings, settings } from '../app/settings';
-import { game, screen, Screen, VERSION, boardView } from '../app/state';
+import { game, screen, Screen, VERSION, boardView, session } from '../app/state';
 import { ONLINE_SERVER } from './config';
 import { native } from '../app/native';
 import { bump, goScreen } from '../app/controller';
@@ -230,7 +230,8 @@ function onStart(m: Extract<S2C, { t: 'start' }>) {
   st.toMove = 1; st.turnEnds = 0;
   st.leaveAsk = false;
   st.shownOnline = true;
-  game.newGame(m.type ? GameType.Go : GameType.Gomoku, m.size, { renju: m.type === 0 && m.renju, vsAI: false });
+  game.newGame(m.type ? GameType.Go : GameType.Gomoku, m.size, { renju: m.type === 0 && m.renju });
+  session.configure('online', { online: { mine: m.color, move, pass, canMove: myTurn } });   // 自己这一方的落子先发给服务端
   if (screen.value !== Screen.Game) goScreen(Screen.Game);
   bump();
 }

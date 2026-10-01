@@ -1,5 +1,5 @@
 /** 棋盘：木面、网格星位、棋子与各种覆盖效果的绘制顺序 */
-import { game, boardView } from '../app/state';
+import { game, boardView, session } from '../app/state';
 import { animK, settings } from '../app/settings';
 import { BLACK, EMPTY, GameType, MAXN, easeOut, smooth01 } from '../core/types';
 import { blowing, buildDebris, drawDebris, staysOnBoard } from '../fx/blow';
@@ -132,7 +132,7 @@ export function drawBoard(p: Painter, L: Layout, now: number) {
   drawRewindOver(p, L, now);
 
   // 禁手点：轮到（人执的）黑棋时，在每个禁手点上画一个暗红色的小叉
-  if (g.type === GameType.Gomoku && g.renju && !g.over && g.cur.toMove === BLACK && !g.aiToMove()) {
+  if (g.type === GameType.Gomoku && g.renju && !g.over && g.cur.toMove === BLACK && !session.computerTurn()) {
     const sz = R * 0.55, t = Math.max(1.5, R * 0.1), red = rgba(176, 52, 40, 200);
     for (let x = 0; x < N; x++) for (let y = 0; y < N; y++) {
       if (g.b(x, y) !== EMPTY || !g.forbiddenAt(x, y)) continue;

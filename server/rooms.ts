@@ -370,7 +370,7 @@ export class RoomServer {
 
   private newRoomGame(r: Room) {
     r.g = new Game();
-    r.g.newGame(r.type === 0 ? GameType.Gomoku : GameType.Go, r.size, { renju: r.type === 0 && r.renju, vsAI: false });
+    r.g.newGame(r.type === 0 ? GameType.Gomoku : GameType.Go, r.size, { renju: r.type === 0 && r.renju });
     r.acts = [];
     r.ask = null;
     r.undoUsed = [0, 0, 0]; r.drawUsed = [0, 0, 0]; r.agreed = [false, false, false];
