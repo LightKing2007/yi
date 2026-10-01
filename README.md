@@ -2,7 +2,7 @@
 
 “弈”是一款围棋与五子棋桌面游戏，支持人机对弈及联机对战。游戏以 TypeScript 编写，通过 Electron 提供 macOS、Windows 及 Linux 平台的安装程序；开发期间亦可在浏览器中运行调试。
 
-本文档说明项目的功能、开发方法、打包发行、联机服务端部署及源码结构。开发与发布流程见 [docs/RELEASE.md](docs/RELEASE.md)，文字规范见 [docs/STYLE.md](docs/STYLE.md)。
+本文档说明项目的功能、开发方法、打包发行、联机服务端部署及源码结构。项目的全部工程规范见 [docs/STANDARDS.md](docs/STANDARDS.md)（项目规范化与标准化白皮书），其下级规范为开发与发布流程 [docs/RELEASE.md](docs/RELEASE.md) 和文字规范 [docs/STYLE.md](docs/STYLE.md)。
 
 ## 1 概述
 
@@ -298,7 +298,7 @@ tests/                vitest：rules（规则与人机）、record（规则层�
                       client（联机客户端：断线、重连、服务器重启）、layers（依赖方向）、text（说明文字的译文、标点与更新日志）
 scripts/              build-node（打包主进程与服务端）、make-fonts（生成内置字体子集）、changelog（读取更新日志、生成发布说明）、
                       release（发版）、deploy.sh（上线）、shots.cjs 与 compare-shots.mjs（场景截图与逐像素对比）
-docs/                 RELEASE.md（开发与发布流程）、STYLE.md（文字规范）、PLAN.md（架构改造计划）
+docs/                 STANDARDS.md（规范白皮书）、RELEASE.md（开发与发布流程）、STYLE.md（文字规范）、PLAN.md（架构改造计划）
 ```
 
 画面分为四层：`#scene`（WebGL：背景、棋盘、棋子、棋罐、光影）、`#ui`（Preact 界面）、`#over`（飞越界面的碎子）、`#glow`（叠加的光效）。

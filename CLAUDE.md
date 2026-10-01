@@ -1,16 +1,9 @@
 # 弈 · 协作约定
 
-- 开发与发版严格按 [docs/RELEASE.md](docs/RELEASE.md) 走。
-  - 不直接改 main。每件事开 `feat/`、`fix/` 等分支，提交说明和 PR 标题都写成 `类型: 说明`。
-  - CI 通过后压缩合并，PR 合并不用等人确认，发版要等人在网页上确认草稿 Release。
-  - 发版用 `npm run release -- 版本号`，上线用 `npm run deploy -- 版本号`，不手动打标签、不手动传服务端。
-- 所有文字（游戏内说明、更新日志、安装程序、下载页面、发布说明、项目文档）按 [docs/STYLE.md](docs/STYLE.md) 书写：
-  - 正式、严谨、客观，术语统一，标点符号按 GB/T 15834，数字按 GB/T 15835；
-  - 更新日志每条以“新增”“优化”“调整”“修复”等动词开头；
-  - 同时补文言和英文译文（`src/i18n/table.ts`），英文用英国拼写，不用长破折号；
-  - 改了界面文字后运行 `node scripts/make-fonts.mjs`。
-- 玩家能感觉到的改动，在同一个 PR 里把更新日志写进 `src/ui/info.ts` 的 `LOG` 最上面一节。那一节是下一个版本，没有就新建。
-- 检查：`npm run typecheck && npm test`。改了画面或动画的，实际运行看一下。
-- 分层规则见 `tests/layers.test.ts`。core 只依赖 core，server 只依赖 core 与 shared。
-- 仓库只放核心的源码与文档，临时脚本、截图、测试产物不提交。
-- 服务器上的操作（重启、改配置）会影响正在下棋的玩家，先看连接数，没人时再做。
+本项目的全部规范以 [docs/STANDARDS.md](docs/STANDARDS.md)（项目规范化与标准化白皮书）为准。开始任何变更前，必须先阅读其中与本次变更相关的章节，并遵守其中的全部规则。
+
+- 流程：按 [docs/RELEASE.md](docs/RELEASE.md) 执行，从分支、PR、发版到上线，严禁绕过。
+- 文字：按 [docs/STYLE.md](docs/STYLE.md) 书写。
+- 检查清单：提交 PR 前逐项核对 STANDARDS.md 附录 F.1；发布前核对附录 F.2 至 F.4。
+- 整改：附录 A 列出的整改项按期限实施；涉及新增依赖、服务器操作或费用的项，先向项目所有者说明并取得同意（GEN-011、GEN-012）。
+- 审查：PR 的审查方式见 GEN-010。

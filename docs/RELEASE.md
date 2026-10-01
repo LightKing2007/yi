@@ -1,6 +1,6 @@
 # 开发与发布流程
 
-从改代码到玩家用上新版本，统一按这里的步骤走。
+本流程是 [STANDARDS.md](STANDARDS.md) 的下级规范，规定从改代码到玩家用上新版本的操作步骤；相关的强制规定见 STANDARDS.md 第 12 章、第 13 章。
 
 ```
 分支开发 → PR（CI 检查）→ 合并到 main → npm run release → 自动打包 → 确认发布 → npm run deploy
