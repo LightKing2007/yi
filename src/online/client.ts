@@ -10,10 +10,9 @@ import { GameType } from '../core/types';
 import { T, TF } from '../i18n';
 import { sfx } from '../audio';
 import { setSettings, settings } from '../app/settings';
-import { game, screen, Screen, VERSION, boardView, session } from '../app/state';
+import { game, screen, Screen, VERSION, boardView, session, uiTick } from '../app/state';
 import { ONLINE_SERVER } from './config';
 import { native } from '../app/native';
-import { bump, goScreen } from '../app/controller';
 import {
   GRACE_SECS, PING_SECS, PROTO_VERSION, SILENT_SECS, cleanName, newRating,
   type Act, type AskKind, type C2S, type GameKind, type Opponent, type OverReason, type QueueMode, type Rating, type Ratings, type S2C,
@@ -29,6 +28,16 @@ export const tr = (m: Msg) => TF(m[0], ...m.slice(1));
 /** 界面与联机状态有关的部分需要重绘时递增 */
 export const netTick = signal(0);
 const changed = () => { netTick.value++; };
+
+/** 对局状态变了：界面重绘 */
+const bump = () => { uiTick.value++; };
+
+/**
+ * 切换界面（离开对局时棋子飞回棋罐、清盘等由控制器负责）。由控制器在加载时注册（bindNavigation），
+ * 联机模块因此不必引用控制器，两者不再互相引用。
+ */
+let goScreen: (s: Screen) => void = s => { screen.value = s; };
+export function bindNavigation(go: (s: Screen) => void) { goScreen = go; }
 
 export const st = {
   phase: Phase.Off,

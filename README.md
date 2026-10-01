@@ -183,7 +183,8 @@ src/
   i18n/               多语言
 server/               rooms.ts 队列、配对、房间、对局与段位（与传输无关）、store.ts 段位存档、host.ts 接到 WebSocket（可同时监听几个端口）、main.ts 入口
 electron/             桌面版主进程（窗口、只允许一个实例、匹配成功时的任务栏提醒、错误日志）与预加载
-tests/                vitest：rules（规则与人机）、record（规则层与棋谱）、session（会话与座位）、server（联机服务端）、client（联机客户端：断线、重连、服务器重启）
+tests/                vitest：rules（规则与人机）、record（规则层与棋谱）、session（会话与座位）、server（联机服务端）、client（联机客户端：断线、重连、服务器重启）、
+                      layers（依赖方向：模块之间没有互相引用，各层只朝允许的方向依赖）
 scripts/              build-node（打包主进程与服务端）、make-icon.swift（生成图标）、make-title.swift（生成开始菜单的标题字）、
                       shots.cjs 与 compare-shots.mjs（场景截图与逐像素对比）
 ```

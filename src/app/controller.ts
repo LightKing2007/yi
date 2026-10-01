@@ -6,7 +6,7 @@ import { blowing } from '../fx/blow';
 import { startGather } from '../fx/gather';
 import { aiColor, setSettings, settings } from './settings';
 import { bowlsShown, game, screen, Screen, uiTick, view, boardView, session } from './state';
-import { online } from '../online/client';
+import { bindNavigation, online } from '../online/client';
 
 export function bump() { uiTick.value++; }
 
@@ -69,6 +69,9 @@ export function goScreen(s: Screen) {
   view.panelT = 0;
   screen.value = s;
 }
+
+// 联机模块要切换界面时（开局、断线、离开）走这里
+bindNavigation(goScreen);
 
 // ---------------- 棋盘 ----------------
 

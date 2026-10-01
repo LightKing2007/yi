@@ -8,8 +8,7 @@ import { settings } from '../app/settings';
 import { GameType, MAXN } from '../core/types';
 import { pt, type Layout } from '../render/layout';
 import { matMul3, rotAxis, type Mat3, type Painter } from '../render/painter';
-import { emit, rnd, waveArrival, winClock } from './fx';
-import { winIndex } from './gomokuWin';
+import { emit, rnd, waveArrival, winClock, winIndex } from './fx';
 
 const BLOW_END = 1.15;     // 起飞后多久完全消失（这时差不多刚停下）
 const BLOW_FADE = 0.2;     // 起飞多久后开始淡出：在飞散的过程中慢慢消失

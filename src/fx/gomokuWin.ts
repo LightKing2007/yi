@@ -7,6 +7,7 @@ import { pt, type Layout } from '../render/layout';
 import type { Painter } from '../render/painter';
 import { ensureBlowSim, emitBlowDust } from './blow';
 import { WIN_HIT, WIN_RIPPLE, WIN_STAGGER, drawLightBurst, drawShockwave, emit, rnd, winClock } from './fx';
+export { winIndex } from './fx';
 
 /** 连珠第 i 颗子的点亮时刻：从最后落下的一子向两端扩散 */
 export function winDelay(i: number) {
@@ -16,7 +17,6 @@ export function winDelay(i: number) {
   return Math.abs(i - last) * WIN_STAGGER;
 }
 
-export function winIndex(x: number, y: number) { return game.win.findIndex(w => w.x === x && w.y === y); }
 
 function winCenter(L: Layout) {
   const w = game.win, a = pt(L, w[0].x, w[0].y), b = pt(L, w[w.length - 1].x, w[w.length - 1].y);

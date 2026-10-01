@@ -16,6 +16,9 @@ export const rnd = (a: number, b: number) => a + (b - a) * Math.random();
 const MAXPT = 1600;
 let particles: Particle[] = [];
 
+/** (x, y) 是连珠里的第几颗（不在连珠里为 -1）；连珠特效与炸飞都要用 */
+export function winIndex(x: number, y: number) { return game.win.findIndex(w => w.x === x && w.y === y); }
+
 /** 胜利动画进行时间（以冲击时刻为 0）；无胜利动画时返回很小的负数 */
 export function winClock(now: number) {
   const g = game;

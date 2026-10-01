@@ -8,9 +8,12 @@ import { boardClick, boardHover, bump, controllerTick, handleKey, newGame } from
 import { animK, settings } from './settings';
 import { game, screen, Screen, uiTick, view, boardView, session } from './state';
 import { Stage } from './stage';
-import { online } from '../online/client';
 import { signal } from '@preact/signals';
 import { GameType } from '../core/types';
+
+/** 每帧要做的其他事（联机模块的心跳、重连、倒计时由入口在这里注册），主循环不必认识它们 */
+const frameHooks: ((t: number) => void)[] = [];
+export function onFrame(f: (t: number) => void) { frameHooks.push(f); }
 
 /** 开发用的钩子：每帧画完之后调用（场景脚本在这里推进虚拟时钟、截图） */
 export const devHooks = { afterDraw: null as null | (() => void) };
@@ -82,7 +85,7 @@ export function startApp(sceneCanvas: HTMLCanvasElement, overCanvas: HTMLCanvasE
     controllerTick(t);
     stage.update(L, t, dt);
     handleEvents();
-    online.update(t);
+    for (const f of frameHooks) f(t);
     const h = boardHover(L);
     ghostUpdate(L, view.mouse.x, view.mouse.y, dt, h.onBoard && !game.over && !game.scoring && h.humanTurn, h.onBoard && game.b(h.hx, h.hy) === 0 && !game.forbiddenAt(h.hx, h.hy));
     sceneCanvas.style.cursor = h.canPlace || (game.scoring && h.onBoard && game.b(h.hx, h.hy)) ? 'pointer' : 'default';
