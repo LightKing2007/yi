@@ -1,4 +1,4 @@
-; Windows 安装程序的补充（打包时自动引入）：开头增设欢迎页，欢迎页、完成页、卸载页的文字按 docs/STYLE.md 的正式文体书写。
+; Windows 安装程序的补充（打包时自动引入）：开头增设欢迎页，欢迎页、完成页、卸载页的文字按 docs/standards/09-text-and-i18n.md 书写。
 ; 欢迎页与完成页左侧为 installerSidebar.bmp 竖图。
 
 !define MUI_FINISHPAGE_TITLE "安装完成"

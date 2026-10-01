@@ -3,7 +3,7 @@
  * 依次检查：在 main 上、没有没提交的改动、和 GitHub 上的 main 一致、版本号比现在的大、这个标签还没有、
  * 更新日志最上面一节就是这个版本且译文齐全、类型检查与测试通过。全部通过后改 package.json 的版本号，
  * 提交 release: v2.0.2，打标签 v2.0.2，推送到 GitHub。推送标签后 GitHub 自动打包并建草稿 Release。
- * 之后的步骤见 docs/RELEASE.md。
+ * 之后的步骤见 docs/procedures/release.md；检查项实现 OPS-021。
  */
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';

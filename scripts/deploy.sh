@@ -1,5 +1,5 @@
 #!/bin/sh
-# 上线：把 GitHub 上已发布的某个版本放到服务器上（发版的最后一步，见 docs/RELEASE.md）
+# 上线：把 GitHub 上已发布的某个版本放到服务器上（发版的最后一步，见 docs/procedures/release.md 第 6 章；规则见 OPS-040 至 OPS-052）
 #   npm run deploy -- 2.0.2             传安装包到下载页、换上这一版的服务端、改最新版本号，再问要不要重启
 #   npm run deploy -- 2.0.2 --restart   不问，直接重启
 #   npm run deploy -- rollback          服务端换回上一版并重启（再执行一次又换回来）

@@ -1,9 +1,22 @@
 # 弈 · 协作约定
 
-本项目的全部规范以 [docs/STANDARDS.md](docs/STANDARDS.md)（项目规范化与标准化白皮书）为准。开始任何变更前，必须先阅读其中与本次变更相关的章节，并遵守其中的全部规则。
+本项目的全部规范在 `docs/standards/`（工程规范 YI-STD-001），以规则编号引用（如 `API-043`）。开始任何变更前，按下表阅读与本次任务相关的文件，并遵守其中的全部规则；只读相关文件，不必通读全部。
 
-- 流程：按 [docs/RELEASE.md](docs/RELEASE.md) 执行，从分支、PR、发版到上线，严禁绕过。
-- 文字：按 [docs/STYLE.md](docs/STYLE.md) 书写。
-- 检查清单：提交 PR 前逐项核对 STANDARDS.md 附录 F.1；发布前核对附录 F.2 至 F.4。
-- 整改：附录 A 列出的整改项按期限实施；涉及新增依赖、服务器操作或费用的项，先向项目所有者说明并取得同意（GEN-011、GEN-012）。
-- 审查：PR 的审查方式见 GEN-010。
+| 任务 | 必读（均在 `docs/standards/` 下） |
+|---|---|
+| 任何代码变更 | `01-coding.md`、`checklists.md` 第 1 节 |
+| 新增模块、跨层引用 | `02-architecture.md` |
+| 段位存档、数据库、本地存储、个人信息 | `03-data.md`、`05-security.md` |
+| 联机协议、服务端消息、HTTP 接口、错误码 | `04-api.md`、`10-edge-cases.md` |
+| 身份、令牌、Electron 配置、服务器配置 | `05-security.md` |
+| 编写测试、性能相关 | `06-testing.md` |
+| CI、发版、上线、日志、监控 | `07-operations.md`，以及 `docs/procedures/release.md` |
+| 版本号、依赖升级、协议或数据版本 | `08-versioning.md` |
+| 界面文字、更新日志、译文、任何文档 | `09-text-and-i18n.md` |
+| 新功能设计、网络或并发相关的缺陷 | `10-edge-cases.md` |
+| 规则冲突、例外、规范本身的修订 | `00-general.md` |
+
+- 流程：分支 → PR → CI 通过后压缩合并 → `npm run release` → 人工确认草稿 → `npm run deploy`，步骤见 `docs/procedures/release.md`，严禁绕过。
+- 整改：`docs/plan/remediation.md` 中的整改项按期限实施，完成后更新其状态。
+- 审查与授权：PR 的审查方式见 GEN-010；生产环境操作、新增依赖、下载、在项目外写入文件，必须先向项目所有者说明并取得同意（GEN-011、GEN-012）。
+- 文档目录与索引：`docs/README.md`。

@@ -2,7 +2,7 @@
 
 “弈”是一款围棋与五子棋桌面游戏，支持人机对弈及联机对战。游戏以 TypeScript 编写，通过 Electron 提供 macOS、Windows 及 Linux 平台的安装程序；开发期间亦可在浏览器中运行调试。
 
-本文档说明项目的功能、开发方法、打包发行、联机服务端部署及源码结构。项目的全部工程规范见 [docs/STANDARDS.md](docs/STANDARDS.md)（项目规范化与标准化白皮书），其下级规范为开发与发布流程 [docs/RELEASE.md](docs/RELEASE.md) 和文字规范 [docs/STYLE.md](docs/STYLE.md)。
+本文档说明项目的功能、开发方法、打包发行、联机服务端部署及源码结构。项目的工程规范、操作规程、计划与审计报告见 [docs/README.md](docs/README.md)。
 
 ## 1 概述
 
@@ -124,11 +124,11 @@ npm run dist:win     # release/Yi-<版本>-win-x64-setup.exe（宜在 Windows �
 npm run dist:linux   # release/Yi-<版本>-linux-x86_64.AppImage（宜在 Linux 上打包）
 ```
 
-正式发行不在本机打包，而是按 [docs/RELEASE.md](docs/RELEASE.md) 由 GitHub Actions 自动完成。私有仓库的 Release 附件不对外公开，玩家应从下载页面 <http://47.108.181.240:8443/> 获取安装程序。
+正式发行不在本机打包，而是按 [开发与发布规程](docs/procedures/release.md) 由 GitHub Actions 自动完成。私有仓库的 Release 附件不对外公开，玩家应从下载页面 <http://47.108.181.240:8443/> 获取安装程序。
 
 ### 4.2 版本号
 
-版本号仅在 `package.json` 的 `version` 中定义，游戏内显示的版本号及服务端的版本号均在构建时由此读取。版本号规则见 [docs/RELEASE.md](docs/RELEASE.md) 第 4 章。
+版本号仅在 `package.json` 的 `version` 中定义，游戏内显示的版本号及服务端的版本号均在构建时由此读取。版本号规则见 VER-002（[docs/standards/08-versioning.md](docs/standards/08-versioning.md)）。
 
 ### 4.3 错误日志
 
@@ -240,7 +240,7 @@ WantedBy=multi-user.target
 
 ### 5.4 更新与运维
 
-- **更新**：服务端随发版一同更新，由 `npm run deploy -- 版本号` 部署对应 Release 中的 `yi-server-版本.cjs`；`npm run deploy -- rollback` 可回退至上一版本。详见 [docs/RELEASE.md](docs/RELEASE.md)。
+- **更新**：服务端随发版一同更新，由 `npm run deploy -- 版本号` 部署对应 Release 中的 `yi-server-版本.cjs`；`npm run deploy -- rollback` 可回退至上一版本。详见 [开发与发布规程](docs/procedures/release.md) 第 6 章。
 - **查看日志**：`ssh root@47.108.181.240 journalctl -u yi -f`。日志首行记录服务端的版本号及提交号。
 - **修改服务配置**：修改 `yi.service` 后，执行 `systemctl daemon-reload && systemctl restart yi`。
 - **安全组**：阿里云安全组应放行 TCP 8443 端口。
@@ -263,7 +263,7 @@ WantedBy=multi-user.target
 - 代码中以中文书写原文，显示时经 [src/i18n/index.ts](src/i18n/index.ts) 中的 `T()`、`TF()` 转换为当前语言；
 - 译文统一维护于 [src/i18n/table.ts](src/i18n/table.ts)，新增界面文字时应在其中补充译文，开发模式下缺少译文时控制台给出提示；
 - 服务端发送的提示同样为中文原文，由客户端翻译；
-- 各语言的写法见 [docs/STYLE.md](docs/STYLE.md)。
+- 各语言的写法见 [docs/standards/09-text-and-i18n.md](docs/standards/09-text-and-i18n.md)。
 
 ## 7 源码结构
 
@@ -298,14 +298,14 @@ tests/                vitest：rules（规则与人机）、record（规则层�
                       client（联机客户端：断线、重连、服务器重启）、layers（依赖方向）、text（说明文字的译文、标点与更新日志）
 scripts/              build-node（打包主进程与服务端）、make-fonts（生成内置字体子集）、changelog（读取更新日志、生成发布说明）、
                       release（发版）、deploy.sh（上线）、shots.cjs 与 compare-shots.mjs（场景截图与逐像素对比）
-docs/                 STANDARDS.md（规范白皮书）、RELEASE.md（开发与发布流程）、STYLE.md（文字规范）、PLAN.md（架构改造计划）
+docs/                 standards/（工程规范）、procedures/（操作规程）、plan/（改造与整改计划）、audits/（审计报告），索引见 docs/README.md
 ```
 
 画面分为四层：`#scene`（WebGL：背景、棋盘、棋子、棋罐、光影）、`#ui`（Preact 界面）、`#over`（飞越界面的碎子）、`#glow`（叠加的光效）。
 
 ## 8 路线图
 
-后续改造计划（数据库与对局记录、账号系统、排位反作弊等）见 [docs/PLAN.md](docs/PLAN.md)。
+后续改造计划（数据库与对局记录、账号系统、排位反作弊等）见 [docs/plan/roadmap.md](docs/plan/roadmap.md)。
 
 ## 9 版权与许可
 

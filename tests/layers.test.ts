@@ -1,5 +1,5 @@
 /**
- * 依赖方向检查：读出 src/ 与 server/ 每个文件的 import（只看运行时引用，import type 不算），
+ * 依赖方向检查（实现 ARC-010、ARC-011 的一部分，见 docs/standards/02-architecture.md）：读出 src/ 与 server/ 每个文件的 import（只看运行时引用，import type 不算），
  * 确认模块之间没有互相引用，各层只朝允许的方向依赖。新增的引用违反规则时这里会失败。
  */
 import fs from 'node:fs';
