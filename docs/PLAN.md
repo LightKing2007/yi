@@ -165,7 +165,7 @@
 | 服务端 | 新增 `HOST` 环境变量（放在反向代理后面时设为 `127.0.0.1`） |
 | 端口 | 统一为 **8443**（服务端默认、客户端默认、`.env.production`、README） |
 | Node | `.nvmrc`（24）、`engines >=22.13`；服务端构建目标暂留 node20，阶段 5 再升 |
-| 其他 | 新图标与开始菜单的行楷标题（`scripts/make-icon.swift`、`make-title.swift`） |
+| 其他 | 新图标与开始菜单的行楷标题 |
 
 ---
 
@@ -489,7 +489,7 @@ export interface Seat {
 
 **验收**：推一个测试标签，Release 页面自动出现三个平台的安装包；Windows 实测清单全部通过。
 
-**结果**：v2.0.1 标签自动打出四个安装包（macOS 两个芯片各一个）。思源黑体、宋体子集随程序附带，Windows、Linux 的界面截图由 Actions 里的“UI 截图”生成。
+**结果**：v2.0.1 标签自动打出四个安装包（macOS 两个芯片各一个）。思源黑体、宋体子集随程序附带，在 Windows、Linux 上截图检查过界面与安装程序。
 私有仓库的 Release 别人下载不了，所以服务端在 8443 端口上顺带提供下载页（`YI_FILES`），发版后用 `scripts/upload-release.sh` 上传，客户端的新版本提示直接打开这个页面。
 
 ---
@@ -918,7 +918,7 @@ server/
   admin/{cli.ts, commands/*.ts}
   data/badwords.txt
 electron/          main（单实例、日志）、preload（log、secret.get/set）
-scripts/           build-node、make-icon.swift、make-title.swift
+scripts/           build-node、make-fonts、upload-release.sh、shots、compare-shots
 tests/             rules、record、match、client、server、auth、anticheat、db、e2e
 docs/              PLAN.md（本文）、PROTOCOL.md（v4 详细说明）、OPS.md（部署、备份、维护、管理）
 .github/workflows/ ci.yml、release.yml

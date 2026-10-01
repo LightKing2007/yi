@@ -1,5 +1,5 @@
 ; Windows 安装程序的补充（打包时自动引入）：开头加一页欢迎页，欢迎页、完成页、卸载页的文字按游戏里的说法写。
-; 欢迎页与完成页左边是 installerSidebar.bmp 那张竖图，由 scripts/make-icon.swift 画出。
+; 欢迎页与完成页左边是 installerSidebar.bmp 那张竖图。
 
 !define MUI_FINISHPAGE_TITLE "安装完成"
 !define MUI_FINISHPAGE_TEXT "弈已经装好了，桌面上有它的快捷方式。$\r$\n$\r$\n点完成关闭这个窗口。"

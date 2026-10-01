@@ -69,15 +69,14 @@ npm run dist:linux   # release/Yi-<版本>-linux-x86_64.AppImage（在 Linux 上
   （<http://47.108.181.240:8443/>，私有仓库的 Release 别人下载不了，大家从这里下），并把服务端的 `YI_LATEST` 改成新版本号；
   挑没人下棋的时候重启服务端，客户端就会提示更新、点一下打开下载页。
   不打标签时也可以在 Actions 页面手动运行 Release，只打包、作为附件下载。私有仓库里 macOS 机器按 10 倍计分钟数，所以平时不自动跑。
-- **各平台的界面截图**：在 Actions 页面手动运行“UI 截图”，会在 Windows、Linux 上截开始菜单、对局、设置、更多、联机对战（中文与文言），
-  用来检查字体与排版；Windows 上还会实际运行一遍安装程序，截下每一页（[scripts/installer-shots.ps1](scripts/installer-shots.ps1)）。本机也可以 `npx electron scripts/ui-shots.cjs 输出目录`。
 - **错误日志**：桌面版把出错信息写到用户数据目录下的 `logs/yi.log`（超过 1 MB 时换成 `yi.old.log`），「更多 · 关于」里有「打开日志文件夹」。只在本机，不上传。
 
 - **附带的字体**：`src/ui/assets/fonts/` 里是思源黑体、思源宋体（SIL OFL 许可）只含游戏用字的子集，约 1.4 MB。
   系统里有中文字体时优先用系统的（macOS 完全不受影响），没有中文字体的 Linux 用它们，Windows 上的标题也用它而不用强行加粗的宋体。
   改了界面文字之后运行 `node scripts/make-fonts.mjs` 重新生成（原始字体的下载地址写在脚本开头，放在不进仓库的 `.fonts-src/`）。
-- 开始菜单的大字「弈」是宣传片片名同款的行楷（macOS 的 Xingkai SC），预先渲染成 `src/ui/assets/title-yi.png`，程序里只带这张图、不带字体文件（系统字体不能随程序分发）。要重新生成：在 Mac 上运行 `npm run title-art`（行楷若未下载，先在「字体册」里下载）。
-- 应用图标是暖白圆角方块正中一个墨色行楷「弈」，右下角一方红色「棋」印，由 [scripts/make-icon.swift](scripts/make-icon.swift) 画出：在 Mac 上运行 `npm run icon`（也可 `npm run icon -- paper` 不带印，或 `-- ink` 用深色底），得到 `build-res/icon.png`（打包时自动转换成各平台格式）、`public/icon.png`（窗口图标），以及 Windows 安装程序左侧的竖图 `build-res/installerSidebar.bmp` 与右上角的小图 `installerHeader.bmp`。安装程序开头的欢迎页写在 `build-res/installer.nsh`。
+- 开始菜单的大字「弈」是宣传片片名同款的行楷（macOS 的 Xingkai SC），预先渲染成 `src/ui/assets/title-yi.png`，程序里只带这张图、不带字体文件（系统字体不能随程序分发）。
+- 应用图标是暖白圆角方块正中一个墨色行楷「弈」，右下角一方红色「棋」印：`build-res/icon.png`（1024×1024，打包时自动转换成各平台格式）与 `public/icon.png`（窗口图标）。
+  Windows 安装程序左侧的竖图是 `build-res/installerSidebar.bmp`，右上角的小图是 `installerHeader.bmp`，欢迎页、完成页、卸载页的文字写在 `build-res/installer.nsh`。
 - **macOS 签名与公证**：默认做临时（ad-hoc）签名，本机与自己的电脑可以直接运行；发给别人时，从网上下载的未公证应用会被系统拦截，
   对方第一次打开要在 Finder 里右键「打开」，或到「系统设置 · 隐私与安全性」里点「仍要打开」。
   正式发行需要 Apple 开发者账号：在钥匙串里装好「Developer ID Application」证书，把 `package.json` 里 `build.mac.identity` 的 `"-"` 删掉（让 electron-builder 自动找证书），
@@ -200,7 +199,7 @@ server/               rooms.ts 队列、配对、房间、对局与段位（与�
 electron/             桌面版主进程（窗口、只允许一个实例、匹配成功时的任务栏提醒、错误日志）与预加载
 tests/                vitest：rules（规则与人机）、record（规则层与棋谱）、session（会话与座位）、server（联机服务端）、client（联机客户端：断线、重连、服务器重启）、
                       layers（依赖方向：模块之间没有互相引用，各层只朝允许的方向依赖）
-scripts/              build-node（打包主进程与服务端）、make-icon.swift（生成图标）、make-title.swift（生成开始菜单的标题字）、
+scripts/              build-node（打包主进程与服务端）、make-fonts（生成附带的字体子集）、upload-release.sh（把安装包传到服务器的下载页）、
                       shots.cjs 与 compare-shots.mjs（场景截图与逐像素对比）
 ```
 

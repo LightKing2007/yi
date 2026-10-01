@@ -67,7 +67,7 @@ canvas { position: fixed; left: 0; top: 0; display: block; }
 
 /* 开始菜单 */
 .brand { position: relative; height: 150px; }
-/* 大字「弈」：宣传片片名同款的行楷，预先渲染成图（scripts/make-title.swift），当遮罩用，颜色跟随主题 */
+/* 大字「弈」：宣传片片名同款的行楷，预先渲染成图，当遮罩用，颜色跟随主题 */
 .brand .big {
   position: absolute; left: -4px; top: -6px; width: 126px; height: 143px; background: var(--text);
   -webkit-mask: url('./assets/title-yi.png') center / contain no-repeat; mask: url('./assets/title-yi.png') center / contain no-repeat;
