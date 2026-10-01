@@ -63,6 +63,12 @@ npm run dist:linux   # release/Yi-<版本>-linux-x86_64.AppImage（在 Linux 上
 ```
 
 - **版本号**只写在 `package.json` 的 `version` 一处，游戏里显示的版本号在构建时从这里取。
+- **发版**（在 GitHub 上自动打三个平台的安装包）：改好 `package.json` 的版本号并提交，然后
+  `git tag v<版本> && git push origin v<版本>`。Actions 里的 Release 会在 macOS、Windows、Linux 上分别打包，
+  建一个草稿 Release 附上全部安装包，在网页上确认后点发布。最后把服务端的 `YI_LATEST` 改成新版本号，提示大家更新。
+  不打标签时也可以在 Actions 页面手动运行 Release，只打包、作为附件下载。私有仓库里 macOS 机器按 10 倍计分钟数，所以平时不自动跑。
+- **各平台的界面截图**：在 Actions 页面手动运行“UI 截图”，会在 Windows、Linux 上截开始菜单、对局、设置、更多、联机对战（中文与文言），
+  用来检查字体与排版；本机也可以 `npx electron scripts/ui-shots.cjs 输出目录`。
 - **错误日志**：桌面版把出错信息写到用户数据目录下的 `logs/yi.log`（超过 1 MB 时换成 `yi.old.log`），「更多 · 关于」里有「打开日志文件夹」。只在本机，不上传。
 
 - 开始菜单的大字「弈」是宣传片片名同款的行楷（macOS 的 Xingkai SC），预先渲染成 `src/ui/assets/title-yi.png`，程序里只带这张图、不带字体文件（系统字体不能随程序分发）。要重新生成：在 Mac 上运行 `npm run title-art`（行楷若未下载，先在「字体册」里下载）。
