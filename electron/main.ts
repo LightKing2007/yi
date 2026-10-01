@@ -54,6 +54,7 @@ function createWindow() {
   const b = loadBounds();
   win = new BrowserWindow({
     ...b, minWidth: 800, minHeight: 600, show: false, title: '弈', backgroundColor: '#e0ddd9',
+    ...(process.platform === 'linux' ? { icon: path.join(DIST, 'icon.png') } : {}),   // Linux 的窗口图标要自己给；macOS、Windows 用安装包里的
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true, sandbox: true, nodeIntegration: false, spellcheck: false,

@@ -1,0 +1,32 @@
+# 在 Windows、Linux 上把游戏的几个界面截成图（检查字体与排版），截图作为附件下载。手动运行。
+name: UI 截图
+
+on:
+  workflow_dispatch:
+
+jobs:
+  shots:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: 截图（Windows）
+        if: runner.os == 'Windows'
+        run: npx electron scripts/ui-shots.cjs ui-shots
+      - name: 截图（Linux，没有显示器，用虚拟显示）
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q && sudo apt-get install -yq xvfb
+          xvfb-run -a npx electron --no-sandbox scripts/ui-shots.cjs ui-shots
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui-shots-${{ matrix.os }}
+          path: ui-shots/*.png
