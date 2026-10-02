@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1 |
+| 文件版本 | 1.1.1 |
 | 修订日期 | 2026-10-02 |
 | 规则前缀 | `API` |
 
@@ -117,10 +117,10 @@
 
 | 编号 | 等级 | 规定 | 现状 |
 |---|---|---|---|
-| API-060 | A | 对公网开放的 HTTP 路径统一以白名单定义：`GET /`、`HEAD /`、`GET /安装程序文件名`（文件名必须匹配 `server/files.ts` 中的正则）、`GET /SHA256SUMS`；3.0 起增加 `/api/v1/*` | 满足 |
+| API-060 | A | 对公网开放的 HTTP 路径统一以白名单定义：`GET /`、`HEAD /`、`GET /安装程序文件名`（文件名必须匹配 `server/files.ts` 中的正则）、`GET /SHA256SUMS`、`GET /assets/资源名`（下载页面所用的标题图与字体，名单以常量定义在 `server/files.ts` 中，内容在构建时嵌入服务端，运行时不读取磁盘）；3.0 起增加 `/api/v1/*` | 满足 |
 | API-061 | A | 健康检查 `GET /healthz` 与指标 `GET /metrics` 只允许来自 127.0.0.1 与 ::1 的请求，其他来源一律返回 404 | 未满足（未实现） |
 | API-062 | A | `/api/*` 统一带主版本前缀 `/v1/`；请求与响应体统一为 `application/json; charset=utf-8`；字段名统一为 lowerCamelCase；时间统一为 RFC 3339 UTC 字符串 | 不适用 |
-| API-063 | A | 所有 HTTP 响应必须带 `X-Content-Type-Options: nosniff`；HTML 响应必须带 `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; img-src 'self'` 与 `Referrer-Policy: no-referrer` | 未满足 |
+| API-063 | A | 所有 HTTP 响应必须带 `X-Content-Type-Options: nosniff`；HTML 响应必须带 `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; font-src 'self'`（不允许任何脚本）与 `Referrer-Policy: no-referrer` | 未满足 |
 
 ## 8 初始错误码表
 
