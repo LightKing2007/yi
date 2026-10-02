@@ -14,7 +14,7 @@ import { game, screen, Screen, VERSION, boardView, session, uiTick } from '../ap
 import { ONLINE_SERVER } from './config';
 import { native } from '../app/native';
 import {
-  GRACE_SECS, PING_SECS, PROTO_VERSION, SILENT_SECS, cleanName, newRating,
+  GRACE_SECS, PING_SECS, PROTO_VERSION, SILENT_SECS, UID_PATTERN, cleanName, newRating,
   type Act, type AskKind, type C2S, type GameKind, type Opponent, type OverReason, type QueueMode, type Rating, type Ratings, type S2C,
 } from '../shared/protocol';
 
@@ -113,12 +113,15 @@ function serverUrl() {
   return q || ONLINE_SERVER;
 }
 
-/** 本机的匿名身份：第一次联机时生成并存在本地，段位跟着它走 */
+/** 本机匿名身份的随机字节数（32 位十六进制） */
+const UID_BYTES = 16;
+
+/** 本机的匿名身份：第一次联机时生成并存在本地，段位跟着它走；本地的值不合格式时重新生成（服务端会拒绝它） */
 function uid() {
-  const make = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), v => v.toString(16).padStart(2, '0')).join('');
+  const make = () => Array.from(crypto.getRandomValues(new Uint8Array(UID_BYTES)), v => v.toString(16).padStart(2, '0')).join('');
   try {
     let v = localStorage.getItem('yi.uid');
-    if (!v) { v = make(); localStorage.setItem('yi.uid', v); }
+    if (!v || !UID_PATTERN.test(v)) { v = make(); localStorage.setItem('yi.uid', v); }
     return v;
   } catch { return make(); }
 }

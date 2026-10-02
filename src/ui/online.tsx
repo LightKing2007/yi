@@ -16,7 +16,7 @@ import { T, TF } from '../i18n';
 import * as net from '../online/client';
 import { Phase, netTick, ratingOf, st, tr } from '../online/client';
 import { seatPlates } from '../scene/online';
-import { RANKS, queueRules, rankIndex, rankName, type Opponent } from '../shared/protocol';
+import { NAME_MAX, RANKS, clipName, queueRules, rankIndex, rankName, type Opponent } from '../shared/protocol';
 import { Row, UpdateNote } from './panels';
 import { Button, Field, Fit, Hair, Seg, StoneIcon } from './widgets';
 
@@ -37,6 +37,9 @@ function Notice({ style }: { style?: Record<string, string> }) {
   const age = now() - st.noticeAt, show = st.notice.length > 0 && age < 4;
   return <div class="msg" style={{ opacity: show && age < 3.4 ? 1 : 0, ...style }}><Fit size={14} min={10}>{show ? st.notice.map(tr).join('  ·  ') : ''}</Fit></div>;
 }
+
+/** 昵称输入框的码元上限只是兜底：一个字素可能由多个码元组成，实际按字素截到 NAME_MAX 个（I18N-030） */
+const NICK_INPUT_MAX = NAME_MAX * 8;
 
 const labelW = () => (settings.value.lang === Lang.EN ? 118 : 80);
 
@@ -135,7 +138,9 @@ function lobby(h: number) {
     <div class="npanel col" style={{ height: h + 'px', ['--lw' as any]: labelW() + 'px' }}>
       <h1 class="title" style={{ height: '60px' }}>{T('联机对战')}</h1>
       <UpdateNote style={{ marginTop: '-8px', marginBottom: '8px' }} />
-      <Row label={T('昵称')}><Field value={s.nick} maxLength={16} placeholder={T('给自己取个名字')} onInput={v => setSettings({ nick: v })} /></Row>
+      <Row label={T('昵称')}>
+        <Field value={s.nick} maxLength={NICK_INPUT_MAX} placeholder={T('给自己取个名字')} onInput={v => setSettings({ nick: clipName(v) })} />
+      </Row>
       <Seg items={[T('匹配'), T('排位'), T('好友')]} sel={u.tab} onChange={v => setUi({ tab: v })} />
       <div style={{ height: '20px' }} />
       <div key={u.tab} class="tab-body">

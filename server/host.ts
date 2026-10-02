@@ -64,7 +64,7 @@ export async function startHost(ports: number | number[], opt: RoomServerOptions
       ws.on('message', (data, isBinary) => {
         if (isBinary || !sess) return;
         let msg: unknown;
-        try { msg = JSON.parse(String(data)); } catch { return; }
+        try { msg = JSON.parse(String(data)); } catch { msg = undefined; /* 不是 JSON：交给 parseC2S 按非法消息处理 */ }
         sess = server.message(sess, msg, conn);
       });
       ws.on('pong', () => { if (sess) server.touch(sess, conn); });
