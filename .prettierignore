@@ -1,0 +1,12 @@
+# Prettier 不处理的文件（COD-006 的范围）。Prettier 另外自动跳过 .gitignore 中的文件
+# 文档按 docs/standards/09-text-and-i18n.md 手工排版
+*.md
+# 锁文件由 npm 生成
+package-lock.json
+# 文字数据：每条一行，scripts/changelog.mjs 按行解析；译文表统一使用双引号（COD-004）
+src/i18n/table.ts
+src/ui/info.ts
+# 二进制资源与安装程序资源
+build-res/
+public/
+src/ui/assets/

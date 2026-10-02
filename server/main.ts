@@ -15,17 +15,24 @@ import { startHost } from './host';
 import { FileStore, StoreLoadError, type StoreLog } from './store';
 
 const BUILD = `${__APP_VERSION__}（${__APP_COMMIT__}）`;
-if (process.argv.includes('--version')) { console.log(BUILD); process.exit(0); }
+if (process.argv.includes('--version')) {
+  console.log(BUILD);
+  process.exit(0);
+}
 
 const port = Number(process.argv[2] ?? process.env.PORT ?? PROTO_PORT);
-const extra = (process.env.EXTRA_PORTS ?? '').split(',').map(s => Number(s.trim())).filter(n => n > 0 && n !== port);
+const extra = (process.env.EXTRA_PORTS ?? '')
+  .split(',')
+  .map(s => Number(s.trim()))
+  .filter(n => n > 0 && n !== port);
 const host = process.env.HOST || undefined;
 const latest = process.env.YI_LATEST || undefined;
 const download = process.env.YI_DOWNLOAD || undefined;
 const files = process.env.YI_FILES ? path.resolve(process.env.YI_FILES) : undefined;
 
 const log = (text: string) => {
-  const d = new Date(), p = (n: number) => String(n).padStart(2, '0');
+  const d = new Date(),
+    p = (n: number) => String(n).padStart(2, '0');
   console.log(`[${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}] ${text}`);
 };
 
@@ -42,13 +49,22 @@ try {
   process.exit(e.exitCode);
 }
 
-startHost([port, ...extra], { log, store, host, latest, download, files }).then(h => {
-  log(`弈 联机服务端 ${BUILD} 已启动，${host ? `地址 ${host}，` : ''}端口 ${h.ports.join('、')}（协议版本 ${PROTO_VERSION}），段位存档 ${dataFile}`
-    + (latest ? `，最新客户端 ${latest}` : '') + (files ? `，安装包目录 ${files}` : ''));
-  const stop = () => { log('正在关闭…'); store.close(); h.close().then(() => process.exit(0)); };
-  process.on('SIGINT', stop);
-  process.on('SIGTERM', stop);
-}).catch((e: Error) => {
-  console.error(`无法在端口 ${[port, ...extra].join('、')} 启动：${e.message}`);
-  process.exit(1);
-});
+startHost([port, ...extra], { log, store, host, latest, download, files })
+  .then(h => {
+    log(
+      `弈 联机服务端 ${BUILD} 已启动，${host ? `地址 ${host}，` : ''}端口 ${h.ports.join('、')}（协议版本 ${PROTO_VERSION}），段位存档 ${dataFile}` +
+        (latest ? `，最新客户端 ${latest}` : '') +
+        (files ? `，安装包目录 ${files}` : ''),
+    );
+    const stop = () => {
+      log('正在关闭…');
+      store.close();
+      h.close().then(() => process.exit(0));
+    };
+    process.on('SIGINT', stop);
+    process.on('SIGTERM', stop);
+  })
+  .catch((e: Error) => {
+    console.error(`无法在端口 ${[port, ...extra].join('、')} 启动：${e.message}`);
+    process.exit(1);
+  });

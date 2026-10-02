@@ -14,7 +14,9 @@ const ratings = (points: number): Ratings => ({
 let dir = '';
 let file = '';
 let logs: { level: string; text: string }[] = [];
-const log: StoreLog = (level, text) => { logs.push({ level, text }); };
+const log: StoreLog = (level, text) => {
+  logs.push({ level, text });
+};
 
 beforeEach(() => {
   vi.useFakeTimers();

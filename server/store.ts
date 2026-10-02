@@ -18,11 +18,16 @@ export const EXIT_DATA_ERROR = 65;
 export const EXIT_IO_ERROR = 74;
 
 /** 存档中一名玩家的记录 */
-interface Entry { name: string; ratings: Ratings }
+interface Entry {
+  name: string;
+  ratings: Ratings;
+}
 
 /** 存档读写用到的文件系统函数；测试中以假实现替换，模拟磁盘写满等故障 */
-export type StoreFs = Pick<typeof fs,
-  'readFileSync' | 'writeFileSync' | 'openSync' | 'writeSync' | 'fsyncSync' | 'closeSync' | 'renameSync' | 'copyFileSync' | 'unlinkSync'>;
+export type StoreFs = Pick<
+  typeof fs,
+  'readFileSync' | 'writeFileSync' | 'openSync' | 'writeSync' | 'fsyncSync' | 'closeSync' | 'renameSync' | 'copyFileSync' | 'unlinkSync'
+>;
 
 /** 存档日志：level 对应 RFC 5424 的级别；结构化日志与事件码由整改项 P1-08 统一建立 */
 export type StoreLog = (level: 'info' | 'warn' | 'error', text: string) => void;
@@ -39,7 +44,11 @@ export interface StoreOptions {
 
 /** 存档存在但无法读取或解析。调用方必须以 `exitCode` 退出，严禁以空数据继续运行（DAT-050） */
 export class StoreLoadError extends Error {
-  constructor(readonly file: string, readonly exitCode: number, reason: string) {
+  constructor(
+    readonly file: string,
+    readonly exitCode: number,
+    reason: string,
+  ) {
     super(`段位存档 ${file} ${reason}，已拒绝启动；原文件保持不动，请从 ${file}.prev 或备份恢复`);
     this.name = 'StoreLoadError';
   }
@@ -66,7 +75,11 @@ const errCode = (e: unknown) => (e as NodeJS.ErrnoException | undefined)?.code;
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /** 文件名可用的 UTC 时间，如 `20261002T014217Z` */
-const stamp = (ms: number) => new Date(ms).toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+const stamp = (ms: number) =>
+  new Date(ms)
+    .toISOString()
+    .replace(/[-:]/g, '')
+    .replace(/\.\d+Z$/, 'Z');
 
 /** 段位存档：内存中保存全部记录，变化后延迟写盘 */
 export class FileStore implements RatingStore {
@@ -79,14 +92,19 @@ export class FileStore implements RatingStore {
   private readonly now: () => number;
 
   /** 读取存档。文件不存在时视为首次运行；存在但无法读取或解析时抛出 `StoreLoadError` */
-  constructor(private readonly file: string, opt: StoreOptions = {}) {
+  constructor(
+    private readonly file: string,
+    opt: StoreOptions = {},
+  ) {
     this.fs = opt.fs ?? fs;
     this.log = opt.log ?? (() => {});
     this.now = opt.now ?? Date.now;
     this.load();
   }
 
-  get(key: string) { return this.data[key]?.ratings; }
+  get(key: string) {
+    return this.data[key]?.ratings;
+  }
 
   set(key: string, ratings: Ratings, name: string) {
     this.data[key] = { name, ratings: { gomoku: { ...ratings.gomoku }, go: { ...ratings.go } } };
@@ -182,7 +200,11 @@ export class FileStore implements RatingStore {
       this.keepPrevious();
       this.fs.renameSync(tmp, this.file);
     } catch (e) {
-      try { this.fs.unlinkSync(tmp); } catch { /* 临时文件可能尚未创建；残留的临时文件不影响下一次写盘 */ }
+      try {
+        this.fs.unlinkSync(tmp);
+      } catch {
+        /* 临时文件可能尚未创建；残留的临时文件不影响下一次写盘 */
+      }
       throw e;
     }
     this.syncDir();
@@ -200,7 +222,11 @@ export class FileStore implements RatingStore {
   private syncDir() {
     if (process.platform === 'win32') return;
     const fd = this.fs.openSync(path.dirname(this.file), 'r');
-    try { this.fs.fsyncSync(fd); } finally { this.fs.closeSync(fd); }
+    try {
+      this.fs.fsyncSync(fd);
+    } finally {
+      this.fs.closeSync(fd);
+    }
   }
 
   private onWriteFailed(e: unknown) {

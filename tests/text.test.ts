@@ -10,7 +10,8 @@ const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.ur
 const keys = new Set(TABLE.map(r => r[0]));
 const han = (s: string) => /[一-鿿]/.test(s);
 const cmp = (a: string, b: string) => {
-  const x = a.split('.').map(Number), y = b.split('.').map(Number);
+  const x = a.split('.').map(Number),
+    y = b.split('.').map(Number);
   for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i];
   return 0;
 };
@@ -18,22 +19,24 @@ const cmp = (a: string, b: string) => {
 describe('说明文字', () => {
   it('每一条都有文言和英文译文', () => {
     const missing: string[] = [];
-    for (const page of INFO_PAGES) for (const l of page.lines) {
-      for (const s of l.slice(1) as string[]) if (han(s) && !keys.has(s)) missing.push(s);
-    }
+    for (const page of INFO_PAGES)
+      for (const l of page.lines) {
+        for (const s of l.slice(1) as string[]) if (han(s) && !keys.has(s)) missing.push(s);
+      }
     expect(missing).toEqual([]);
   });
 
   it('中文标点合乎 GB/T 15834：不混用半角标点，引号与括号成对，段落以句号结尾', () => {
     const bad: string[] = [];
-    for (const page of INFO_PAGES) for (const l of page.lines) {
-      for (const s of l.slice(1) as string[]) {
-        if (!han(s)) continue;
-        if (/[,;:!?()"']/.test(s)) bad.push(`半角标点：${s}`);
-        if (s.split('“').length !== s.split('”').length || s.split('（').length !== s.split('）').length) bad.push(`不成对：${s}`);
+    for (const page of INFO_PAGES)
+      for (const l of page.lines) {
+        for (const s of l.slice(1) as string[]) {
+          if (!han(s)) continue;
+          if (/[,;:!?()"']/.test(s)) bad.push(`半角标点：${s}`);
+          if (s.split('“').length !== s.split('”').length || s.split('（').length !== s.split('）').length) bad.push(`不成对：${s}`);
+        }
+        if (l[0] === 'P' && han(l[1]) && !l[1].endsWith('。')) bad.push(`没有以句号结尾：${l[1]}`);
       }
-      if (l[0] === 'P' && han(l[1]) && !l[1].endsWith('。')) bad.push(`没有以句号结尾：${l[1]}`);
-    }
     expect(bad).toEqual([]);
   });
 
@@ -61,6 +64,9 @@ describe('更新日志', () => {
 
   it('最上面一节是当前版本，或者是正在准备的下一个版本', () => {
     expect(cmp(log[0].version, pkg.version)).toBeGreaterThanOrEqual(0);
-    expect(log.some(s => s.version === pkg.version), `更新日志里没有当前版本 ${pkg.version}`).toBe(true);
+    expect(
+      log.some(s => s.version === pkg.version),
+      `更新日志里没有当前版本 ${pkg.version}`,
+    ).toBe(true);
   });
 });

@@ -8,9 +8,19 @@
  */
 import { BLACK, EMPTY, MAXN, type Board } from './types';
 
-export enum Renju { Ok = 0, Overline = 1, DoubleFour = 2, DoubleThree = 3 }
+export enum Renju {
+  Ok = 0,
+  Overline = 1,
+  DoubleFour = 2,
+  DoubleThree = 3,
+}
 
-const DIRS = [[1, 0], [0, 1], [1, 1], [1, -1]] as const;
+const DIRS = [
+  [1, 0],
+  [0, 1],
+  [1, 1],
+  [1, -1],
+] as const;
 
 const inB = (N: number, x: number, y: number) => x >= 0 && y >= 0 && x < N && y < N;
 
@@ -36,11 +46,12 @@ function foursInDir(b: Board, N: number, px: number, py: number, d: number) {
   const [dx, dy] = DIRS[d];
   const qs: number[] = [];
   for (let k = -4; k <= 4; k++) {
-    const qx = px + k * dx, qy = py + k * dy;
+    const qx = px + k * dx,
+      qy = py + k * dy;
     if (k === 0 || !inB(N, qx, qy) || b[qx * MAXN + qy] !== EMPTY) continue;
     if (fiveThrough(b, N, px, py, qx, qy, d)) qs.push(k);
   }
-  if (qs.length === 2 && qs[1] - qs[0] === 5) return 1;   // _XXXX_ 活四
+  if (qs.length === 2 && qs[1] - qs[0] === 5) return 1; // _XXXX_ 活四
   return qs.length >= 2 ? 2 : qs.length;
 }
 
@@ -48,17 +59,28 @@ function foursInDir(b: Board, N: number, px: number, py: number, d: number) {
 function threeInDir(b: Board, N: number, px: number, py: number, d: number, depth: number) {
   const [dx, dy] = DIRS[d];
   for (let k = -4; k <= 4; k++) {
-    const qx = px + k * dx, qy = py + k * dy;
+    const qx = px + k * dx,
+      qy = py + k * dy;
     if (k === 0 || !inB(N, qx, qy) || b[qx * MAXN + qy] !== EMPTY) continue;
     b[qx * MAXN + qy] = BLACK;
     let open = foursInDir(b, N, px, py, d) === 1 && runLen(b, N, px, py, d) === 4;
-    if (open) {                                   // 活四：连续四子两端都空，且各补一子都恰好成五
-      let a = 1, c = 1;
+    if (open) {
+      // 活四：连续四子两端都空，且各补一子都恰好成五
+      let a = 1,
+        c = 1;
       while (inB(N, px + a * dx, py + a * dy) && b[(px + a * dx) * MAXN + py + a * dy] === BLACK) a++;
       while (inB(N, px - c * dx, py - c * dy) && b[(px - c * dx) * MAXN + py - c * dy] === BLACK) c++;
-      const ex = px + a * dx, ey = py + a * dy, fx = px - c * dx, fy = py - c * dy;
-      open = inB(N, ex, ey) && inB(N, fx, fy) && b[ex * MAXN + ey] === EMPTY && b[fx * MAXN + fy] === EMPTY
-        && fiveThrough(b, N, px, py, ex, ey, d) && fiveThrough(b, N, px, py, fx, fy, d);
+      const ex = px + a * dx,
+        ey = py + a * dy,
+        fx = px - c * dx,
+        fy = py - c * dy;
+      open =
+        inB(N, ex, ey) &&
+        inB(N, fx, fy) &&
+        b[ex * MAXN + ey] === EMPTY &&
+        b[fx * MAXN + fy] === EMPTY &&
+        fiveThrough(b, N, px, py, ex, ey, d) &&
+        fiveThrough(b, N, px, py, fx, fy, d);
     }
     b[qx * MAXN + qy] = EMPTY;
     if (open && (depth <= 0 || !forbiddenDepth(b, N, qx, qy, depth - 1))) return true;
@@ -69,7 +91,10 @@ function threeInDir(b: Board, N: number, px: number, py: number, d: number, dept
 function forbiddenDepth(b: Board, N: number, x: number, y: number, depth: number): Renju {
   if (b[x * MAXN + y] !== EMPTY) return Renju.Ok;
   b[x * MAXN + y] = BLACK;
-  let five = false, over = false, fours = 0, threes = 0;
+  let five = false,
+    over = false,
+    fours = 0,
+    threes = 0;
   for (let d = 0; d < 4; d++) {
     const n = runLen(b, N, x, y, d);
     if (n === 5) five = true;
@@ -92,16 +117,19 @@ function forbiddenDepth(b: Board, N: number, x: number, y: number, depth: number
  * 同一条线上的四四与长连要另有至少三颗。够不上的点不可能是禁手，免去递归检查。
  */
 function mayBeForbidden(b: Board, N: number, x: number, y: number) {
-  let lines2 = 0, lines3 = 0;
+  let lines2 = 0,
+    lines3 = 0;
   for (let d = 0; d < 4; d++) {
     const [dx, dy] = DIRS[d];
     let n = 0;
     for (const s of [1, -1]) {
       for (let k = 1; k <= 4; k++) {
-        const px = x + s * k * dx, py = y + s * k * dy;
+        const px = x + s * k * dx,
+          py = y + s * k * dy;
         if (!inB(N, px, py)) break;
         const v = b[px * MAXN + py];
-        if (v === BLACK) n++; else if (v !== EMPTY) break;
+        if (v === BLACK) n++;
+        else if (v !== EMPTY) break;
       }
     }
     if (n >= 2) lines2++;

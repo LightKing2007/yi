@@ -5,7 +5,7 @@ name: Linux 冒烟检查
 
 on:
   workflow_dispatch:
-  pull_request:                              # 改动检查本身时自动运行一次
+  pull_request: # 改动检查本身时自动运行一次
     paths:
       - .github/workflows/linux-smoke.yml
       - scripts/smoke-app.mjs
@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      APPIMAGE_EXTRACT_AND_RUN: '1'          # 运行机器上没有 FUSE 2：AppImage 解压后运行
+      APPIMAGE_EXTRACT_AND_RUN: '1' # 运行机器上没有 FUSE 2：AppImage 解压后运行
       # 运行机器没有 GPU。Chromium 已取消 WebGL 自动退回软件渲染，须显式允许 SwiftShader，否则游戏提示“当前环境不支持 WebGL2”
       SMOKE_ARGS: --enable-unsafe-swiftshader
     steps:
@@ -48,4 +48,4 @@ jobs:
         with:
           name: linux-smoke
           path: smoke*/*.png
-          retention-days: 7                    # 截图只供当次核对
+          retention-days: 7 # 截图只供当次核对

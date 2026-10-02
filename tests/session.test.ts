@@ -18,21 +18,34 @@ class FakeWorker implements WorkerLike {
   onerror: ((e: { message: string }) => void) | null = null;
   queue: ThinkRequest[] = [];
   terminated = false;
-  constructor() { FakeWorker.all.push(this); }
-  postMessage(m: ThinkRequest) { this.queue.push(m); }
-  terminate() { this.terminated = true; }
-  flush() { for (const m of this.queue.splice(0)) if (!this.terminated) this.onmessage?.({ data: think(m) }); }
+  constructor() {
+    FakeWorker.all.push(this);
+  }
+  postMessage(m: ThinkRequest) {
+    this.queue.push(m);
+  }
+  terminate() {
+    this.terminated = true;
+  }
+  flush() {
+    for (const m of this.queue.splice(0)) if (!this.terminated) this.onmessage?.({ data: think(m) });
+  }
 }
 const flushAll = () => FakeWorker.all.forEach(w => w.flush());
 
 function world(level = 1) {
-  const g = new Game(), view = new BoardView();
+  const g = new Game(),
+    view = new BoardView();
   g.listener = view;
   const s = new Session(g, view, { level: () => level, worker: () => new FakeWorker() });
   return { g, view, s };
 }
 
-beforeEach(() => { T = 100; setClock(() => T); FakeWorker.all = []; });
+beforeEach(() => {
+  T = 100;
+  setClock(() => T);
+  FakeWorker.all = [];
+});
 
 describe('双人对弈', () => {
   it('两方都由本机的人落子，悔棋退一手', () => {
@@ -56,13 +69,15 @@ describe('人机对弈', () => {
     expect(s.play(7, 7)).toBe(true);
     expect(s.computerTurn()).toBe(true);
     expect(s.humanTurn()).toBe(false);
-    expect(s.play(0, 0)).toBe(false);                     // 轮到电脑时人不能落子
-    s.tick(T);                                             // 刚落子，电脑还在等
+    expect(s.play(0, 0)).toBe(false); // 轮到电脑时人不能落子
+    s.tick(T); // 刚落子，电脑还在等
     expect(FakeWorker.all.length).toBe(0);
-    T += 0.4; s.tick(T);
+    T += 0.4;
+    s.tick(T);
     expect(s.thinking).toBe(true);
     expect(FakeWorker.all[0].queue[0].kind).toBe('gomoku');
-    flushAll(); s.tick(T);
+    flushAll();
+    s.tick(T);
     expect(g.cur.moves).toBe(2);
     expect(g.cur.toMove).toBe(BLACK);
     expect(s.thinking).toBe(false);
@@ -77,7 +92,10 @@ describe('人机对弈', () => {
     g.newGame(GameType.Gomoku, 15);
     s.configure('computer', { computerColor: BLACK });
     expect(s.computerTurn()).toBe(true);
-    T += 1; s.tick(T); flushAll(); s.tick(T);
+    T += 1;
+    s.tick(T);
+    flushAll();
+    s.tick(T);
     expect(g.b(7, 7)).toBe(BLACK);
   });
 
@@ -86,18 +104,23 @@ describe('人机对弈', () => {
     g.newGame(GameType.Gomoku, 15);
     s.configure('computer', { computerColor: WHITE });
     s.play(7, 7);
-    T += 0.4; s.tick(T);
+    T += 0.4;
+    s.tick(T);
     const w = FakeWorker.all[0];
     expect(w.queue.length).toBe(1);
-    g.undo(1); s.cancel();                                 // 电脑还在想时悔棋
+    g.undo(1);
+    s.cancel(); // 电脑还在想时悔棋
     expect(w.terminated).toBe(true);
     expect(s.thinking).toBe(false);
-    w.flush(); s.tick(T);
+    w.flush();
+    s.tick(T);
     expect(g.cur.moves).toBe(0);
     s.play(6, 6);
-    T += 0.4; s.tick(T);
-    expect(FakeWorker.all.length).toBe(2);                 // 新开的线程
-    flushAll(); s.tick(T);
+    T += 0.4;
+    s.tick(T);
+    expect(FakeWorker.all.length).toBe(2); // 新开的线程
+    flushAll();
+    s.tick(T);
     expect(g.cur.moves).toBe(2);
   });
 
@@ -106,12 +129,17 @@ describe('人机对弈', () => {
     g.newGame(GameType.Gomoku, 15);
     s.configure('computer', { computerColor: WHITE });
     s.play(7, 7);
-    T += 0.4; s.tick(T);
-    g.undo(1); g.play(3, 3);                               // 不经过会话直接改了局面（例如联机重放）
-    flushAll(); T += 0.4; s.tick(T);
+    T += 0.4;
+    s.tick(T);
+    g.undo(1);
+    g.play(3, 3); // 不经过会话直接改了局面（例如联机重放）
+    flushAll();
+    T += 0.4;
+    s.tick(T);
     expect(g.b(3, 3)).toBe(BLACK);
-    expect(g.cur.moves).toBe(1);                           // 旧结果被丢掉，电脑重新想
-    flushAll(); s.tick(T);
+    expect(g.cur.moves).toBe(1); // 旧结果被丢掉，电脑重新想
+    flushAll();
+    s.tick(T);
     expect(g.cur.moves).toBe(2);
   });
 
@@ -119,17 +147,20 @@ describe('人机对弈', () => {
     const { g, s } = world();
     g.newGame(GameType.Go, 9);
     s.configure('computer', { computerColor: WHITE });
-    for (let y = 0; y < 9; y++) { g.cur.b[at(3, y)] = BLACK; g.cur.b[at(5, y)] = WHITE; }
-    g.cur.b[at(1, 4)] = WHITE;                             // 黑地里一颗孤零零的白子
+    for (let y = 0; y < 9; y++) {
+      g.cur.b[at(3, y)] = BLACK;
+      g.cur.b[at(5, y)] = WHITE;
+    }
+    g.cur.b[at(1, 4)] = WHITE; // 黑地里一颗孤零零的白子
     s.pass();
     s.tick(T);
-    g.pass();                                              // 电脑也停一手
+    g.pass(); // 电脑也停一手
     expect(g.scoring).toBe(true);
     s.tick(T);
-    expect(g.dead[1 * MAXN + 4]).toBe(0);                  // 还没算完
+    expect(g.dead[1 * MAXN + 4]).toBe(0); // 还没算完
     flushAll();
     expect(g.dead[1 * MAXN + 4]).toBe(1);
-    expect(g.scoreB).toBe(9 + 27);                         // 死子提掉后左边三列都是黑地
+    expect(g.scoreB).toBe(9 + 27); // 死子提掉后左边三列都是黑地
   });
 });
 
@@ -148,8 +179,8 @@ describe('联机', () => {
     canMove = false;
     expect(s.humanTurn()).toBe(false);
     canMove = true;
-    g.play(4, 4);                                          // 服务端确认后由联机模块落子
-    expect(s.humanTurn()).toBe(false);                     // 轮到对方
+    g.play(4, 4); // 服务端确认后由联机模块落子
+    expect(s.humanTurn()).toBe(false); // 轮到对方
     expect(s.play(5, 5)).toBe(false);
     expect(sent.length).toBe(2);
   });
@@ -158,7 +189,18 @@ describe('联机', () => {
 describe('困难电脑的时限', () => {
   it('时间到了就用已经算完的那一层，不会一直想下去', () => {
     const b = new Uint8Array(MAXN * MAXN);
-    const stones = [[7, 7, 1], [8, 8, 2], [6, 8, 1], [8, 6, 2], [9, 7, 1], [6, 6, 2], [7, 9, 1], [9, 9, 2], [5, 7, 1], [10, 8, 2]];
+    const stones = [
+      [7, 7, 1],
+      [8, 8, 2],
+      [6, 8, 1],
+      [8, 6, 2],
+      [9, 7, 1],
+      [6, 6, 2],
+      [7, 9, 1],
+      [9, 9, 2],
+      [5, 7, 1],
+      [10, 8, 2],
+    ];
     for (const [x, y, c] of stones) b[at(x, y)] = c;
     const t0 = performance.now();
     const m = gomokuMove({ b, N: 15, me: BLACK, renju: true }, 2, Math.random, 30);

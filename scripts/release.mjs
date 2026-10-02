@@ -12,13 +12,21 @@ import { check } from './changelog.mjs';
 const version = process.argv[2];
 const sh = (cmd, opt = {}) => execSync(cmd, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], ...opt }).trim();
 const run = (cmd, env) => execSync(cmd, { stdio: 'inherit', env: { ...process.env, ...env } });
-const fail = msg => { console.error(`✗ ${msg}`); process.exit(1); };
+const fail = msg => {
+  console.error(`✗ ${msg}`);
+  process.exit(1);
+};
 const ok = msg => console.log(`✓ ${msg}`);
 
 if (!/^\d+\.\d+\.\d+$/.test(version ?? '')) fail('用法：npm run release -- 版本号，例如 npm run release -- 2.0.2');
 
 const current = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
-const cmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
+const cmp = (a, b) => {
+  const x = a.split('.').map(Number),
+    y = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i];
+  return 0;
+};
 if (cmp(version, current) <= 0) fail(`新版本号 ${version} 要比现在的 ${current} 大`);
 ok(`版本号 ${current} → ${version}`);
 
@@ -30,7 +38,10 @@ if (sh(`git tag --list v${version}`)) fail(`标签 v${version} 已经有了`);
 ok('在 main 上，和 GitHub 一致，没有没提交的改动');
 
 const problems = check(version);
-if (problems.length) { for (const p of problems) console.error(`✗ ${p}`); fail('先把更新日志写好（src/ui/info.ts 与 src/i18n/table.ts），走 PR 合并后再发版'); }
+if (problems.length) {
+  for (const p of problems) console.error(`✗ ${p}`);
+  fail('先把更新日志写好（src/ui/info.ts 与 src/i18n/table.ts），走 PR 合并后再发版');
+}
 ok(`更新日志 ${version} 已写好，译文齐全`);
 
 console.log('… 类型检查与测试');

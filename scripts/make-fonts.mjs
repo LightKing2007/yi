@@ -13,7 +13,8 @@ import path from 'node:path';
 import subsetFont from 'subset-font';
 
 const root = path.join(path.dirname(new URL(import.meta.url).pathname), '..');
-const src = path.join(root, '.fonts-src'), out = path.join(root, 'src/ui/assets/fonts');
+const src = path.join(root, '.fonts-src'),
+  out = path.join(root, 'src/ui/assets/fonts');
 
 /** 游戏里出现过的所有字：src/ 与 server/ 下全部源码里的字符（含译文表、说明文字、服务端发来的提示） */
 function usedChars() {
@@ -27,24 +28,27 @@ function usedChars() {
   };
   walk(path.join(root, 'src'));
   walk(path.join(root, 'server'));
-  for (let c = 0x20; c < 0x7f; c++) set.add(String.fromCharCode(c));       // ASCII
+  for (let c = 0x20; c < 0x7f; c++) set.add(String.fromCharCode(c)); // ASCII
   for (const ch of '·、，。：；！？“”‘’（）《》「」—…　') set.add(ch);
   return set;
 }
 
 /** GB2312 一级汉字（最常用的 3755 个） */
 function gb2312Level1() {
-  const dec = new TextDecoder('gbk'), out = [];
-  for (let hi = 0xb0; hi <= 0xd7; hi++) for (let lo = 0xa1; lo <= 0xfe; lo++) {
-    if (hi === 0xd7 && lo > 0xf9) break;
-    out.push(dec.decode(new Uint8Array([hi, lo])));
-  }
+  const dec = new TextDecoder('gbk'),
+    out = [];
+  for (let hi = 0xb0; hi <= 0xd7; hi++)
+    for (let lo = 0xa1; lo <= 0xfe; lo++) {
+      if (hi === 0xd7 && lo > 0xf9) break;
+      out.push(dec.decode(new Uint8Array([hi, lo])));
+    }
   return out;
 }
 
 const used = usedChars();
 const keep = s => [...s].filter(ch => ch.codePointAt(0) >= 0x20).join('');
-const serifText = keep(used), sansText = keep(new Set([...used, ...gb2312Level1()]));
+const serifText = keep(used),
+  sansText = keep(new Set([...used, ...gb2312Level1()]));
 
 const jobs = [
   ['NotoSerifSC-Regular.otf', 'yi-serif-400.woff2', serifText],
@@ -54,7 +58,10 @@ const jobs = [
 fs.mkdirSync(out, { recursive: true });
 for (const [from, to, text] of jobs) {
   const file = path.join(src, from);
-  if (!fs.existsSync(file)) { console.error(`缺少原始字体 ${file}（见本文件开头的下载地址）`); process.exit(1); }
+  if (!fs.existsSync(file)) {
+    console.error(`缺少原始字体 ${file}（见本文件开头的下载地址）`);
+    process.exit(1);
+  }
   const buf = await subsetFont(fs.readFileSync(file), text, { targetFormat: 'woff2' });
   fs.writeFileSync(path.join(out, to), buf);
   console.log(`${to}  ${[...text].length} 个字  ${(buf.length / 1024).toFixed(0)} KB`);

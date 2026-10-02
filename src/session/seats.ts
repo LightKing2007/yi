@@ -27,21 +27,34 @@ export interface Seat {
 export class HumanSeat implements Seat {
   readonly kind = 'human';
   readonly local = true;
-  constructor(private game: Game, private view: BoardView) {}
+  constructor(
+    private game: Game,
+    private view: BoardView,
+  ) {}
   play(x: number, y: number) {
     if (!this.game.play(x, y)) return false;
-    this.view.aiAt = now() + 0.35;                         // 人机对弈时电脑稍等一下再应
+    this.view.aiAt = now() + 0.35; // 人机对弈时电脑稍等一下再应
     return true;
   }
-  pass() { this.game.pass(); }
+  pass() {
+    this.game.pass();
+  }
 }
 
 /** 联机的一方：mine 为自己时，落子与停一手交给 send 发给服务端 */
 export class RemoteSeat implements Seat {
   readonly kind = 'remote';
-  constructor(readonly local: boolean, private send: { move(x: number, y: number): void; pass(): void } | null) {}
-  play(x: number, y: number) { this.send?.move(x, y); return false; }
-  pass() { this.send?.pass(); }
+  constructor(
+    readonly local: boolean,
+    private send: { move(x: number, y: number): void; pass(): void } | null,
+  ) {}
+  play(x: number, y: number) {
+    this.send?.move(x, y);
+    return false;
+  }
+  pass() {
+    this.send?.pass();
+  }
 }
 
 /** 后台线程的样子（测试里换成同步的假线程） */
@@ -72,18 +85,28 @@ export class ComputerSeat implements Seat {
   private result: { stamp: string; x: number; y: number } | null = null;
   private dead: { id: number; stamp: string } | null = null;
 
-  constructor(private game: Game, private view: BoardView, readonly color: number, private opt: ComputerOptions) {}
+  constructor(
+    private game: Game,
+    private view: BoardView,
+    readonly color: number,
+    private opt: ComputerOptions,
+  ) {}
 
-  play() { return false; }
+  play() {
+    return false;
+  }
   pass() {}
 
   /** 局面的指纹：想好的结果只用在想它的那个局面上 */
-  private stamp() { return String(this.game.ver); }
+  private stamp() {
+    return String(this.game.ver);
+  }
 
   private ensureWorker() {
     if (this.worker) return this.worker;
     const w = this.opt.worker();
-    w.onerror = e => {                                     // 出错就丢掉这个线程，稍后重新开
+    w.onerror = e => {
+      // 出错就丢掉这个线程，稍后重新开
       this.opt.onError?.(e.message);
       this.cancel();
       this.view.aiAt = now() + 2;
@@ -94,34 +117,43 @@ export class ComputerSeat implements Seat {
 
   private onReply(r: ThinkReply) {
     if ('dead' in r) {
-      const d = this.dead, g = this.game;
+      const d = this.dead,
+        g = this.game;
       if (!d || d.id !== r.id) return;
       this.dead = null;
-      if (!g.scoring || d.stamp !== this.stamp()) return;  // 点目已经结束或局面变了
+      if (!g.scoring || d.stamp !== this.stamp()) return; // 点目已经结束或局面变了
       for (const p of r.dead) g.dead[p.x * MAXN + p.y] = 1;
       if (r.dead.length) g.computeScore();
       return;
     }
-    if (this.pending && r.id === this.pending.id) { this.result = { stamp: this.pending.stamp, x: r.x, y: r.y }; this.pending = null; }
+    if (this.pending && r.id === this.pending.id) {
+      this.result = { stamp: this.pending.stamp, x: r.x, y: r.y };
+      this.pending = null;
+    }
   }
 
   /** 轮到电脑：想好了就落子，没想就开始想 */
   tick(t: number) {
     const g = this.game;
     const myTurn = !g.over && !g.scoring && g.cur.toMove === this.color;
-    if (!myTurn) { this.thinking = false; return; }
+    if (!myTurn) {
+      this.thinking = false;
+      return;
+    }
     if (t < this.view.aiAt) return;
     const stamp = this.stamp();
     if (this.result && this.result.stamp === stamp) {
       const { x, y } = this.result;
       this.result = null;
       this.thinking = false;
-      if (g.type === GameType.Gomoku) { if (x >= 0) g.play(x, y); }
-      else if (x < 0 || !g.play(x, y)) g.pass();
+      if (g.type === GameType.Gomoku) {
+        if (x >= 0) g.play(x, y);
+      } else if (x < 0 || !g.play(x, y)) g.pass();
       return;
     }
     if (this.pending && this.pending.stamp === stamp) return;
-    const id = ++this.reqId, level = this.opt.level();
+    const id = ++this.reqId,
+      level = this.opt.level();
     this.pending = { id, stamp };
     this.thinking = true;
     this.ensureWorker().postMessage(g.type === GameType.Go ? { id, kind: 'go', snap: goSnap(g), level } : { id, kind: 'gomoku', snap: gomokuSnap(g), level });
@@ -129,15 +161,21 @@ export class ComputerSeat implements Seat {
 
   /** 点目开始时让电脑先估出死子（在后台线程里算，玩家可以再改） */
   estimateDead() {
-    const g = this.game, id = ++this.reqId;
+    const g = this.game,
+      id = ++this.reqId;
     this.dead = { id, stamp: this.stamp() };
     this.ensureWorker().postMessage({ id, kind: 'dead', b: g.cur.b.slice(), N: g.N, komi: g.komi });
   }
 
   /** 立刻停止思考：后台线程正在算的话直接结束它，下次要用时重新开 */
   cancel() {
-    if (this.worker && (this.pending || this.dead)) { this.worker.terminate(); this.worker = null; }
-    this.pending = null; this.result = null; this.dead = null;
+    if (this.worker && (this.pending || this.dead)) {
+      this.worker.terminate();
+      this.worker = null;
+    }
+    this.pending = null;
+    this.result = null;
+    this.dead = null;
     this.thinking = false;
   }
 }

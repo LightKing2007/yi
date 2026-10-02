@@ -9,7 +9,10 @@ import { PROTO_VERSION, UID_PATTERN, type C2S } from './protocol';
  * 校验失败。invalid 为 `version` 时是协议版本不符（提示玩家更新游戏），为 `format` 时是消息格式错误；
  * why 是失败原因，只写日志，不下发给客户端
  */
-export interface Invalid { invalid: 'version' | 'format'; why: string }
+export interface Invalid {
+  invalid: 'version' | 'format';
+  why: string;
+}
 
 /** 校验结果是否为失败 */
 export const isInvalid = (m: C2S | Invalid): m is Invalid => 'invalid' in m;
@@ -21,17 +24,32 @@ const NAME_RAW_MAX = 256;
 
 type Check = (v: unknown) => boolean;
 /** 一个字段的校验；optional 表示该字段可以不出现 */
-interface Field { check: Check; optional?: true }
+interface Field {
+  check: Check;
+  optional?: true;
+}
 /** 每种消息除 t 以外的每个字段都必须有校验：协议新增字段而忘了在这里补上时，类型检查不通过 */
 type Schema = { [K in C2S['t']]: { [F in Exclude<keyof Extract<C2S, { t: K }>, 't'>]-?: Field } };
 
 /** 有限整数且在 [lo, hi] 内；NaN、Infinity、小数、负零一律不合法（10-edge-cases.md 第 4 节） */
-const intIn = (lo: number, hi: number): Check => v => Number.isInteger(v) && !Object.is(v, -0) && (v as number) >= lo && (v as number) <= hi;
+const intIn =
+  (lo: number, hi: number): Check =>
+  v =>
+    Number.isInteger(v) && !Object.is(v, -0) && (v as number) >= lo && (v as number) <= hi;
 /** 取值属于列出的几项（数值按 Object.is 比较，负零不等于零） */
-const oneOf = (...xs: readonly (string | number)[]): Check => v => xs.some(x => Object.is(x, v));
+const oneOf =
+  (...xs: readonly (string | number)[]): Check =>
+  v =>
+    xs.some(x => Object.is(x, v));
 const bool: Check = v => typeof v === 'boolean';
-const match = (re: RegExp): Check => v => typeof v === 'string' && re.test(v);
-const text = (max: number): Check => v => typeof v === 'string' && v.length <= max;
+const match =
+  (re: RegExp): Check =>
+  v =>
+    typeof v === 'string' && re.test(v);
+const text =
+  (max: number): Check =>
+  v =>
+    typeof v === 'string' && v.length <= max;
 
 const need = (check: Check): Field => ({ check });
 const COORD = need(intIn(0, MAXN - 1));
@@ -81,7 +99,7 @@ export function parseC2S(raw: unknown): C2S | Invalid {
   const fields: Record<string, Field> = SCHEMA[t as C2S['t']];
   const out: Record<string, unknown> = { t };
   for (const [k, f] of Object.entries(fields)) {
-    const v = Object.hasOwn(o, k) ? o[k] : undefined;   // 值为 undefined 的键与没有这个键相同（JSON 里不会出现）
+    const v = Object.hasOwn(o, k) ? o[k] : undefined; // 值为 undefined 的键与没有这个键相同（JSON 里不会出现）
     if (v === undefined && f.optional) continue;
     if (v === undefined || !f.check(v)) return format(`${t}.${k} 不合法：${v === undefined ? '缺少' : shown(v)}`);
     out[k] = v;

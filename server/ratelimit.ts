@@ -36,7 +36,11 @@ export class TokenBucket {
   private at: number;
 
   /** rate：每秒补充的令牌数；burst：桶的容量；now：创建时刻（秒），桶在此刻是满的 */
-  constructor(private readonly rate: number, private readonly burst: number, now: number) {
+  constructor(
+    private readonly rate: number,
+    private readonly burst: number,
+    now: number,
+  ) {
     this.tokens = burst;
     this.at = now;
   }
@@ -56,13 +60,16 @@ export class WindowCounter {
   private times: number[] = [];
 
   /** windowSecs：时间窗长度（秒）；max：上限，窗内次数达到它即 full */
-  constructor(private readonly windowSecs: number, private readonly max: number) {}
+  constructor(
+    private readonly windowSecs: number,
+    private readonly max: number,
+  ) {}
 
   /** 记一次，返回记过之后窗内的次数 */
   hit(now: number): number {
     this.prune(now);
     this.times.push(now);
-    if (this.times.length > this.max) this.times.shift();   // 超过上限的部分不必记：full 已经成立
+    if (this.times.length > this.max) this.times.shift(); // 超过上限的部分不必记：full 已经成立
     return this.times.length;
   }
 
@@ -73,7 +80,9 @@ export class WindowCounter {
   }
 
   /** 窗内的次数已达到上限 */
-  full(now: number): boolean { return this.count(now) >= this.max; }
+  full(now: number): boolean {
+    return this.count(now) >= this.max;
+  }
 
   private prune(now: number) {
     while (this.times.length && now - this.times[0] >= this.windowSecs) this.times.shift();
@@ -104,7 +113,7 @@ export class IpGate {
       this.blocked.delete(ip);
     }
     let c = this.recent.get(ip);
-    if (!c) this.recent.set(ip, c = new WindowCounter(this.opt.windowSecs, this.opt.max + 1));
+    if (!c) this.recent.set(ip, (c = new WindowCounter(this.opt.windowSecs, this.opt.max + 1)));
     if (c.hit(now) <= this.opt.max) return true;
     this.recent.delete(ip);
     this.blocked.set(ip, now + this.opt.blockSecs);
@@ -118,7 +127,9 @@ export class IpGate {
   }
 
   /** 正在追踪的 IP 数（测试与监控用） */
-  get size() { return this.recent.size + this.blocked.size; }
+  get size() {
+    return this.recent.size + this.blocked.size;
+  }
 }
 
 /** 受频率限制的操作：改名、进入或退出匹配队列（API-044） */
@@ -135,10 +146,14 @@ export class ConnLimits {
   private noticedAt = -Infinity;
 
   /** now：连接建立的时刻（秒） */
-  constructor(now: number) { this.bucket = new TokenBucket(MSG_RATE_PER_SEC, MSG_BURST, now); }
+  constructor(now: number) {
+    this.bucket = new TokenBucket(MSG_RATE_PER_SEC, MSG_BURST, now);
+  }
 
   /** 收到一条消息时调用；返回 false 表示超出限速，这条消息应丢弃 */
-  message(now: number): boolean { return this.bucket.take(now); }
+  message(now: number): boolean {
+    return this.bucket.take(now);
+  }
 
   /** 执行一次受限操作前调用；返回 false 表示超出频率，这次操作应拒绝 */
   allow(op: LimitedOp, now: number): boolean {
@@ -149,7 +164,9 @@ export class ConnLimits {
   }
 
   /** 记一次违规；返回 true 表示累计已达上限，连接应断开 */
-  violate(now: number): boolean { return this.violations.hit(now) >= VIOLATION_MAX; }
+  violate(now: number): boolean {
+    return this.violations.hit(now) >= VIOLATION_MAX;
+  }
 
   /** 这次超限是否应回复提示：1 秒内只回复一次，免得回复本身成了洪泛 */
   notice(now: number): boolean {

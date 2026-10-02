@@ -5,11 +5,23 @@ import { GameType, easeOut } from '../core/types';
 import { PAD, type Layout } from '../render/layout';
 import type { Painter } from '../render/painter';
 
-export interface Particle { x: number; y: number; vx: number; vy: number; t0: number; life: number; size: number; drag: number; grav: number; hue: number; kind: number }
+export interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  t0: number;
+  life: number;
+  size: number;
+  drag: number;
+  grav: number;
+  hue: number;
+  kind: number;
+}
 
-export const WIN_STAGGER = 0.075;  // 连珠棋子从最后一子向两端依次点亮的间隔
-export const WIN_HIT = 0.15;       // 最后一子落定（冲击）相对连珠时刻的延迟
-export const WIN_RIPPLE = 1.4;     // 每颗棋子涟漪扩散一次的时长
+export const WIN_STAGGER = 0.075; // 连珠棋子从最后一子向两端依次点亮的间隔
+export const WIN_HIT = 0.15; // 最后一子落定（冲击）相对连珠时刻的延迟
+export const WIN_RIPPLE = 1.4; // 每颗棋子涟漪扩散一次的时长
 
 export const rnd = (a: number, b: number) => a + (b - a) * Math.random();
 
@@ -17,7 +29,9 @@ const MAXPT = 1600;
 let particles: Particle[] = [];
 
 /** (x, y) 是连珠里的第几颗（不在连珠里为 -1）；连珠特效与炸飞都要用 */
-export function winIndex(x: number, y: number) { return game.win.findIndex(w => w.x === x && w.y === y); }
+export function winIndex(x: number, y: number) {
+  return game.win.findIndex(w => w.x === x && w.y === y);
+}
 
 /** 胜利动画进行时间（以冲击时刻为 0）；无胜利动画时返回很小的负数 */
 export function winClock(now: number) {
@@ -43,20 +57,26 @@ export function waveArrival(gx: number, gy: number, cx: number, cy: number) {
   return (1 - Math.cbrt(1 - e)) * 1.1;
 }
 
-export function clearParticles() { particles = []; }
-export function emit(p: Particle) { if (particles.length < MAXPT) particles.push(p); }
+export function clearParticles() {
+  particles = [];
+}
+export function emit(p: Particle) {
+  if (particles.length < MAXPT) particles.push(p);
+}
 
 /** 棋盘整体的震动：位移、冲击时的缩放、轻微的旋转晃动（度） */
 export function winShake(L: Layout, now: number) {
-  const t = endClock(now), s = settings.value;
+  const t = endClock(now),
+    s = settings.value;
   const out = { x: 0, y: 0, scale: 1, rot: 0 };
   if (!s.shake || s.fx === 0 || t < -WIN_HIT || t > 1.4) return out;
-  if (t < 0) {                                           // 冲击前的一瞬：整盘微微收紧
+  if (t < 0) {
+    // 冲击前的一瞬：整盘微微收紧
     const u = (t + WIN_HIT) / WIN_HIT;
     out.scale = 1 - 0.012 * u * u;
     return out;
   }
-  const a = L.cell * 0.4 * Math.exp(-t * 3.6);           // 沉重的震动：频率低、幅度大、衰减慢
+  const a = L.cell * 0.4 * Math.exp(-t * 3.6); // 沉重的震动：频率低、幅度大、衰减慢
   out.scale = 1 + 0.028 * Math.exp(-t * 3.2) * Math.cos(t * 8);
   out.rot = 0.6 * Math.exp(-t * 3.2) * Math.sin(t * 17 + 0.6);
   out.x = a * (0.7 * Math.sin(t * 47) + 0.3 * Math.sin(t * 73 + 1.3));
@@ -69,8 +89,10 @@ export function drawLightBurst(p: Painter, L: Layout, cx: number, cy: number, t:
   if (t < 0 || t > 2.6 || settings.value.fx < 2) return;
   p.blend('add');
   for (let i = 0; i < 12; i++) {
-    let h1 = Math.sin(i * 12.9898) * 43758.5453; h1 -= Math.floor(h1);
-    let h2 = Math.sin(i * 78.233) * 12543.853; h2 -= Math.floor(h2);
+    let h1 = Math.sin(i * 12.9898) * 43758.5453;
+    h1 -= Math.floor(h1);
+    let h2 = Math.sin(i * 78.233) * 12543.853;
+    h2 -= Math.floor(h2);
     const ang = i * 0.5236 + (h1 - 0.5) * 0.35 + t * 0.04;
     const grow = easeOut(Math.min(t / 0.8, 1));
     const len = reach * (0.55 + 0.45 * h2) * (0.3 + 0.7 * grow);
@@ -89,9 +111,11 @@ export function updateParticles(now: number, dt: number) {
     if (age > q.life) return false;
     if (age >= 0) {
       const k = Math.exp(-q.drag * dt);
-      q.vx *= k; q.vy *= k;
+      q.vx *= k;
+      q.vy *= k;
       q.vy += q.grav * dt;
-      q.x += q.vx * dt; q.y += q.vy * dt;
+      q.x += q.vx * dt;
+      q.y += q.vy * dt;
     }
     return true;
   });
@@ -122,8 +146,10 @@ export function drawParticles(body: Painter, glow: Painter, now: number) {
     for (const q of particles) {
       const age = now - q.t0;
       if (age < 0) continue;
-      const u = age / q.life, fade = (1 - u) * (1 - u);
-      const hue = pass ? q.hue * 0.3 : q.hue, sz = pass ? 0.7 : 1;
+      const u = age / q.life,
+        fade = (1 - u) * (1 - u);
+      const hue = pass ? q.hue * 0.3 : q.hue,
+        sz = pass ? 0.7 : 1;
       if (q.kind === 1) {
         const sp = Math.hypot(q.vx, q.vy);
         const len = q.size * (1.6 + sp / (q.size * 12));
@@ -142,8 +168,10 @@ export function drawParticles(body: Painter, glow: Painter, now: number) {
 /** 画面四周压暗的电影感暗角（alpha 0..1） */
 function vignette(p: Painter, w: number, h: number, a: number) {
   if (a < 0.004) return;
-  const d = [16 / 255, 10 / 255, 4 / 255, a] as const, z = [16 / 255, 10 / 255, 4 / 255, 0] as const;
-  const bw = w / 4, bh = h / 4;
+  const d = [16 / 255, 10 / 255, 4 / 255, a] as const,
+    z = [16 / 255, 10 / 255, 4 / 255, 0] as const;
+  const bw = w / 4,
+    bh = h / 4;
   p.gradH(0, 0, bw, h, d, z);
   p.gradH(w - bw, 0, bw, h, z, d);
   p.gradV(0, 0, w, bh, d, z);

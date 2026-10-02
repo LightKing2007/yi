@@ -11,14 +11,32 @@ import { BLACK, MAXN, at, newBoard, type Board, type Pos } from '../core/types';
 import { rejectText } from '../shared/reject';
 
 /** 屏幕上方的提示：文字表里的中文原文（显示时经 T() 翻译） */
-export interface Flash { key: string }
+export interface Flash {
+  key: string;
+}
 
-export interface FadeStone { x: number; y: number; c: number; t0: number }
+export interface FadeStone {
+  x: number;
+  y: number;
+  c: number;
+  t0: number;
+}
 /** 悔棋时被收回、正在“倒放”升起消失的棋子 */
-export interface RewindStone { x: number; y: number; c: number; t0: number }
+export interface RewindStone {
+  x: number;
+  y: number;
+  c: number;
+  t0: number;
+}
 
 /** 切换棋盘 / 新局的过渡：记下旧棋盘，旧棋子由中心向外依次升起淡去 */
-export interface BoardSwitch { t0: number; N: number; b: Board; seed: Uint8Array; dur: number }
+export interface BoardSwitch {
+  t0: number;
+  N: number;
+  b: Board;
+  seed: Uint8Array;
+  dur: number;
+}
 export const SWITCH_T = 0.7;
 
 export class BoardView implements GameListener {
@@ -54,12 +72,27 @@ export class BoardView implements GameListener {
   /** 电脑最早可以落子的时刻（落子、悔棋、开局后稍等一下） */
   aiAt = 0;
 
-  constructor() { this.reseed(); }
+  constructor() {
+    this.reseed();
+  }
 
-  private reseed() { for (let i = 0; i < this.seed.length; i++) this.seed[i] = (Math.random() * 256) | 0; }
-  private clearEnd() { this.winT = 0; this.winBurst = 0; this.review = false; this.blowView = 1; this.goEndT = 0; this.goBurst = 0; this.undoPending = false; }
+  private reseed() {
+    for (let i = 0; i < this.seed.length; i++) this.seed[i] = (Math.random() * 256) | 0;
+  }
+  private clearEnd() {
+    this.winT = 0;
+    this.winBurst = 0;
+    this.review = false;
+    this.blowView = 1;
+    this.goEndT = 0;
+    this.goBurst = 0;
+    this.undoPending = false;
+  }
 
-  flash(key: string) { this.msg = { key }; this.msgAt = now(); }
+  flash(key: string) {
+    this.msg = { key };
+    this.msgAt = now();
+  }
 
   // ---------------- GameListener ----------------
 
@@ -67,18 +100,25 @@ export class BoardView implements GameListener {
     this.switch = { t0: t, N: prevN, b: prevB.slice(), seed: this.seed.slice(), dur: this.nextSwitchDur };
     this.nextSwitchDur = SWITCH_T;
     this.newPending = null;
-    this.fades = []; this.rw = [];
+    this.fades = [];
+    this.rw = [];
     this.clearEnd();
-    this.placeT.fill(-10); this.appearT.fill(-10);
+    this.placeT.fill(-10);
+    this.appearT.fill(-10);
     this.reseed();
     this.msg = null;
-    this.aiAt = t + 0.6;                                   // 玩家执白时电脑先行，稍等一下再落子
+    this.aiAt = t + 0.6; // 玩家执白时电脑先行，稍等一下再落子
   }
 
   placed(x: number, y: number, color: number, v: Applied, t: number) {
     this.placeT[at(x, y)] = t;
     this.seed[at(x, y)] = (Math.random() * 256) | 0;
-    if (v.line) { this.winT = t; this.winBurst = 0; this.review = false; this.blowView = 1; }
+    if (v.line) {
+      this.winT = t;
+      this.winBurst = 0;
+      this.review = false;
+      this.blowView = 1;
+    }
     for (const p of v.captured) if (this.fades.length < 512) this.fades.push({ x: p.x, y: p.y, c: 3 - color, t0: t + 0.08 });
   }
 
@@ -93,7 +133,8 @@ export class BoardView implements GameListener {
     const k = animK();
     this.rw = [];
     for (let i = 0; i < old.b.length; i++) {
-      const x = Math.floor(i / MAXN), y = i % MAXN;
+      const x = Math.floor(i / MAXN),
+        y = i % MAXN;
       if (old.b[i] && !cur.b[i]) {
         if (this.rw.length < 8) this.rw.push({ x, y, c: old.b[i], t0: t + (x === old.lastX && y === old.lastY ? 0 : 0.14 * k) });
       } else if (!old.b[i] && cur.b[i]) this.appearT[i] = t + 0.3 * k;
@@ -105,19 +146,30 @@ export class BoardView implements GameListener {
     this.aiAt = t + 0.4;
   }
 
-  scored(t: number) { this.goEndT = t; this.goBurst = 0; }
-
-  forfeited(t: number) {
-    this.winT = t; this.winBurst = 0; this.review = false; this.blowView = 1;   // 五子棋用
-    this.goEndT = t; this.goBurst = 0;                                        // 围棋用
+  scored(t: number) {
+    this.goEndT = t;
+    this.goBurst = 0;
   }
 
-  rejected(why: Reject) { this.flash(rejectText(why)); }
+  forfeited(t: number) {
+    this.winT = t;
+    this.winBurst = 0;
+    this.review = false;
+    this.blowView = 1; // 五子棋用
+    this.goEndT = t;
+    this.goBurst = 0; // 围棋用
+  }
+
+  rejected(why: Reject) {
+    this.flash(rejectText(why));
+  }
 
   /** 整局重建之后（联机重连、复盘）：不要逐手的动画，直接定格在最终局面 */
   settle() {
-    this.placeT.fill(-10); this.appearT.fill(-10);
-    this.fades = []; this.rw = [];
+    this.placeT.fill(-10);
+    this.appearT.fill(-10);
+    this.fades = [];
+    this.rw = [];
     this.switch.t0 = -100;
     this.msg = null;
   }

@@ -13,6 +13,6 @@ export type ThinkReply = { id: number; x: number; y: number } | { id: number; de
 
 export function think(r: ThinkRequest): ThinkReply {
   if (r.kind === 'dead') return { id: r.id, dead: estimateDead(r.b, r.N, r.komi) };
-  const m = r.kind === 'go' ? goThink(r.snap, r.level) : gomokuMove(r.snap, r.level) ?? { x: -1, y: -1 };
+  const m = r.kind === 'go' ? goThink(r.snap, r.level) : (gomokuMove(r.snap, r.level) ?? { x: -1, y: -1 });
   return { id: r.id, x: m.x, y: m.y };
 }

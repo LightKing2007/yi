@@ -1,4 +1,4 @@
-# 每个 PR 与合并到 main 后：类型检查、测试、构建。PR 还要检查标题的格式（合并时它就是 main 上的提交说明）。
+# 每个 PR 与合并到 main 后：格式检查、类型检查、测试、构建。PR 还要检查标题的格式（合并时它就是 main 上的提交说明）。
 name: CI
 
 on:
@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'   # 只跑类型检查与测试，不需要 Electron 本体
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1' # 只跑类型检查与测试，不需要 Electron 本体
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -23,6 +23,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - run: npm run format:check # COD-006：格式由 Prettier 决定
       - run: npm run typecheck
       - run: npm test
       - run: npm run build:web
@@ -33,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
-      - name: "PR 标题写成「类型: 说明」"
+      - name: 'PR 标题写成「类型: 说明」'
         env:
           TITLE: ${{ github.event.pull_request.title }}
         run: |

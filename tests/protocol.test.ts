@@ -10,14 +10,26 @@ const TOKEN = '0123456789abcdef0123456789abcdef';
 const LEGAL: C2S[] = [
   { t: 'hello', v: PROTO_VERSION, name: '甲', uid: UID },
   { t: 'hello', v: PROTO_VERSION, name: '', uid: UID, token: TOKEN },
-  { t: 'ping' }, { t: 'name', name: '乙' },
-  { t: 'queue', mode: 'match', type: 1, size: 9 }, { t: 'queue', mode: 'ranked', type: 0, size: 19 },
-  { t: 'unqueue' }, { t: 'confirm', ok: false },
+  { t: 'ping' },
+  { t: 'name', name: '乙' },
+  { t: 'queue', mode: 'match', type: 1, size: 9 },
+  { t: 'queue', mode: 'ranked', type: 0, size: 19 },
+  { t: 'unqueue' },
+  { t: 'confirm', ok: false },
   { t: 'create', type: 1, size: 13, hostColor: 2, renju: false, moveTime: 120 },
-  { t: 'close' }, { t: 'join', code: '0427' },
-  { t: 'move', x: 0, y: 18 }, { t: 'pass' }, { t: 'undo' }, { t: 'draw' }, { t: 'rematch' },
-  { t: 'reply', kind: 'rematch', ok: true }, { t: 'resign' }, { t: 'mark', x: 3, y: 3 },
-  { t: 'agree' }, { t: 'resume' }, { t: 'leave' },
+  { t: 'close' },
+  { t: 'join', code: '0427' },
+  { t: 'move', x: 0, y: 18 },
+  { t: 'pass' },
+  { t: 'undo' },
+  { t: 'draw' },
+  { t: 'rematch' },
+  { t: 'reply', kind: 'rematch', ok: true },
+  { t: 'resign' },
+  { t: 'mark', x: 3, y: 3 },
+  { t: 'agree' },
+  { t: 'resume' },
+  { t: 'leave' },
 ];
 
 /** 期望校验不通过，返回失败的种类 */
@@ -52,12 +64,16 @@ describe('入站消息校验', () => {
 
   it('枚举与布尔字段取值不在规定范围内时不通过（API-012）', () => {
     const bad: unknown[] = [
-      { t: 'queue', mode: 'casual', type: 0, size: 15 }, { t: 'queue', mode: 'match', type: 2, size: 15 },
-      { t: 'queue', mode: 'match', type: 0, size: 14 }, { t: 'queue', mode: 'match', type: 0 },
+      { t: 'queue', mode: 'casual', type: 0, size: 15 },
+      { t: 'queue', mode: 'match', type: 2, size: 15 },
+      { t: 'queue', mode: 'match', type: 0, size: 14 },
+      { t: 'queue', mode: 'match', type: 0 },
       { t: 'create', type: 0, size: 15, hostColor: 3, renju: true, moveTime: 0 },
       { t: 'create', type: 0, size: 15, hostColor: 0, renju: 1, moveTime: 0 },
       { t: 'create', type: 0, size: 15, hostColor: 0, renju: true, moveTime: 45 },
-      { t: 'confirm', ok: 'yes' }, { t: 'reply', kind: 'resign', ok: true }, { t: 'reply', kind: 'undo' },
+      { t: 'confirm', ok: 'yes' },
+      { t: 'reply', kind: 'resign', ok: true },
+      { t: 'reply', kind: 'undo' },
     ];
     for (const m of bad) expect(kind(m), JSON.stringify(m)).toBe('format');
   });
@@ -65,11 +81,23 @@ describe('入站消息校验', () => {
   it('房号、uid、令牌不合格式，或昵称原文过长时不通过（API-013）', () => {
     const hello = { t: 'hello', v: PROTO_VERSION, name: '甲', uid: UID };
     const bad: unknown[] = [
-      { t: 'join', code: '12a4' }, { t: 'join', code: '123' }, { t: 'join', code: '12345' }, { t: 'join', code: 1234 },
-      { ...hello, uid: '' }, { ...hello, uid: 'short' }, { ...hello, uid: 'x'.repeat(65) }, { ...hello, uid: 'has space in it!!' },
-      { ...hello, token: '' }, { ...hello, token: TOKEN.toUpperCase() }, { ...hello, token: TOKEN + '0' },
-      { ...hello, name: 7 }, { ...hello, name: '名'.repeat(257) }, { t: 'name', name: null },
-      { ...hello, v: 0 }, { ...hello, v: 100 }, { ...hello, v: '3' },
+      { t: 'join', code: '12a4' },
+      { t: 'join', code: '123' },
+      { t: 'join', code: '12345' },
+      { t: 'join', code: 1234 },
+      { ...hello, uid: '' },
+      { ...hello, uid: 'short' },
+      { ...hello, uid: 'x'.repeat(65) },
+      { ...hello, uid: 'has space in it!!' },
+      { ...hello, token: '' },
+      { ...hello, token: TOKEN.toUpperCase() },
+      { ...hello, token: TOKEN + '0' },
+      { ...hello, name: 7 },
+      { ...hello, name: '名'.repeat(257) },
+      { t: 'name', name: null },
+      { ...hello, v: 0 },
+      { ...hello, v: 100 },
+      { ...hello, v: '3' },
     ];
     for (const m of bad) expect(kind(m), JSON.stringify(m)).toBe('format');
   });
@@ -100,7 +128,9 @@ describe('昵称清洗', () => {
   });
 
   it('按字素截到 16 个：带肤色的表情、国旗与组合字符不被拆开（I18N-030）', () => {
-    const thumb = '👍🏽', flag = '🇨🇳', e = 'é̂';   // e 加两个组合附加符号：一个字素
+    const thumb = '👍🏽',
+      flag = '🇨🇳',
+      e = 'é̂'; // e 加两个组合附加符号：一个字素
     expect(cleanName((thumb + flag + e).repeat(10), '棋手')).toBe((thumb + flag + e.normalize('NFC')).repeat(5) + thumb);
     expect(cleanName('一二三四五六七八九十一二三四五六七八', '棋手')).toBe('一二三四五六七八九十一二三四五六');
   });

@@ -8,7 +8,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const DIST = path.join(__dirname, '..', 'dist');
-const DEV_URL = process.env.YI_DEV_URL;           // 开发时：YI_DEV_URL=http://localhost:5173 npm run app:dev
+const DEV_URL = process.env.YI_DEV_URL; // 开发时：YI_DEV_URL=http://localhost:5173 npm run app:dev
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, codeCache: true } }]);
 
@@ -22,15 +22,22 @@ const LOG_MAX = 1024 * 1024;
 
 function writeLog(level: string, text: string) {
   try {
-    const dir = logDir(), file = path.join(dir, 'yi.log');
+    const dir = logDir(),
+      file = path.join(dir, 'yi.log');
     fs.mkdirSync(dir, { recursive: true });
-    try { if (fs.statSync(file).size > LOG_MAX) fs.renameSync(file, path.join(dir, 'yi.old.log')); } catch { /* 还没有日志文件 */ }
+    try {
+      if (fs.statSync(file).size > LOG_MAX) fs.renameSync(file, path.join(dir, 'yi.old.log'));
+    } catch {
+      /* 还没有日志文件 */
+    }
     fs.appendFileSync(file, `[${new Date().toISOString()}] [${level}] ${text}\n`);
-  } catch { /* 写不了日志也不能影响游戏 */ }
+  } catch {
+    /* 写不了日志也不能影响游戏 */
+  }
 }
 
 process.on('uncaughtException', e => writeLog('main', e.stack ?? String(e)));
-process.on('unhandledRejection', e => writeLog('main', e instanceof Error ? e.stack ?? e.message : String(e)));
+process.on('unhandledRejection', e => writeLog('main', e instanceof Error ? (e.stack ?? e.message) : String(e)));
 
 // ---------------- 窗口 ----------------
 
@@ -40,36 +47,57 @@ function loadBounds() {
   try {
     const b = JSON.parse(fs.readFileSync(boundsFile(), 'utf8'));
     if (typeof b.width === 'number' && typeof b.height === 'number') return b as { x?: number; y?: number; width: number; height: number; max?: boolean };
-  } catch { /* 第一次启动 */ }
+  } catch {
+    /* 第一次启动 */
+  }
   const wa = screen.getPrimaryDisplay().workAreaSize;
   return { width: Math.min(1320, Math.round(wa.width * 0.9)), height: Math.min(900, Math.round(wa.height * 0.9)) };
 }
 
 function saveBounds() {
   if (!win) return;
-  try { fs.writeFileSync(boundsFile(), JSON.stringify({ ...win.getNormalBounds(), max: win.isMaximized() })); } catch { /* 忽略 */ }
+  try {
+    fs.writeFileSync(boundsFile(), JSON.stringify({ ...win.getNormalBounds(), max: win.isMaximized() }));
+  } catch {
+    /* 忽略 */
+  }
 }
 
 function createWindow() {
   const b = loadBounds();
   win = new BrowserWindow({
-    ...b, minWidth: 800, minHeight: 600, show: false, title: '弈', backgroundColor: '#e0ddd9',
-    ...(process.platform === 'linux' ? { icon: path.join(DIST, 'icon.png') } : {}),   // Linux 的窗口图标要自己给；macOS、Windows 用安装包里的
+    ...b,
+    minWidth: 800,
+    minHeight: 600,
+    show: false,
+    title: '弈',
+    backgroundColor: '#e0ddd9',
+    ...(process.platform === 'linux' ? { icon: path.join(DIST, 'icon.png') } : {}), // Linux 的窗口图标要自己给；macOS、Windows 用安装包里的
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
-      contextIsolation: true, sandbox: true, nodeIntegration: false, spellcheck: false,
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      spellcheck: false,
       autoplayPolicy: 'no-user-gesture-required',
     },
   });
   if (b.max) win.maximize();
   win.once('ready-to-show', () => win?.show());
   win.on('close', saveBounds);
-  win.on('closed', () => { win = null; });
+  win.on('closed', () => {
+    win = null;
+  });
   win.webContents.on('render-process-gone', (_e, d) => writeLog('main', `页面进程退出：${d.reason}（${d.exitCode}）`));
   win.on('focus', () => win?.flashFrame(false));
   // 外部链接用系统浏览器打开，页面本身不跳转
-  win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:\/\//.test(url)) shell.openExternal(url); return { action: 'deny' }; });
-  win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('app://') && !(DEV_URL && url.startsWith(DEV_URL))) e.preventDefault(); });
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  win.webContents.on('will-navigate', (e, url) => {
+    if (!url.startsWith('app://') && !(DEV_URL && url.startsWith(DEV_URL))) e.preventDefault();
+  });
   // F11 全屏
   win.webContents.on('before-input-event', (_e, input) => {
     if (input.type === 'keyDown' && input.key === 'F11' && win) win.setFullScreen(!win.isFullScreen());
@@ -81,7 +109,10 @@ function createWindow() {
 
 ipcMain.on('app:quit', () => app.quit());
 ipcMain.on('app:log', (_e, level: unknown, text: unknown) => writeLog(String(level).slice(0, 16), String(text).slice(0, 8000)));
-ipcMain.on('app:openLogs', () => { fs.mkdirSync(logDir(), { recursive: true }); shell.openPath(logDir()); });
+ipcMain.on('app:openLogs', () => {
+  fs.mkdirSync(logDir(), { recursive: true });
+  shell.openPath(logDir());
+});
 // 窗口不在前台时匹配成功：任务栏闪烁 / 程序坞图标跳一下
 ipcMain.on('app:attention', () => {
   if (!win || win.isFocused()) return;
@@ -107,9 +138,11 @@ app.whenReady().then(() => {
     if (!file.startsWith(DIST + path.sep)) return new Response('Not found', { status: 404 });
     return net.fetch(pathToFileURL(file).toString());
   });
-  if (process.platform !== 'darwin') Menu.setApplicationMenu(null);   // macOS 保留系统菜单（退出、编辑快捷键）
+  if (process.platform !== 'darwin') Menu.setApplicationMenu(null); // macOS 保留系统菜单（退出、编辑快捷键）
   createWindow();
-  app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
+  app.on('activate', () => {
+    if (!BrowserWindow.getAllWindows().length) createWindow();
+  });
 });
 
 app.on('window-all-closed', () => app.quit());

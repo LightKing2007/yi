@@ -21,8 +21,8 @@ scenarios?.prepare();
 
 try {
   const stage = startApp(scene, over, glow);
-  onFrame(net.update);                                  // 联机：心跳、重连、倒计时
-  if (import.meta.env.DEV) (window as any).__yi = { stage, net, controller };   // 开发时调试用
+  onFrame(net.update); // 联机：心跳、重连、倒计时
+  if (import.meta.env.DEV) (window as any).__yi = { stage, net, controller }; // 开发时调试用
 } catch (e) {
   logError('启动', e);
   const box = document.createElement('div');

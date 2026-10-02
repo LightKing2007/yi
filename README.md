@@ -90,6 +90,7 @@ npm install          # 安装依赖，并启用 .githooks 中的 Git 钩子
 npm run dev          # 启动开发服务器，浏览器打开 http://localhost:5173，修改代码后即时刷新
 npm test             # 运行全部测试
 npm run typecheck    # 类型检查
+npm run format       # 按 Prettier 统一代码格式（COD-006；范围见 .prettierignore），CI 以 npm run format:check 检查
 ```
 
 Electron 本体（约 130 MB）不随 `npm install` 下载，而在首次运行 `npm run app`、`npm run shots` 等命令时下载，默认缓存于系统目录。如需将下载缓存保留在项目内，可在首次运行前设置环境变量 `electron_config_cache=.cache/electron`（`.cache/` 不纳入版本控制）。

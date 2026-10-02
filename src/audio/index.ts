@@ -9,7 +9,9 @@ type Impl = {
 
 let impl: Impl = { play() {}, clack() {}, duck() {} };
 
-export function setAudioImpl(i: Impl) { impl = i; }
+export function setAudioImpl(i: Impl) {
+  impl = i;
+}
 
 export const sfx = {
   play: (id: SfxId, vol = 1, rate = 1, pan = 0) => impl.play(id, vol, rate, pan),

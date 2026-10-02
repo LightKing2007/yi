@@ -56,8 +56,8 @@ export class Stage {
     goEndUpdate(L, now, dt);
     updateParticles(now, dt);
     view.onlineK = approach(view.onlineK, scr === Screen.Online ? 1 : 0, dt, 0.5);
-    boardView.blowView = approach(boardView.blowView, boardView.review ? 0 : 1, dt, 0.75);        // 查看 / 收起棋局
-    view.bowlK = approach(view.bowlK, bowlsShown(scr) ? 1 : 0, dt, 1.2);  // 棋罐缓缓移出 / 移回
+    boardView.blowView = approach(boardView.blowView, boardView.review ? 0 : 1, dt, 0.75); // 查看 / 收起棋局
+    view.bowlK = approach(view.bowlK, bowlsShown(scr) ? 1 : 0, dt, 1.2); // 棋罐缓缓移出 / 移回
     view.duskK += ((settings.value.light ? 1 : 0) - view.duskK) * (1 - Math.exp(-dt * 4));
   }
 
@@ -76,11 +76,19 @@ export class Stage {
   }
 
   draw(L: Layout, now: number) {
-    const p = this.ps, g = p.g, W = g.vw, H = g.vh, th = theme();
+    const p = this.ps,
+      g = p.g,
+      W = g.vw,
+      H = g.vh,
+      th = theme();
     const sh = winShake(L, now);
     const pushShake = (gg: Gfx) => {
       const bc = { x: L.board.x + L.board.w / 2, y: L.board.y + L.board.h / 2 };
-      gg.push(); gg.translate(bc.x + sh.x, bc.y + sh.y); gg.rotate(sh.rot); gg.scale(sh.scale); gg.translate(-bc.x, -bc.y);
+      gg.push();
+      gg.translate(bc.x + sh.x, bc.y + sh.y);
+      gg.rotate(sh.rot);
+      gg.scale(sh.scale);
+      gg.translate(-bc.x, -bc.y);
     };
 
     g.begin(null, [th.bgBot[0], th.bgBot[1], th.bgBot[2], 1]);
@@ -94,7 +102,8 @@ export class Stage {
     this.light.draw(W, H, this.lightK());
     g.end();
 
-    const o = this.po, og = o.g;
+    const o = this.po,
+      og = o.g;
     og.begin(null, [0, 0, 0, 0]);
     pushShake(og);
     drawDebris(o, L, true, true);

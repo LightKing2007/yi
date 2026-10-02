@@ -11,8 +11,8 @@ import { fileServer } from './files';
 import { IpGate, NEW_CONN_BLOCK_SECS, NEW_CONN_MAX, NEW_CONN_WINDOW_SECS } from './ratelimit';
 import { RoomServer, type Conn, type RoomServerOptions } from './rooms';
 
-const MAX_MSG_BYTES = 4096;     // 单条消息的字节上限：远大于任何合法消息（API-002）
-const MAX_PER_IP = 8;           // 同一个 IP 同时最多几条连接（API-040）
+const MAX_MSG_BYTES = 4096; // 单条消息的字节上限：远大于任何合法消息（API-002）
+const MAX_PER_IP = 8; // 同一个 IP 同时最多几条连接（API-040）
 /** 检查各种超时的间隔 */
 const TICK_MS = 250;
 /** WebSocket 层心跳的间隔；同时清理按 IP 的连接记录 */
@@ -34,10 +34,17 @@ export function hardenHttp(server: http.Server) {
   server.maxHeadersCount = HTTP_LIMITS.maxHeadersCount;
 }
 
-export interface Host { server: RoomServer; port: number; ports: number[]; close(): Promise<void> }
+export interface Host {
+  server: RoomServer;
+  port: number;
+  ports: number[];
+  close(): Promise<void>;
+}
 
 type Web = (req: http.IncomingMessage, res: http.ServerResponse) => void;
-const notFound: Web = (_req, res) => { res.writeHead(404).end(); };
+const notFound: Web = (_req, res) => {
+  res.writeHead(404).end();
+};
 
 function listen(port: number, host: string | undefined, web: Web) {
   const httpServer = http.createServer(web);
@@ -45,7 +52,10 @@ function listen(port: number, host: string | undefined, web: Web) {
   const wss = new WebSocketServer({ server: httpServer, maxPayload: MAX_MSG_BYTES, perMessageDeflate: false });
   return new Promise<{ http: http.Server; wss: WebSocketServer }>((resolve, reject) => {
     httpServer.once('error', reject);
-    httpServer.listen(port, host, () => { httpServer.off('error', reject); resolve({ http: httpServer, wss }); });
+    httpServer.listen(port, host, () => {
+      httpServer.off('error', reject);
+      resolve({ http: httpServer, wss });
+    });
   });
 }
 
@@ -57,7 +67,10 @@ export async function startHost(ports: number | number[], opt: RoomServerOptions
   try {
     for (const p of list) listening.push(await listen(p, opt.host, web));
   } catch (e) {
-    for (const l of listening) { l.wss.close(); l.http.close(); }
+    for (const l of listening) {
+      l.wss.close();
+      l.http.close();
+    }
     throw e;
   }
   const servers = listening.map(l => l.wss);
@@ -72,28 +85,46 @@ export async function startHost(ports: number | number[], opt: RoomServerOptions
     wss.on('connection', (ws: WebSocket, req) => {
       const ip = req.socket.remoteAddress ?? '';
       const n = perIp.get(ip) ?? 0;
-      if (!gate.admit(ip, now()) || n >= MAX_PER_IP) { ws.close(CLOSE_CODE.overload, 'too many'); return; }
+      if (!gate.admit(ip, now()) || n >= MAX_PER_IP) {
+        ws.close(CLOSE_CODE.overload, 'too many');
+        return;
+      }
       perIp.set(ip, n + 1);
       const conn: Conn = {
-        send: msg => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg)); },
-        close: code => { if (code) ws.close(code); else ws.terminate(); },
+        send: msg => {
+          if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
+        },
+        close: code => {
+          if (code) ws.close(code);
+          else ws.terminate();
+        },
       };
       let sess = server.connect(conn);
       ws.on('close', () => {
         const left = (perIp.get(ip) ?? 1) - 1;
-        if (left > 0) perIp.set(ip, left); else perIp.delete(ip);
+        if (left > 0) perIp.set(ip, left);
+        else perIp.delete(ip);
         if (sess) server.disconnect(sess, conn);
         sess = null;
       });
       ws.on('error', () => {});
-      if (!sess) { ws.close(CLOSE_CODE.overload, 'full'); return; }
+      if (!sess) {
+        ws.close(CLOSE_CODE.overload, 'full');
+        return;
+      }
       ws.on('message', (data, isBinary) => {
         if (isBinary || !sess) return;
         let msg: unknown;
-        try { msg = JSON.parse(String(data)); } catch { msg = undefined; /* 不是 JSON：交给 parseC2S 按非法消息处理 */ }
+        try {
+          msg = JSON.parse(String(data));
+        } catch {
+          msg = undefined; /* 不是 JSON：交给 parseC2S 按非法消息处理 */
+        }
         sess = server.message(sess, msg, conn);
       });
-      ws.on('pong', () => { if (sess) server.touch(sess, conn); });
+      ws.on('pong', () => {
+        if (sess) server.touch(sess, conn);
+      });
     });
   }
 
@@ -111,12 +142,17 @@ export async function startHost(ports: number | number[], opt: RoomServerOptions
       clearInterval(timer);
       clearInterval(beat);
       server.shutdown();
-      return Promise.all(listening.map(l => new Promise<void>(res => {
-        for (const c of l.wss.clients) c.terminate();
-        l.wss.close();
-        l.http.close(() => res());
-        l.http.closeAllConnections();                      // 正在下载的连接也断掉
-      }))).then(() => {});
+      return Promise.all(
+        listening.map(
+          l =>
+            new Promise<void>(res => {
+              for (const c of l.wss.clients) c.terminate();
+              l.wss.close();
+              l.http.close(() => res());
+              l.http.closeAllConnections(); // 正在下载的连接也断掉
+            }),
+        ),
+      ).then(() => {});
     },
   };
 }
