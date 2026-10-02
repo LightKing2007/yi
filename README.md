@@ -124,7 +124,7 @@ npm run dist:win     # release/Yi-<版本>-win-x64-setup.exe（宜在 Windows �
 npm run dist:linux   # release/Yi-<版本>-linux-x86_64.AppImage（宜在 Linux 上打包）
 ```
 
-正式发行不在本机打包，而是按 [开发与发布规程](docs/procedures/release.md) 由 GitHub Actions 自动完成。私有仓库的 Release 附件不对外公开，玩家应从下载页面 <http://47.108.181.240:8443/> 获取安装程序。
+正式发行不在本机打包，而是按 [开发与发布规程](docs/procedures/release.md) 由 GitHub Actions 自动完成。面向玩家的下载地址统一为下载页面 <http://47.108.181.240:8443/>；本仓库公开，GitHub Release 中的附件与下载页面上的安装程序相同。
 
 ### 4.2 版本号
 
@@ -210,7 +210,11 @@ node dist-server/server.cjs --version
 | `/opt/yi/server.cjs` | 服务端（属主为 root，只读）；上一版本保留为 `server.cjs.prev` |
 | `/opt/yi/download/` | 下载页面上的安装程序（属主为 root，服务端只读），发版时由 `npm run deploy` 更新 |
 | `/var/lib/yi/` | 段位数据，属主为系统用户 `yi`（`useradd --system --no-create-home --shell /usr/sbin/nologin yi`） |
-| `/etc/systemd/system/yi.service` | 常驻服务，开机自启，异常退出后 3 秒自动重启 |
+| `/etc/systemd/system/yi.service` | 常驻服务，开机自启，异常退出后 3 秒自动重启；因段位存档损坏退出（退出码 65、74）时不重启 |
+| `/etc/ssh/sshd_config.d/00-yi-hardening.conf` | SSH 仅允许 Ed25519 密钥登录，禁止口令登录（SEC-040）；原配置备份为 `/etc/ssh/sshd_config.bak-20261002` |
+| UFW | 主机防火墙，默认拒绝入站，仅放行 TCP 22、8443（SEC-041） |
+| `/etc/fail2ban/jail.local` | SSH 10 分钟内失败 5 次封禁 1 小时（SEC-042）。Ubuntu 24.04 的 SSH 单元名为 `ssh.service`，须以 `journalmatch = _SYSTEMD_UNIT=ssh.service + _COMM=sshd` 指明，否则 fail2ban 读不到任何日志 |
+| `/var/lib/yi/deploy.log` | 上线、回滚及配置修改的记录，每次操作追加一行（OPS-048） |
 
 `yi.service` 的内容如下，其中 `YI_LATEST` 由 `npm run deploy` 维护：
 
@@ -233,6 +237,7 @@ Environment=YI_FILES=/opt/yi/download
 Environment=YI_DOWNLOAD=http://47.108.181.240:8443/
 Restart=always
 RestartSec=3
+RestartPreventExitStatus=65 74
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
@@ -248,7 +253,7 @@ WantedBy=multi-user.target
 - **更新**：服务端随发版一同更新，由 `npm run deploy -- 版本号` 部署对应 Release 中的 `yi-server-版本.cjs`；`npm run deploy -- rollback` 可回退至上一版本。详见 [开发与发布规程](docs/procedures/release.md) 第 6 章。
 - **查看日志**：`ssh root@47.108.181.240 journalctl -u yi -f`。日志首行记录服务端的版本号及提交号。
 - **修改服务配置**：修改 `yi.service` 后，执行 `systemctl daemon-reload && systemctl restart yi`。
-- **安全组**：阿里云安全组应放行 TCP 8443 端口。
+- **防火墙**：阿里云安全组与主机防火墙 UFW 均仅放行 TCP 22、8443 端口，两者须保持一致（SEC-041）。
 - **重启**：重启服务端将中断正在进行的对局，应在无人对局时进行。
 - **旧版服务端**：1.x 版本的 C 语言服务端（端口 7700）已停用并清理，1.x 客户端不再支持联机。
 
@@ -258,7 +263,7 @@ WantedBy=multi-user.target
 
 1. 使用 Caddy 作为反向代理，并自动申请证书：`yi.lightking.com.cn { reverse_proxy 127.0.0.1:8443 }`；
 2. 在 `yi.service` 中增加 `Environment=HOST=127.0.0.1`，使服务端仅接受本机反向代理的连接；
-3. 在安全组中关闭 8443 端口，仅开放 443 端口；
+3. 在安全组与 UFW 中关闭 8443 端口，改为放行 80、443 端口，其中 80 端口仅供 Caddy 申请证书及跳转至 HTTPS；
 4. 将 `YI_DOWNLOAD` 改为 `https://yi.lightking.com.cn/`。
 
 ## 6 多语言
