@@ -102,6 +102,10 @@ Electron 本体（约 130 MB）不随 `npm install` 下载，而在首次运行 
 2. 修改代码后运行 `npm run shots`，再截取一组；
 3. 运行 `node scripts/compare-shots.mjs` 逐像素对比，存在差异的部分在 `.shots/diff/` 中以红色标出。
 
+### 3.2.1 安装后的冒烟检查
+
+`node scripts/smoke-app.mjs <可执行文件>` 启动打包好的游戏（用户数据放在临时目录），经开发者协议检查 Electron 版本、预加载接口、渲染进程沙箱、WebGL2、开局落子与人机对弈、页面报错及日志，截图存于 `smoke/`。Linux 上由工作流“Linux 冒烟检查”在 GitHub 的 Ubuntu 机器上运行（手动触发），发版前对待发布的提交运行一次。
+
 开发期间亦可在浏览器中打开 `http://localhost:5173/?scenario=gomoku-win&hold=1`，直接查看指定场景。
 
 ### 3.3 桌面版调试
