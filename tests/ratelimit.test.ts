@@ -1,8 +1,18 @@
 /** 限流部件（server/ratelimit.ts）：令牌桶、滑动时间窗、按 IP 的新建连接频率、每条连接的限额；时刻全部由测试给出（API-041 至 API-045） */
 import { describe, expect, it } from 'vitest';
 import {
-  ConnLimits, IpGate, MSG_BURST, MSG_RATE_PER_SEC, NEW_CONN_BLOCK_SECS, NEW_CONN_MAX, NEW_CONN_WINDOW_SECS, QUEUE_OPS_MAX,
-  TokenBucket, VIOLATION_MAX, VIOLATION_WINDOW_SECS, WindowCounter,
+  ConnLimits,
+  IpGate,
+  MSG_BURST,
+  MSG_RATE_PER_SEC,
+  NEW_CONN_BLOCK_SECS,
+  NEW_CONN_MAX,
+  NEW_CONN_WINDOW_SECS,
+  QUEUE_OPS_MAX,
+  TokenBucket,
+  VIOLATION_MAX,
+  VIOLATION_WINDOW_SECS,
+  WindowCounter,
 } from '../server/ratelimit';
 
 /** 在同一时刻连取 n 次，返回取到的次数 */
@@ -17,8 +27,8 @@ describe('令牌桶', () => {
   it('桶空后按速率补充，补满即止，不会越攒越多', () => {
     const b = new TokenBucket(20, 40, 0);
     takeMany(b, 40, 0);
-    expect(takeMany(b, 30, 1)).toBe(20);                 // 1 秒补 20 个
-    expect(takeMany(b, 100, 100)).toBe(40);              // 闲置很久也只有容量那么多
+    expect(takeMany(b, 30, 1)).toBe(20); // 1 秒补 20 个
+    expect(takeMany(b, 100, 100)).toBe(40); // 闲置很久也只有容量那么多
   });
 
   it('被拒的请求不扣成负数：洪泛停下后照常按速率恢复', () => {

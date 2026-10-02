@@ -5,7 +5,10 @@ import { applyMove, type Applied } from './rules';
 import { newPos, type Pos } from './types';
 
 /** 一手棋；ms 是这一手用了多少毫秒（联机时由服务端记录） */
-export interface MoveRec { m: Move; ms?: number }
+export interface MoveRec {
+  m: Move;
+  ms?: number;
+}
 
 export interface GameRecord {
   cfg: GameConfig;
@@ -17,7 +20,8 @@ export interface GameRecord {
 
 /** 从头回放：history[i] 是第 i 手之前的局面（history[0] 为空盘），pos 是最后的局面；遇到不合法的一手时抛出 */
 export function replay(rec: GameRecord): { history: Pos[]; pos: Pos; last: Applied | null } {
-  let pos = newPos(), last: Applied | null = null;
+  let pos = newPos(),
+    last: Applied | null = null;
   const history: Pos[] = [];
   for (let i = 0; i < rec.moves.length; i++) {
     const r = applyMove(rec.cfg, pos, rec.moves[i].m, history.length ? history[history.length - 1].b : null);

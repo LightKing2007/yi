@@ -4,11 +4,20 @@ import { Gfx, Program, type RenderTarget, type RGBA, WHITE, Z4 } from './gl';
 import { BG_FS, BOWL_FS, DUSKMIX_FS, DUSK_FS, FX_FS, SHADOW_FS, SHAPE_FS, STONE3D_FS, STONE3D_VS, STONE_FS, TEX_FS, WOOD_FS } from './shaders';
 import type { Rect } from './layout';
 
-export type Mat3 = number[];   // 列主序 3×3 旋转矩阵（物体 → 屏幕，y 轴向上）
+export type Mat3 = number[]; // 列主序 3×3 旋转矩阵（物体 → 屏幕，y 轴向上）
 
 export class Painter {
-  readonly shape: Program; readonly tex: Program; readonly wood: Program; readonly stoneP: Program; readonly stone3d: Program;
-  readonly bowl: Program; readonly shadowP: Program; readonly fx: Program; readonly bg: Program; readonly dusk: Program; readonly duskMix: Program;
+  readonly shape: Program;
+  readonly tex: Program;
+  readonly wood: Program;
+  readonly stoneP: Program;
+  readonly stone3d: Program;
+  readonly bowl: Program;
+  readonly shadowP: Program;
+  readonly fx: Program;
+  readonly bg: Program;
+  readonly dusk: Program;
+  readonly duskMix: Program;
   private woodRT: RenderTarget | null = null;
   private woodKey = '';
 
@@ -27,17 +36,39 @@ export class Painter {
   }
 
   // ---------------- 纯色形状 ----------------
-  rect(x: number, y: number, w: number, h: number, c: RGBA) { this.g.use(this.shape); this.g.quad(x, y, w, h, c); }
-  circle(cx: number, cy: number, r: number, c: RGBA) { this.g.use(this.shape); this.g.quad(cx - r, cy - r, 2 * r, 2 * r, c, [1, 0, 0, 0]); }
-  roundRect(x: number, y: number, w: number, h: number, r: number, c: RGBA) { this.g.use(this.shape); this.g.quad(x, y, w, h, c, [2, r, w, h]); }
-  roundRectLine(x: number, y: number, w: number, h: number, r: number, c: RGBA) { this.g.use(this.shape); this.g.quad(x, y, w, h, c, [3, r, w, h]); }
+  rect(x: number, y: number, w: number, h: number, c: RGBA) {
+    this.g.use(this.shape);
+    this.g.quad(x, y, w, h, c);
+  }
+  circle(cx: number, cy: number, r: number, c: RGBA) {
+    this.g.use(this.shape);
+    this.g.quad(cx - r, cy - r, 2 * r, 2 * r, c, [1, 0, 0, 0]);
+  }
+  roundRect(x: number, y: number, w: number, h: number, r: number, c: RGBA) {
+    this.g.use(this.shape);
+    this.g.quad(x, y, w, h, c, [2, r, w, h]);
+  }
+  roundRectLine(x: number, y: number, w: number, h: number, r: number, c: RGBA) {
+    this.g.use(this.shape);
+    this.g.quad(x, y, w, h, c, [3, r, w, h]);
+  }
   /** 以 (cx, cy) 为中心、旋转 deg 度的实心矩形 */
-  rectC(cx: number, cy: number, w: number, h: number, deg: number, c: RGBA) { this.g.use(this.shape); this.g.quadC(cx, cy, w, h, deg, c); }
-  gradV(x: number, y: number, w: number, h: number, top: RGBA, bottom: RGBA) { this.g.use(this.shape); this.g.quadGrad(x, y, w, h, top, bottom, true); }
-  gradH(x: number, y: number, w: number, h: number, left: RGBA, right: RGBA) { this.g.use(this.shape); this.g.quadGrad(x, y, w, h, left, right, false); }
+  rectC(cx: number, cy: number, w: number, h: number, deg: number, c: RGBA) {
+    this.g.use(this.shape);
+    this.g.quadC(cx, cy, w, h, deg, c);
+  }
+  gradV(x: number, y: number, w: number, h: number, top: RGBA, bottom: RGBA) {
+    this.g.use(this.shape);
+    this.g.quadGrad(x, y, w, h, top, bottom, true);
+  }
+  gradH(x: number, y: number, w: number, h: number, left: RGBA, right: RGBA) {
+    this.g.use(this.shape);
+    this.g.quadGrad(x, y, w, h, left, right, false);
+  }
 
   background(w: number, h: number, top: number[], bottom: number[]) {
-    this.bg.set('top', top); this.bg.set('bottom', bottom);
+    this.bg.set('top', top);
+    this.bg.set('bottom', bottom);
     this.g.use(this.bg);
     this.g.quad(0, 0, w, h, WHITE);
   }
@@ -52,20 +83,27 @@ export class Painter {
   // ---------------- 棋盘木面 ----------------
   /** 棋盘木纹：只在尺寸变化时画进离屏贴图。须在一帧开画之前调用（见 prepare） */
   prepareBoard(w: number, h: number, radius: number) {
-    const g = this.g, dpr = g.dpr;
-    const pw = Math.max(2, Math.round(w * dpr)), ph = Math.max(2, Math.round(h * dpr)), key = `${pw}x${ph}`;
+    const g = this.g,
+      dpr = g.dpr;
+    const pw = Math.max(2, Math.round(w * dpr)),
+      ph = Math.max(2, Math.round(h * dpr)),
+      key = `${pw}x${ph}`;
     if (this.woodRT && this.woodKey === key) return;
     this.woodRT = g.createTarget(pw, ph, this.woodRT);
     this.woodKey = key;
     g.begin(this.woodRT, [0, 0, 0, 0]);
     g.setBlend('replace');
-    this.wood.set('size', [pw, ph]); this.wood.set('radius', radius * dpr); this.wood.set('seed', 3.71);
+    this.wood.set('size', [pw, ph]);
+    this.wood.set('radius', radius * dpr);
+    this.wood.set('seed', 3.71);
     g.use(this.wood);
     g.quad(0, 0, pw, ph, WHITE);
     g.end();
   }
 
-  get boardTex() { return this.woodRT?.tex ?? this.g.white; }
+  get boardTex() {
+    return this.woodRT?.tex ?? this.g.white;
+  }
 
   image(tex: WebGLTexture, x: number, y: number, w: number, h: number, alpha = 1, premul = false) {
     const g = this.g;
@@ -105,15 +143,21 @@ export class Painter {
     this.g.use(this.fx);
     this.g.quadC(cx, cy, w, h, deg, [col[0], col[1], col[2], Math.max(0, Math.min(1, alpha))], [mode, Math.max(0, Math.min(1, prm)), gold ? 1 : 0, 0]);
   }
-  fxGlow(cx: number, cy: number, r: number, hue: number, alpha: number) { this.fxQuad(cx, cy, 2 * r, 2 * r, 0, 0, hue, false, alpha); }
+  fxGlow(cx: number, cy: number, r: number, hue: number, alpha: number) {
+    this.fxQuad(cx, cy, 2 * r, 2 * r, 0, 0, hue, false, alpha);
+  }
   /** 圆环：r 为外径，w 为环宽（像素）；非金色圆环用 col 着色 */
   fxRing(cx: number, cy: number, r: number, w: number, gold: boolean, alpha: number, col: RGBA = RING_RED) {
     this.fxQuad(cx, cy, 2 * r, 2 * r, 0, 1, (w / r) * 4, gold, alpha, col);
   }
   /** 光束 / 火花拖尾 */
-  fxBeam(cx: number, cy: number, len: number, th: number, deg: number, hue: number, alpha: number) { this.fxQuad(cx, cy, len, th, deg, 2, hue, false, alpha); }
+  fxBeam(cx: number, cy: number, len: number, th: number, deg: number, hue: number, alpha: number) {
+    this.fxQuad(cx, cy, len, th, deg, 2, hue, false, alpha);
+  }
 
-  blend(b: 'alpha' | 'add') { this.g.setBlend(b); }
+  blend(b: 'alpha' | 'add') {
+    this.g.setBlend(b);
+  }
 }
 
 export const RING_RED: RGBA = [0.78, 0.29, 0.21, 1];
@@ -125,27 +169,50 @@ function quat(r: Mat3): RGBA {
   let qx: number, qy: number, qz: number, qw: number;
   if (tr > 0) {
     const s = Math.sqrt(tr + 1) * 2;
-    qw = 0.25 * s; qx = (M(2, 1) - M(1, 2)) / s; qy = (M(0, 2) - M(2, 0)) / s; qz = (M(1, 0) - M(0, 1)) / s;
+    qw = 0.25 * s;
+    qx = (M(2, 1) - M(1, 2)) / s;
+    qy = (M(0, 2) - M(2, 0)) / s;
+    qz = (M(1, 0) - M(0, 1)) / s;
   } else if (M(0, 0) > M(1, 1) && M(0, 0) > M(2, 2)) {
     const s = Math.sqrt(1 + M(0, 0) - M(1, 1) - M(2, 2)) * 2;
-    qw = (M(2, 1) - M(1, 2)) / s; qx = 0.25 * s; qy = (M(0, 1) + M(1, 0)) / s; qz = (M(0, 2) + M(2, 0)) / s;
+    qw = (M(2, 1) - M(1, 2)) / s;
+    qx = 0.25 * s;
+    qy = (M(0, 1) + M(1, 0)) / s;
+    qz = (M(0, 2) + M(2, 0)) / s;
   } else if (M(1, 1) > M(2, 2)) {
     const s = Math.sqrt(1 + M(1, 1) - M(0, 0) - M(2, 2)) * 2;
-    qw = (M(0, 2) - M(2, 0)) / s; qx = (M(0, 1) + M(1, 0)) / s; qy = 0.25 * s; qz = (M(1, 2) + M(2, 1)) / s;
+    qw = (M(0, 2) - M(2, 0)) / s;
+    qx = (M(0, 1) + M(1, 0)) / s;
+    qy = 0.25 * s;
+    qz = (M(1, 2) + M(2, 1)) / s;
   } else {
     const s = Math.sqrt(1 + M(2, 2) - M(0, 0) - M(1, 1)) * 2;
-    qw = (M(1, 0) - M(0, 1)) / s; qx = (M(0, 2) + M(2, 0)) / s; qy = (M(1, 2) + M(2, 1)) / s; qz = 0.25 * s;
+    qw = (M(1, 0) - M(0, 1)) / s;
+    qx = (M(0, 2) + M(2, 0)) / s;
+    qy = (M(1, 2) + M(2, 1)) / s;
+    qz = 0.25 * s;
   }
-  const n = Math.hypot(qx, qy, qz, qw) || 1, sg = qw < 0 ? -1 : 1;
+  const n = Math.hypot(qx, qy, qz, qw) || 1,
+    sg = qw < 0 ? -1 : 1;
   return [(qx * sg) / n, (qy * sg) / n, (qz * sg) / n, (qw * sg) / n];
 }
 
 /** 绕单位轴 (ax, ay, az) 转 a 弧度的旋转矩阵，列主序 */
 export function rotAxis(ax: number, ay: number, az: number, a: number): Mat3 {
-  const c = Math.cos(a), s = Math.sin(a), t = 1 - c;
-  return [t * ax * ax + c, t * ax * ay + s * az, t * ax * az - s * ay,
-    t * ax * ay - s * az, t * ay * ay + c, t * ay * az + s * ax,
-    t * ax * az + s * ay, t * ay * az - s * ax, t * az * az + c];
+  const c = Math.cos(a),
+    s = Math.sin(a),
+    t = 1 - c;
+  return [
+    t * ax * ax + c,
+    t * ax * ay + s * az,
+    t * ax * az - s * ay,
+    t * ax * ay - s * az,
+    t * ay * ay + c,
+    t * ay * az + s * ax,
+    t * ax * az + s * ay,
+    t * ay * az - s * ax,
+    t * az * az + c,
+  ];
 }
 
 export function matMul3(a: Mat3, b: Mat3): Mat3 {

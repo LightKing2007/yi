@@ -3,4 +3,6 @@ let override: (() => number) | null = null;
 
 export const now = (): number => (override ? override() : performance.now() / 1000);
 
-export function setClock(fn: (() => number) | null) { override = fn; }
+export function setClock(fn: (() => number) | null) {
+  override = fn;
+}

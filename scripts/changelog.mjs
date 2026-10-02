@@ -31,7 +31,9 @@ function translated() {
 
 /** 发版前的检查：返回问题列表，空表示可以发 */
 export function check(version) {
-  const log = changelog(), top = log[0], problems = [];
+  const log = changelog(),
+    top = log[0],
+    problems = [];
   if (!top || top.version !== version) problems.push(`更新日志最上面一节是 ${top?.version ?? '（没有）'}，应该是 ${version}`);
   else if (!top.lines.length) problems.push(`更新日志 ${version} 一节还没写内容`);
   else {
@@ -44,11 +46,14 @@ export function check(version) {
 /** 某个版本的发布日期与联机协议版本：已打标签的取标签上的，否则取当前的 */
 function facts(version) {
   const tag = `v${version}`;
-  let date = new Date().toISOString().slice(0, 10), proto = read('src/shared/protocol.ts');
+  let date = new Date().toISOString().slice(0, 10),
+    proto = read('src/shared/protocol.ts');
   try {
     date = execSync(`git log -1 --format=%cs ${tag}`, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || date;
     proto = execSync(`git show ${tag}:src/shared/protocol.ts`, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-  } catch { /* 还没打标签 */ }
+  } catch {
+    /* 还没打标签 */
+  }
   return { date, proto: Number(/PROTO_VERSION = (\d+)/.exec(proto)?.[1]) };
 }
 
@@ -59,7 +64,11 @@ export function notes(version) {
   const [, minor, patch] = version.split('.').map(Number);
   const kind = patch ? '修订版本' : minor ? '次版本' : '主版本';
   const { date, proto } = facts(version);
-  const groups = [['新增', []], ['改进', []], ['修复', []]];
+  const groups = [
+    ['新增', []],
+    ['改进', []],
+    ['修复', []],
+  ];
   for (const l of sec.lines) (l.startsWith('新增') ? groups[0] : l.startsWith('修复') ? groups[2] : groups[1])[1].push(l);
   const changes = groups.filter(g => g[1].length).flatMap(([name, ls], i) => [`### 1.${i + 1} ${name}`, '', ...ls.map(l => `- ${l}`), '']);
   return [
@@ -91,7 +100,10 @@ export function notes(version) {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const [cmd, version] = process.argv.slice(2);
-  if (!version || !['check', 'notes'].includes(cmd)) { console.error('用法：node scripts/changelog.mjs check|notes 版本号'); process.exit(2); }
+  if (!version || !['check', 'notes'].includes(cmd)) {
+    console.error('用法：node scripts/changelog.mjs check|notes 版本号');
+    process.exit(2);
+  }
   if (cmd === 'notes') process.stdout.write(notes(version));
   else {
     const p = check(version);

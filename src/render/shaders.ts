@@ -6,7 +6,9 @@ in vec2 fragTexCoord; in vec4 fragColor; in vec4 fragExt;
 out vec4 finalColor;
 `;
 
-const COMMON = HEAD + `
+const COMMON =
+  HEAD +
+  `
 float hash(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
 float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
   return mix(mix(hash(i), hash(i+vec2(1,0)), f.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y); }
@@ -17,7 +19,9 @@ float sdRR(vec2 p, vec2 b, float r){ vec2 q = abs(p) - b + r; return length(max(
 `;
 
 /** 纯色形状：ext = (类型, 圆角半径, 宽, 高)。类型 0 矩形 1 圆 2 圆角矩形 3 圆角矩形描边（宽 1 像素） */
-export const SHAPE_FS = COMMON + `
+export const SHAPE_FS =
+  COMMON +
+  `
 void main(){
   int kind = int(fragExt.x + 0.5);
   float a = 1.0;
@@ -33,7 +37,9 @@ void main(){
 }`;
 
 /** 贴图：ext.x = 1 时按预乘 alpha 输出 */
-export const TEX_FS = HEAD + `
+export const TEX_FS =
+  HEAD +
+  `
 uniform sampler2D tex;
 void main(){
   vec4 c = texture(tex, fragTexCoord)*fragColor;
@@ -41,7 +47,9 @@ void main(){
 }`;
 
 /** 榧木棋盘 */
-export const WOOD_FS = COMMON + `
+export const WOOD_FS =
+  COMMON +
+  `
 uniform vec2 size;
 uniform float radius;
 uniform float seed;
@@ -123,7 +131,10 @@ vec3 stoneColor(int mode, vec3 n, vec2 q, vec2 p, float r, float seed){
 }`;
 
 /** 棋子与棋子阴影。顶点色：r=模式(0 阴影 / 80 黑 / 160 白，÷255) g=随机种子÷255 b>0.5 标出最后一手 a=透明度 */
-export const STONE_FS = COMMON + STONE_MATERIAL + `
+export const STONE_FS =
+  COMMON +
+  STONE_MATERIAL +
+  `
 void main(){
   float m = fragColor.r*255.0;
   int mode = m < 40.0 ? 0 : (m < 120.0 ? 1 : 2);
@@ -173,7 +184,10 @@ void main(){
   gl_Position = vec4(aPos.x*uProj.x + uProj.z, aPos.y*uProj.y + uProj.w, 0.0, 1.0);
 }`;
 
-export const STONE3D_FS = COMMON + STONE_MATERIAL + `
+export const STONE3D_FS =
+  COMMON +
+  STONE_MATERIAL +
+  `
 flat in vec3 rot0; flat in vec3 rot1; flat in vec3 rot2;
 const float c = 0.526;
 void main(){
@@ -197,7 +211,9 @@ void main(){
 }`;
 
 /** 木制棋罐（俯视）。顶点色：r=模式(0 罐体 / 80 罐内阴影) g=木纹种子÷255 a=透明度。罐口外缘半径为 1，0.8 以内是罐内 */
-export const BOWL_FS = COMMON + `
+export const BOWL_FS =
+  COMMON +
+  `
 const float ri = 0.80;
 vec3 L = normalize(vec3(-0.42, 0.52, 0.74));
 vec3 wood(vec2 p, float r, float seed){
@@ -249,7 +265,9 @@ void main(){
 }`;
 
 /** 柔和圆角矩形投影：ext = (矩形宽, 高, 圆角, 模糊)，四边形比矩形每边大 2 倍模糊 */
-export const SHADOW_FS = COMMON + `
+export const SHADOW_FS =
+  COMMON +
+  `
 void main(){
   vec2 rect = fragExt.xy; float radius = fragExt.z, blur = fragExt.w;
   vec2 quad = rect + vec2(4.0*blur);
@@ -264,7 +282,9 @@ void main(){
  * 特效（胜利、冲击波、雷达波纹等）。ext = (模式, 参数, 金色, 0)：模式 0 光晕 / 1 圆环 / 2 火花拖尾与光束；
  * 光晕、火花：参数 = 偏金程度；圆环：参数 = 环宽（占半径的 参数/4），金色 > 0.5 为金色光环并带内侧余晖
  */
-export const FX_FS = COMMON + `
+export const FX_FS =
+  COMMON +
+  `
 void main(){
   int m = int(fragExt.x + 0.5);
   float prm = fragExt.y;
@@ -300,7 +320,9 @@ void main(){
  * P[0] 光源位置 xy、暗角、枝叶阴影强度；P[1] 近光色 + 叶影横向拉伸；P[2] 远处色 + 纵向拉伸；
  * P[3] 叶影色 + 叶影斜切；P[4] 光源晕光；P[5] 叶隙透光；P[6] 光束；P[7].x 竹影浓淡
  */
-export const DUSK_FS = COMMON + `
+export const DUSK_FS =
+  COMMON +
+  `
 uniform vec2 res;
 uniform vec4 board;
 uniform vec4 panel;
@@ -372,7 +394,9 @@ void main(){
 }`;
 
 /** 光影合成的一层：ext.x = 0 取左半（乘法色），1 取右半（加法光） */
-export const DUSKMIX_FS = HEAD + `
+export const DUSKMIX_FS =
+  HEAD +
+  `
 uniform sampler2D dusk;
 uniform vec2 texel;
 void main(){
@@ -381,7 +405,9 @@ void main(){
 }`;
 
 /** 背景：竖向渐变 + 柔光 + 抖动防色带 */
-export const BG_FS = COMMON + `
+export const BG_FS =
+  COMMON +
+  `
 uniform vec3 top;
 uniform vec3 bottom;
 void main(){

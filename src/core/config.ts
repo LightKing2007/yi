@@ -11,5 +11,9 @@ export interface GameConfig {
   komi: number;
 }
 
-export const gameConfig = (type: GameType, size: number, renju = true, komi = 7.5): GameConfig =>
-  ({ type, size, renju: type === GameType.Gomoku && renju, komi });
+export const gameConfig = (type: GameType, size: number, renju = true, komi = 7.5): GameConfig => ({
+  type,
+  size,
+  renju: type === GameType.Gomoku && renju,
+  komi,
+});

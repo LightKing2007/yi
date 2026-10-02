@@ -12,7 +12,9 @@ import { BLACK, EMPTY, GameType, MAXN, WHITE, at, newBoard, newPos, type Board, 
 
 export type GameEvent = { type: 'stone'; strength: number } | { type: 'undo' } | { type: 'reset' };
 
-export interface NewGameOptions { renju?: boolean }
+export interface NewGameOptions {
+  renju?: boolean;
+}
 
 /**
  * 对局的旁观者：画面层（presentation/boardView.ts）在这里接收落子、悔棋、终局等消息，驱动动画与提示。
@@ -48,10 +50,10 @@ export class Game {
   /** 最近一次落子不合法的原因 */
   lastReject: Reject | null = null;
   over = false;
-  winner = 0;                  // 1 黑 2 白 3 和
+  winner = 0; // 1 黑 2 白 3 和
   /** 连成的五子；认输等结束时是胜方最后一子 */
   win: { x: number; y: number }[] = [];
-  forfeit = false;             // 因认输、超时、离开而结束（且盘上有子）
+  forfeit = false; // 因认输、超时、离开而结束（且盘上有子）
   scoring = false;
   finished = false;
   dead = newBoard();
@@ -68,17 +70,34 @@ export class Game {
   private forbidCache = { stamp: -1, map: new Uint8Array(MAXN * MAXN) };
 
   /** 当前这局的规则设置 */
-  get cfg(): GameConfig { return gameConfig(this.type, this.N, this.renju, this.komi); }
+  get cfg(): GameConfig {
+    return gameConfig(this.type, this.N, this.renju, this.komi);
+  }
 
-  constructor() { this.newGame(GameType.Gomoku, 15); this.events.length = 0; }
+  constructor() {
+    this.newGame(GameType.Gomoku, 15);
+    this.events.length = 0;
+  }
 
-  pollEvent(): GameEvent | undefined { return this.events.shift(); }
-  eventMark() { return this.events.length; }
-  eventRewind(mark: number) { if (mark >= 0 && mark < this.events.length) this.events.length = mark; }
-  private push(e: GameEvent) { if (this.events.length < 16) this.events.push(e); }
+  pollEvent(): GameEvent | undefined {
+    return this.events.shift();
+  }
+  eventMark() {
+    return this.events.length;
+  }
+  eventRewind(mark: number) {
+    if (mark >= 0 && mark < this.events.length) this.events.length = mark;
+  }
+  private push(e: GameEvent) {
+    if (this.events.length < 16) this.events.push(e);
+  }
 
-  b(x: number, y: number) { return this.cur.b[x * MAXN + y]; }
-  inB(x: number, y: number) { return x >= 0 && y >= 0 && x < this.N && y < this.N; }
+  b(x: number, y: number) {
+    return this.cur.b[x * MAXN + y];
+  }
+  inB(x: number, y: number) {
+    return x >= 0 && y >= 0 && x < this.N && y < this.N;
+  }
 
   newGame(type: GameType, N: number, opt: NewGameOptions = {}) {
     this.listener?.reset(this.N, this.cur.b, now());
@@ -87,13 +106,19 @@ export class Game {
     this.type = type;
     this.N = N;
     if (type === GameType.Go) this.goSize = N;
-    this.hist = []; this.moves = []; this.lastReject = null;
-    this.over = false; this.winner = 0; this.win = []; this.forfeit = false;
+    this.hist = [];
+    this.moves = [];
+    this.lastReject = null;
+    this.over = false;
+    this.winner = 0;
+    this.win = [];
+    this.forfeit = false;
     this.push({ type: 'reset' });
     this.scoring = this.finished = false;
     this.komi = 7.5;
     if (opt.renju !== undefined) this.renju = opt.renju;
-    this.dead.fill(0); this.terr.fill(0);
+    this.dead.fill(0);
+    this.terr.fill(0);
   }
 
   /** 当前局面下黑棋在 (x, y) 是否为禁手（按局面缓存整盘） */
@@ -105,11 +130,13 @@ export class Game {
     const c = this.forbidCache;
     if (h !== c.stamp) {
       c.stamp = h;
-      const cfg = this.cfg, code: Record<string, Renju> = { 'renju-overline': Renju.Overline, 'renju-44': Renju.DoubleFour, 'renju-33': Renju.DoubleThree };
-      for (let i = 0; i < this.N; i++) for (let j = 0; j < this.N; j++) {
-        const why = rulesForbidden(cfg, this.cur, i, j);
-        c.map[i * MAXN + j] = why ? code[why] : Renju.Ok;
-      }
+      const cfg = this.cfg,
+        code: Record<string, Renju> = { 'renju-overline': Renju.Overline, 'renju-44': Renju.DoubleFour, 'renju-33': Renju.DoubleThree };
+      for (let i = 0; i < this.N; i++)
+        for (let j = 0; j < this.N; j++) {
+          const why = rulesForbidden(cfg, this.cur, i, j);
+          c.map[i * MAXN + j] = why ? code[why] : Renju.Ok;
+        }
     }
     return c.map[x * MAXN + y];
   }
@@ -125,7 +152,10 @@ export class Game {
   /** 按规则走一手；合法则记入历史与棋谱，返回结果，否则记下原因返回 null */
   private step(m: Move): Applied | null {
     const r = applyMove(this.cfg, this.cur, m, this.hist.length ? this.hist[this.hist.length - 1].b : null);
-    if (!r.ok) { this.lastReject = r.why; return null; }
+    if (!r.ok) {
+      this.lastReject = r.why;
+      return null;
+    }
     this.lastReject = null;
     this.ver++;
     this.hist.push(this.cur);
@@ -136,8 +166,14 @@ export class Game {
 
   /** 落子；不合法返回 false（并给出提示，原因在 lastReject） */
   play(x: number, y: number): boolean {
-    if (this.over) { this.lastReject = 'over'; return false; }
-    if (this.scoring) { this.lastReject = 'scoring'; return false; }
+    if (this.over) {
+      this.lastReject = 'over';
+      return false;
+    }
+    if (this.scoring) {
+      this.lastReject = 'scoring';
+      return false;
+    }
     const c = this.cur.toMove;
     const v = this.step({ k: 'play', x, y });
     if (!v) {
@@ -157,7 +193,8 @@ export class Game {
 
   pass() {
     if (this.type !== GameType.Go || this.over || this.scoring) return;
-    const who = this.cur.toMove, v = this.step({ k: 'pass' });
+    const who = this.cur.toMove,
+      v = this.step({ k: 'pass' });
     if (!v) return;
     if (v.scoring) {
       this.scoring = true;
@@ -171,20 +208,29 @@ export class Game {
   undo(steps = 1) {
     if (this.hist.length === 0) return;
     this.ver++;
-    const old = this.cur, wasFinished = this.finished;
-    for (let i = 0; i < steps && this.hist.length > 0; i++) { this.cur = this.hist.pop()!; this.moves.pop(); }
+    const old = this.cur,
+      wasFinished = this.finished;
+    for (let i = 0; i < steps && this.hist.length > 0; i++) {
+      this.cur = this.hist.pop()!;
+      this.moves.pop();
+    }
     this.listener?.undone(old, this.cur, wasFinished, this.dead, now());
     if ([...old.b].some((v, i) => v && !this.cur.b[i])) this.push({ type: 'undo' });
-    this.over = false; this.winner = 0; this.win = []; this.forfeit = false;
+    this.over = false;
+    this.winner = 0;
+    this.win = [];
+    this.forfeit = false;
     this.push({ type: 'reset' });
     this.scoring = this.finished = false;
-    this.dead.fill(0); this.terr.fill(0);
+    this.dead.fill(0);
+    this.terr.fill(0);
   }
 
   toggleDead(x: number, y: number) {
     this.ver++;
     if (!this.inB(x, y) || this.b(x, y) === EMPTY) return;
-    const g = group(this.cur.b, this.N, x, y), v = this.dead[at(x, y)] ? 0 : 1;
+    const g = group(this.cur.b, this.N, x, y),
+      v = this.dead[at(x, y)] ? 0 : 1;
     for (let i = 0; i < g.xs.length; i++) this.dead[at(g.xs[i], g.ys[i])] = v;
     this.computeScore();
     this.push({ type: 'stone', strength: 0.35 });
@@ -202,7 +248,8 @@ export class Game {
     this.ver++;
     this.scoring = false;
     this.cur.passes = 0;
-    this.dead.fill(0); this.terr.fill(0);
+    this.dead.fill(0);
+    this.terr.fill(0);
   }
 
   /** 胜方最后落下的一子（找不到就取天元） */
@@ -211,7 +258,8 @@ export class Game {
     if (cur.lastX >= 0 && cur.b[at(cur.lastX, cur.lastY)] === winner) return { x: cur.lastX, y: cur.lastY };
     for (let i = this.hist.length - 1; i >= 0; i--) {
       const after = i + 1 < this.hist.length ? this.hist[i + 1] : cur;
-      const lx = after.lastX, ly = after.lastY;
+      const lx = after.lastX,
+        ly = after.lastY;
       if (lx >= 0 && after.b[at(lx, ly)] === winner && cur.b[at(lx, ly)] === winner) return { x: lx, y: ly };
     }
     return { x: this.N >> 1, y: this.N >> 1 };
@@ -230,7 +278,8 @@ export class Game {
     if (this.type === GameType.Gomoku) this.win = [this.winnerLastStone(winner)];
     else {
       this.scoring = false;
-      this.dead.fill(0); this.terr.fill(0);
+      this.dead.fill(0);
+      this.terr.fill(0);
     }
     this.listener?.forfeited(now());
   }

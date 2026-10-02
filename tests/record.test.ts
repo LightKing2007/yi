@@ -8,7 +8,8 @@ import { replay, type GameRecord } from '../src/core/record';
 import { applyMove, forbiddenAt, gomokuHasMove } from '../src/core/rules';
 import { BLACK, EMPTY, GameType, Rng, WHITE, at, newPos, type Pos } from '../src/core/types';
 
-const B = BLACK, W = WHITE;
+const B = BLACK,
+  W = WHITE;
 const gomoku = gameConfig(GameType.Gomoku, 15, true);
 const go9 = gameConfig(GameType.Go, 9);
 
@@ -51,7 +52,9 @@ describe('规则层：不合法的原因', () => {
 
 describe('规则层：纯函数', () => {
   it('不改动传入的局面', () => {
-    const p = posWith([1, 0, B, 0, 1, W, 1, 1, W, 2, 0, W], WHITE), before = p.b.slice(), moves = p.moves;
+    const p = posWith([1, 0, B, 0, 1, W, 1, 1, W, 2, 0, W], WHITE),
+      before = p.b.slice(),
+      moves = p.moves;
     const r = applyMove(go9, p, play(0, 0), null);
     expect(r.ok).toBe(true);
     expect(p.b).toEqual(before);
@@ -59,19 +62,24 @@ describe('规则层：纯函数', () => {
     expect(p.toMove).toBe(WHITE);
   });
   it('同一份棋谱回放两次，结果逐字节相同', () => {
-    const rng = new Rng(7), cfg = gameConfig(GameType.Go, 13);
+    const rng = new Rng(7),
+      cfg = gameConfig(GameType.Go, 13);
     const rec: GameRecord = { cfg, moves: [] };
-    let pos = newPos(), prev: Uint8Array | null = null;
+    let pos = newPos(),
+      prev: Uint8Array | null = null;
     let fails = 0;
-    while (rec.moves.length < 300) {                                  // 随机落子，连续落不下去就停一手
+    while (rec.moves.length < 300) {
+      // 随机落子，连续落不下去就停一手
       const m: Move = ++fails > 40 ? { k: 'pass' } : play(rng.int(0, 12), rng.int(0, 12));
       const r = applyMove(cfg, pos, m, prev);
       if (!r.ok) continue;
       fails = 0;
       rec.moves.push({ m });
-      prev = pos.b; pos = r.v.pos;
+      prev = pos.b;
+      pos = r.v.pos;
     }
-    const a = replay(rec), b = replay(rec);
+    const a = replay(rec),
+      b = replay(rec);
     expect(a.pos.b).toEqual(pos.b);
     expect(b.pos.b).toEqual(a.pos.b);
     expect(a.pos.cap).toEqual(pos.cap);
@@ -83,19 +91,26 @@ describe('对局：棋谱与长局', () => {
   it('每一手都记入棋谱，悔棋同时退掉', () => {
     const g = new Game();
     g.newGame(GameType.Go, 9);
-    g.play(2, 2); g.play(6, 6); g.pass();
+    g.play(2, 2);
+    g.play(6, 6);
+    g.pass();
     expect(g.moves.map(r => r.m)).toEqual([play(2, 2), play(6, 6), { k: 'pass' }]);
     g.undo();
     expect(g.moves.length).toBe(2);
     expect(replay({ cfg: g.cfg, moves: g.moves }).pos.b).toEqual(g.cur.b);
   });
   it('超过 1024 手的长局也能一路悔回空盘', () => {
-    const g = new Game(), rng = new Rng(11);
+    const g = new Game(),
+      rng = new Rng(11);
     g.newGame(GameType.Go, 19);
     let fails = 0;
-    while (g.moves.length < 1100) {                                   // 随机落子；连续落不下去就停一手（棋盘满了靠提子腾地方）
+    while (g.moves.length < 1100) {
+      // 随机落子；连续落不下去就停一手（棋盘满了靠提子腾地方）
       if (g.play(rng.int(0, 18), rng.int(0, 18))) fails = 0;
-      else if (++fails > 40) { g.pass(); fails = 0; }
+      else if (++fails > 40) {
+        g.pass();
+        fails = 0;
+      }
       if (g.scoring) g.resume();
     }
     expect(replay({ cfg: g.cfg, moves: g.moves }).pos.b).toEqual(g.cur.b);
@@ -104,13 +119,14 @@ describe('对局：棋谱与长局', () => {
     expect(g.moves.length).toBe(0);
   }, 20000);
   it('不合法的原因记在 lastReject，提示文字不变', () => {
-    const g = new Game(), view = new BoardView();
+    const g = new Game(),
+      view = new BoardView();
     g.listener = view;
     g.newGame(GameType.Gomoku, 15, { renju: true });
     g.play(7, 7);
     expect(g.play(7, 7)).toBe(false);
     expect(g.lastReject).toBe('occupied');
-    expect(view.msg).toBeNull();                                  // 下在已有子的地方不提示
+    expect(view.msg).toBeNull(); // 下在已有子的地方不提示
   });
 });
 
@@ -119,9 +135,9 @@ describe('禁手下黑棋无处可下', () => {
   function nearlyFull() {
     const p = newPos();
     for (let x = 0; x < 15; x++) for (let y = 0; y < 15; y++) p.b[at(x, y)] = (x + 2 * y) % 4 < 2 ? B : W;
-    for (const x of [3, 4, 5, 7, 8]) p.b[at(x, 7)] = B;                 // 第 7 行：黑黑黑 _ 黑黑，空点下黑是长连
+    for (const x of [3, 4, 5, 7, 8]) p.b[at(x, 7)] = B; // 第 7 行：黑黑黑 _ 黑黑，空点下黑是长连
     p.b[at(6, 7)] = EMPTY;
-    p.b[at(14, 14)] = EMPTY;                                           // 留给白棋的最后一手
+    p.b[at(14, 14)] = EMPTY; // 留给白棋的最后一手
     p.moves = 223;
     p.toMove = W;
     return p;

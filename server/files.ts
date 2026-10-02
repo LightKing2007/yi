@@ -12,7 +12,8 @@ import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { PLATFORMS, downloadPage, type PagePkg } from './page';
 
-const PER_IP = 2, TOTAL = 8;
+const PER_IP = 2,
+  TOTAL = 8;
 const NAME = /^Yi-(\d+(?:\.\d+)*)-(mac-arm64|mac-x64|win-x64|linux-x86_64)[\w.-]*\.(dmg|exe|AppImage)$/;
 const ORDER = Object.keys(PLATFORMS);
 /** 下载并发已满或校验值尚未算完时，建议客户端多久后重试 */
@@ -21,7 +22,10 @@ const RETRY_AFTER_SECS = 30;
 const ASSET_MAX_AGE_SECS = 7 * 24 * 3600;
 
 /** 下载速率的下限（API-047）：每 stallMs 毫秒内送出的字节数低于 minBytesPerSec 对应的量时断开，免得慢速读取长期占住下载名额 */
-export interface StallLimit { stallMs: number; minBytesPerSec: number }
+export interface StallLimit {
+  stallMs: number;
+  minBytesPerSec: number;
+}
 /** 写入速率低于 1 KB/s 持续 60 秒即断开 */
 const STALL: StallLimit = { stallMs: 60_000, minBytesPerSec: 1024 };
 
@@ -43,10 +47,17 @@ const HTML_HEADERS = {
   'Cache-Control': 'no-cache',
 };
 
-interface Pkg { file: string; version: string; platform: string; size: number; mtimeMs: number }
+interface Pkg {
+  file: string;
+  version: string;
+  platform: string;
+  size: number;
+  mtimeMs: number;
+}
 
 const cmpVer = (a: string, b: string) => {
-  const x = a.split('.').map(Number), y = b.split('.').map(Number);
+  const x = a.split('.').map(Number),
+    y = b.split('.').map(Number);
   for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0);
   return 0;
 };
@@ -54,19 +65,27 @@ const cmpVer = (a: string, b: string) => {
 /** 目录里每个平台最新的安装包 */
 function list(dir: string): Pkg[] {
   let names: string[];
-  try { names = fs.readdirSync(dir); } catch { return []; }
+  try {
+    names = fs.readdirSync(dir);
+  } catch {
+    return [];
+  }
   const best = new Map<string, Pkg>();
   for (const file of names) {
     const m = NAME.exec(file);
     if (!m) continue;
     let st: fs.Stats;
-    try { st = fs.statSync(path.join(dir, file)); } catch { continue; }   // 刚好被删掉或改名：本次不列出
+    try {
+      st = fs.statSync(path.join(dir, file));
+    } catch {
+      continue;
+    } // 刚好被删掉或改名：本次不列出
     if (!st.isFile()) continue;
     const p = { file, version: m[1], platform: m[2], size: st.size, mtimeMs: st.mtimeMs };
     const old = best.get(p.platform);
     if (!old || cmpVer(p.version, old.version) > 0) best.set(p.platform, p);
   }
-  return ORDER.filter(k => best.has(k)).map(k => best.get(k)!);   // 例外 COD-052：best.has(k) 刚确认过有这一项
+  return ORDER.filter(k => best.has(k)).map(k => best.get(k)!); // 例外 COD-052：best.has(k) 刚确认过有这一项
 }
 
 /**
@@ -74,19 +93,26 @@ function list(dir: string): Pkg[] {
  * 尚未算完时 get 返回 null
  */
 function checksums(dir: string) {
-  const done = new Map<string, string>(), running = new Set<string>();
+  const done = new Map<string, string>(),
+    running = new Set<string>();
   const key = (p: Pkg) => `${p.file}:${p.size}:${p.mtimeMs}`;
   return {
     get(p: Pkg): string | null {
-      const k = key(p), hex = done.get(k);
+      const k = key(p),
+        hex = done.get(k);
       if (hex) return hex;
       if (!running.has(k)) {
         running.add(k);
         const hash = createHash('sha256');
         fs.createReadStream(path.join(dir, p.file))
           .on('data', d => hash.update(d))
-          .on('end', () => { done.set(k, hash.digest('hex')); running.delete(k); })
-          .on('error', () => { running.delete(k); });   // 文件在计算途中被替换：下次请求时按新文件重算
+          .on('end', () => {
+            done.set(k, hash.digest('hex'));
+            running.delete(k);
+          })
+          .on('error', () => {
+            running.delete(k);
+          }); // 文件在计算途中被替换：下次请求时按新文件重算
       }
       return null;
     },
@@ -103,9 +129,17 @@ export function fileServer(dir: string, stall: StallLimit = STALL) {
   };
 
   return (req: IncomingMessage, res: ServerResponse) => {
-    if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, { ...BASE_HEADERS, Allow: 'GET, HEAD' }).end(); return; }
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      res.writeHead(405, { ...BASE_HEADERS, Allow: 'GET, HEAD' }).end();
+      return;
+    }
     let name: string;
-    try { name = decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname.slice(1)); } catch { res.writeHead(400, BASE_HEADERS).end(); return; }
+    try {
+      name = decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname.slice(1));
+    } catch {
+      res.writeHead(400, BASE_HEADERS).end();
+      return;
+    }
     const head = req.method === 'HEAD';
 
     if (name === '') {
@@ -119,16 +153,22 @@ export function fileServer(dir: string, stall: StallLimit = STALL) {
       const asset = name.slice('assets/'.length);
       const type = Object.hasOwn(ASSET_TYPES, asset) ? ASSET_TYPES[asset] : undefined;
       const data = type && __PAGE_ASSETS__[asset] ? Buffer.from(__PAGE_ASSETS__[asset], 'base64') : undefined;
-      if (!type || !data) { notFound(res); return; }
+      if (!type || !data) {
+        notFound(res);
+        return;
+      }
       res.writeHead(200, { ...BASE_HEADERS, 'Content-Type': type, 'Content-Length': data.length, 'Cache-Control': `public, max-age=${ASSET_MAX_AGE_SECS}` });
       res.end(head ? undefined : data);
       return;
     }
 
     if (name === 'SHA256SUMS') {
-      const pkgs = list(dir), lines = pkgs.map(p => [sums.get(p), p.file] as const);
+      const pkgs = list(dir),
+        lines = pkgs.map(p => [sums.get(p), p.file] as const);
       if (lines.some(([hex]) => !hex)) {
-        res.writeHead(503, { ...BASE_HEADERS, 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': String(RETRY_AFTER_SECS) }).end('校验值正在计算，请稍后再试。');
+        res
+          .writeHead(503, { ...BASE_HEADERS, 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': String(RETRY_AFTER_SECS) })
+          .end('校验值正在计算，请稍后再试。');
         return;
       }
       const body = lines.map(([hex, file]) => `${hex}  ${file}\n`).join('');
@@ -139,15 +179,24 @@ export function fileServer(dir: string, stall: StallLimit = STALL) {
     }
 
     const pkg = NAME.test(name) ? list(dir).find(p => p.file === name) : undefined;
-    if (!pkg) { notFound(res); return; }
+    if (!pkg) {
+      notFound(res);
+      return;
+    }
 
     // 断点续传：只认 bytes=开始-结束 一段
-    let start = 0, end = pkg.size - 1;
+    let start = 0,
+      end = pkg.size - 1;
     const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? '');
     if (range && (range[1] || range[2])) {
-      if (range[1]) { start = Number(range[1]); if (range[2]) end = Math.min(end, Number(range[2])); }
-      else start = Math.max(0, pkg.size - Number(range[2]));
-      if (start > end) { res.writeHead(416, { ...BASE_HEADERS, 'Content-Range': `bytes */${pkg.size}` }).end(); return; }
+      if (range[1]) {
+        start = Number(range[1]);
+        if (range[2]) end = Math.min(end, Number(range[2]));
+      } else start = Math.max(0, pkg.size - Number(range[2]));
+      if (start > end) {
+        res.writeHead(416, { ...BASE_HEADERS, 'Content-Range': `bytes */${pkg.size}` }).end();
+        return;
+      }
     }
     const headers = {
       ...BASE_HEADERS,
@@ -157,30 +206,47 @@ export function fileServer(dir: string, stall: StallLimit = STALL) {
       'Accept-Ranges': 'bytes',
       ...(range ? { 'Content-Range': `bytes ${start}-${end}/${pkg.size}` } : {}),
     };
-    if (head) { res.writeHead(range ? 206 : 200, headers).end(); return; }
+    if (head) {
+      res.writeHead(range ? 206 : 200, headers).end();
+      return;
+    }
 
     const ip = req.socket.remoteAddress ?? '';
     if ((perIp.get(ip) ?? 0) >= PER_IP || total >= TOTAL) {
-      res.writeHead(503, { ...BASE_HEADERS, 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': String(RETRY_AFTER_SECS) }).end('当前下载请求过多，请稍后再试。');
+      res
+        .writeHead(503, { ...BASE_HEADERS, 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': String(RETRY_AFTER_SECS) })
+        .end('当前下载请求过多，请稍后再试。');
       return;
     }
-    perIp.set(ip, (perIp.get(ip) ?? 0) + 1); total++;
+    perIp.set(ip, (perIp.get(ip) ?? 0) + 1);
+    total++;
     let done = false;
     const release = () => {
       if (done) return;
-      done = true; total--;
+      done = true;
+      total--;
       const n = (perIp.get(ip) ?? 1) - 1;
-      if (n > 0) perIp.set(ip, n); else perIp.delete(ip);
+      if (n > 0) perIp.set(ip, n);
+      else perIp.delete(ip);
     };
     res.writeHead(range ? 206 : 200, headers);
     const stream = fs.createReadStream(path.join(dir, pkg.file), { start, end });
     // 管道按对方的读取速度送数据：对方不读时 data 事件随之停下，以此计量实际送出的字节数
     let sent = 0;
-    stream.on('data', chunk => { sent += chunk.length; });
-    const minBytes = stall.minBytesPerSec * stall.stallMs / 1000;
-    const watch = setInterval(() => { if (sent < minBytes) res.destroy(); else sent = 0; }, stall.stallMs);
-    stream.on('end', () => clearInterval(watch));          // 文件已读完：剩下的只是套接字缓冲区里有限的数据
-    res.on('close', () => { clearInterval(watch); stream.destroy(); release(); });
+    stream.on('data', chunk => {
+      sent += chunk.length;
+    });
+    const minBytes = (stall.minBytesPerSec * stall.stallMs) / 1000;
+    const watch = setInterval(() => {
+      if (sent < minBytes) res.destroy();
+      else sent = 0;
+    }, stall.stallMs);
+    stream.on('end', () => clearInterval(watch)); // 文件已读完：剩下的只是套接字缓冲区里有限的数据
+    res.on('close', () => {
+      clearInterval(watch);
+      stream.destroy();
+      release();
+    });
     stream.on('error', () => res.destroy());
     stream.pipe(res);
   };

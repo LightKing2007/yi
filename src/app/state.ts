@@ -8,7 +8,13 @@ import { logError } from './native';
 import { settings } from './settings';
 
 /** 界面：开始菜单 → 单人对局 / 多人游戏 / 设置 / 更多 */
-export enum Screen { Menu, Settings, Game, More, Online }
+export enum Screen {
+  Menu,
+  Settings,
+  Game,
+  More,
+  Online,
+}
 
 export const VERSION = __APP_VERSION__;
 
@@ -30,10 +36,10 @@ export const screen = signal<Screen>(Screen.Menu);
 /** 每帧变化的状态（画面直接读，界面靠 uiTick 重绘） */
 export const view = {
   panelFrom: Screen.Menu,
-  panelT: 1,               // 面板切换进度 0..1
-  bowlK: 1,                // 棋罐：1 在盘上，0 已移出
-  onlineK: 0,              // 多人游戏页棋盘布置的显现程度
-  duskK: 1,                // 光影开关的渐变值
+  panelT: 1, // 面板切换进度 0..1
+  bowlK: 1, // 棋罐：1 在盘上，0 已移出
+  onlineK: 0, // 多人游戏页棋盘布置的显现程度
+  duskK: 1, // 光影开关的渐变值
   mouse: { x: -9999, y: -9999, inside: false },
 };
 

@@ -3,7 +3,12 @@
  * 界面按设计稿（1320×900 的窗口）等比缩放：u 为一个设计像素在当前窗口里的大小，
  * 所以高分辨率屏幕、大窗口上界面跟着放大，不会缩成一小块。
  */
-export interface Rect { x: number; y: number; w: number; h: number }
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 
 export interface Layout {
   board: Rect;
@@ -18,8 +23,9 @@ export interface Layout {
   vertical: boolean;
 }
 
-export const PAD = 0.92;                // 棋盘边缘到第一条线的距离（格）
-export const DESIGN_W = 1320, DESIGN_H = 900;
+export const PAD = 0.92; // 棋盘边缘到第一条线的距离（格）
+export const DESIGN_W = 1320,
+  DESIGN_H = 900;
 
 /** 设计像素的大小：按窗口等比缩放，小窗口不低于 0.8；userScale 为设置里的界面缩放 */
 export function uiUnit(W: number, H: number, userScale = 1) {
@@ -29,12 +35,14 @@ export function uiUnit(W: number, H: number, userScale = 1) {
 export function computeLayout(W: number, H: number, N: number, userScale = 1): Layout {
   const u = uiUnit(W, H, userScale);
   const margin = Math.max(28 * u, Math.min(W, H) * 0.055);
-  const panelW = 300 * u, gap = Math.max(40 * u, W * 0.04);
+  const panelW = 300 * u,
+    gap = Math.max(40 * u, W * 0.04);
   const vertical = W < H * 1.1;
   let board: Rect, panel: Rect, bs: number;
   if (!vertical) {
     bs = Math.max(240, Math.min(H - 2 * margin - 16 * u, W - panelW - gap - 2 * margin));
-    const total = bs + gap + panelW, x0 = (W - total) / 2;
+    const total = bs + gap + panelW,
+      x0 = (W - total) / 2;
     board = { x: Math.round(x0), y: Math.round((H - bs) / 2 - 8 * u), w: Math.round(bs), h: Math.round(bs) };
     panel = { x: board.x + bs + gap, y: board.y, w: panelW, h: bs };
   } else {
@@ -52,6 +60,8 @@ export function gridFor(board: Rect, N: number) {
   return { cell, ox: board.x + PAD * cell, oy: board.y + PAD * cell, R: cell * 0.482, thick: Math.max(5, board.w * 0.022) };
 }
 
-export function layoutForN(L: Layout, N: number): Layout { return { ...L, ...gridFor(L.board, N) }; }
+export function layoutForN(L: Layout, N: number): Layout {
+  return { ...L, ...gridFor(L.board, N) };
+}
 
 export const pt = (L: Layout, x: number, y: number) => ({ x: L.ox + x * L.cell, y: L.oy + y * L.cell });

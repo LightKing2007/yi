@@ -7,19 +7,33 @@ import { renjuForbidden, Renju } from '../src/core/renju';
 import { autoMarkDead, goSnap, gomokuSnap } from '../src/core/snap';
 import { at, BLACK, EMPTY, GameType, WHITE } from '../src/core/types';
 
-const B = BLACK, W = WHITE;
+const B = BLACK,
+  W = WHITE;
 
 function setStones(g: Game, stones: number[]) {
   for (let i = 0; i < stones.length; i += 3) g.cur.b[at(stones[i], stones[i + 1])] = stones[i + 2];
 }
-function go9() { const g = new Game(); g.newGame(GameType.Go, 9); return g; }
-function gomoku15(stones: number[] = []) { const g = new Game(); g.newGame(GameType.Gomoku, 15, { renju: true }); setStones(g, stones); return g; }
+function go9() {
+  const g = new Game();
+  g.newGame(GameType.Go, 9);
+  return g;
+}
+function gomoku15(stones: number[] = []) {
+  const g = new Game();
+  g.newGame(GameType.Gomoku, 15, { renju: true });
+  setStones(g, stones);
+  return g;
+}
 const playAll = (g: Game, mv: number[][]) => mv.forEach(([x, y]) => g.play(x, y));
 
 describe('围棋规则', () => {
   it('角上提一子', () => {
     const g = go9();
-    playAll(g, [[1, 0], [0, 0], [0, 1]]);
+    playAll(g, [
+      [1, 0],
+      [0, 0],
+      [0, 1],
+    ]);
     expect(g.b(0, 0)).toBe(EMPTY);
     expect(g.cur.cap[BLACK]).toBe(1);
   });
@@ -27,25 +41,32 @@ describe('围棋规则', () => {
     const g = go9();
     setStones(g, [1, 0, B, 0, 1, B, 1, 2, B, 2, 0, W, 1, 1, W, 3, 1, W, 2, 2, W]);
     expect(g.play(2, 1) && g.b(1, 1) === EMPTY).toBe(true);
-    expect(g.play(1, 1)).toBe(false);                      // 不能立即回提
-    expect(g.play(8, 8) && g.play(7, 7)).toBe(true);        // 各找劫材
+    expect(g.play(1, 1)).toBe(false); // 不能立即回提
+    expect(g.play(8, 8) && g.play(7, 7)).toBe(true); // 各找劫材
     expect(g.play(1, 1) && g.b(2, 1) === EMPTY).toBe(true);
   });
   it('禁止自杀，提子优先于自杀', () => {
     let g = go9();
-    setStones(g, [1, 0, B, 0, 1, B]); g.cur.toMove = W;
+    setStones(g, [1, 0, B, 0, 1, B]);
+    g.cur.toMove = W;
     expect(g.play(0, 0)).toBe(false);
     g = go9();
-    setStones(g, [1, 0, B, 0, 1, W, 1, 1, W, 2, 0, W]); g.cur.toMove = W;
+    setStones(g, [1, 0, B, 0, 1, W, 1, 1, W, 2, 0, W]);
+    g.cur.toMove = W;
     expect(g.play(0, 0) && g.b(1, 0) === EMPTY).toBe(true);
   });
   it('数子与死子', () => {
     const g = go9();
-    for (let y = 0; y < 9; y++) { g.cur.b[at(4, y)] = B; g.cur.b[at(5, y)] = W; }
-    g.pass(); g.pass();
+    for (let y = 0; y < 9; y++) {
+      g.cur.b[at(4, y)] = B;
+      g.cur.b[at(5, y)] = W;
+    }
+    g.pass();
+    g.pass();
     expect(g.scoring).toBe(true);
     expect([g.scoreB, g.scoreW]).toEqual([45, 43.5]);
-    g.cur.b[at(7, 4)] = B; g.computeScore();
+    g.cur.b[at(7, 4)] = B;
+    g.computeScore();
     g.toggleDead(7, 4);
     expect([g.scoreB, g.scoreW]).toEqual([45, 43.5]);
     g.confirmScore();
@@ -56,13 +77,27 @@ describe('围棋规则', () => {
 describe('五子棋规则', () => {
   it('五连判胜', () => {
     const g = gomoku15();
-    playAll(g, [[7, 7], [0, 0], [8, 7], [0, 1], [9, 7], [0, 2], [10, 7], [0, 3], [11, 7]]);
+    playAll(g, [
+      [7, 7],
+      [0, 0],
+      [8, 7],
+      [0, 1],
+      [9, 7],
+      [0, 2],
+      [10, 7],
+      [0, 3],
+      [11, 7],
+    ]);
     expect(g.over && g.winner === BLACK && g.win.length === 5).toBe(true);
   });
   it('悔棋把收回的子放进倒流动画（画面层）', () => {
-    const g = gomoku15(), view = new BoardView();
+    const g = gomoku15(),
+      view = new BoardView();
     g.listener = view;
-    playAll(g, [[7, 7], [8, 8]]);
+    playAll(g, [
+      [7, 7],
+      [8, 8],
+    ]);
     g.undo();
     expect(g.b(8, 8)).toBe(EMPTY);
     expect(view.rw).toEqual([{ x: 8, y: 8, c: WHITE, t0: expect.any(Number) }]);
@@ -83,7 +118,10 @@ describe('禁手', () => {
     ['跳活三也算活三', [4, 7, B, 6, 7, B, 7, 5, B, 7, 6, B], [7, 7], Renju.DoubleThree],
   ];
   for (const [name, stones, [x, y], want] of cases)
-    it(name, () => { const g = gomoku15(stones); expect(renjuForbidden(g.cur.b, 15, x, y)).toBe(want); });
+    it(name, () => {
+      const g = gomoku15(stones);
+      expect(renjuForbidden(g.cur.b, 15, x, y)).toBe(want);
+    });
 
   it('黑棋下禁手被拒绝，关闭禁手后可以下', () => {
     const g = gomoku15([5, 7, B, 6, 7, B, 7, 5, B, 7, 6, B]);
@@ -96,9 +134,11 @@ describe('禁手', () => {
     expect(g.play(7, 7)).toBe(true);
   });
   it('白棋不受禁手限制，白棋长连算胜', () => {
-    let g = gomoku15([5, 7, W, 6, 7, W, 7, 5, W, 7, 6, W]); g.cur.toMove = W;
+    let g = gomoku15([5, 7, W, 6, 7, W, 7, 5, W, 7, 6, W]);
+    g.cur.toMove = W;
     expect(g.play(7, 7)).toBe(true);
-    g = gomoku15([2, 7, W, 3, 7, W, 4, 7, W, 6, 7, W, 7, 7, W]); g.cur.toMove = W;
+    g = gomoku15([2, 7, W, 3, 7, W, 4, 7, W, 6, 7, W, 7, 7, W]);
+    g.cur.toMove = W;
     expect(g.play(5, 7) && g.over && g.winner === W).toBe(true);
   });
   it('成五同时另一方向长连：成五优先，黑胜', () => {
@@ -120,11 +160,26 @@ describe('五子棋人机', () => {
   for (const lv of [1, 2]) {
     it(`${LV[lv]} 堵活三、堵冲四`, () => {
       let g = gomoku15();
-      playAll(g, [[7, 7], [0, 14], [8, 7], [1, 14], [9, 7]]);
+      playAll(g, [
+        [7, 7],
+        [0, 14],
+        [8, 7],
+        [1, 14],
+        [9, 7],
+      ]);
       let m = gomokuMove(gomokuSnap(g), lv)!;
       expect((m.x === 6 || m.x === 10) && m.y === 7).toBe(true);
       g = gomoku15();
-      playAll(g, [[7, 7], [0, 14], [8, 7], [1, 14], [9, 7], [2, 14], [10, 7], [6, 7]]);
+      playAll(g, [
+        [7, 7],
+        [0, 14],
+        [8, 7],
+        [1, 14],
+        [9, 7],
+        [2, 14],
+        [10, 7],
+        [6, 7],
+      ]);
       m = gomokuMove(gomokuSnap(g), lv)!;
       expect(m).toEqual({ x: 11, y: 7 });
     });
@@ -133,14 +188,25 @@ describe('五子棋人机', () => {
     it(`${LV[lv]} 优先连五而非防守`, () => {
       for (let rep = 0; rep < (lv ? 1 : 20); rep++) {
         const g = gomoku15();
-        playAll(g, [[7, 7], [3, 3], [8, 7], [3, 4], [9, 7], [3, 5], [0, 14], [3, 6], [1, 13]]);
+        playAll(g, [
+          [7, 7],
+          [3, 3],
+          [8, 7],
+          [3, 4],
+          [9, 7],
+          [3, 5],
+          [0, 14],
+          [3, 6],
+          [1, 13],
+        ]);
         const m = gomokuMove(gomokuSnap(g), lv)!;
         expect(m.x === 3 && (m.y === 2 || m.y === 7)).toBe(true);
       }
     });
     it(`${LV[lv]} 自我对弈全部合法（禁手开）`, () => {
       const g = gomoku15();
-      let moves = 0, worst = 0;
+      let moves = 0,
+        worst = 0;
       while (!g.over && moves < 80) {
         const t0 = performance.now();
         const m = gomokuMove(gomokuSnap(g), lv);
@@ -171,8 +237,9 @@ describe('围棋人机', () => {
       const g = go9();
       let moves = 0;
       while (!g.scoring && moves < 150) {
-        const m = goThink(goSnap(g), lv, { iterations: 400, seed: moves + 1 });   // 固定模拟次数与种子：结果不随机器快慢变化
-        if (m.x < 0) g.pass(); else expect(g.play(m.x, m.y)).toBe(true);
+        const m = goThink(goSnap(g), lv, { iterations: 400, seed: moves + 1 }); // 固定模拟次数与种子：结果不随机器快慢变化
+        if (m.x < 0) g.pass();
+        else expect(g.play(m.x, m.y)).toBe(true);
         moves++;
       }
       expect(moves).toBeGreaterThan(20);
@@ -180,20 +247,30 @@ describe('围棋人机', () => {
   }
   it('点目时自动标出死子', () => {
     const g = go9();
-    for (let y = 0; y < 9; y++) { g.cur.b[at(3, y)] = B; g.cur.b[at(5, y)] = W; }
-    g.cur.b[at(1, 4)] = W; g.cur.b[at(7, 4)] = B;
-    g.pass(); g.pass();
+    for (let y = 0; y < 9; y++) {
+      g.cur.b[at(3, y)] = B;
+      g.cur.b[at(5, y)] = W;
+    }
+    g.cur.b[at(1, 4)] = W;
+    g.cur.b[at(7, 4)] = B;
+    g.pass();
+    g.pass();
     autoMarkDead(g);
     expect([g.dead[at(1, 4)], g.dead[at(7, 4)], g.dead[at(3, 0)], g.dead[at(5, 0)]]).toEqual([1, 1, 0, 0]);
   });
   it('点目时不把两眼活棋判死', () => {
     const g = go9();
-    for (let y = 0; y < 9; y++) { g.cur.b[at(2, y)] = B; g.cur.b[at(3, y)] = W; }
+    for (let y = 0; y < 9; y++) {
+      g.cur.b[at(2, y)] = B;
+      g.cur.b[at(3, y)] = W;
+    }
     for (let x = 6; x <= 8; x++) for (let y = 0; y <= 4; y++) g.cur.b[at(x, y)] = B;
-    g.cur.b[at(7, 1)] = EMPTY; g.cur.b[at(7, 3)] = EMPTY;
+    g.cur.b[at(7, 1)] = EMPTY;
+    g.cur.b[at(7, 3)] = EMPTY;
     for (let x = 5; x <= 8; x++) g.cur.b[at(x, 5)] = W;
     for (let y = 0; y <= 5; y++) g.cur.b[at(5, y)] = W;
-    g.pass(); g.pass();
+    g.pass();
+    g.pass();
     autoMarkDead(g);
     expect([g.dead[at(6, 0)], g.dead[at(2, 0)], g.dead[at(3, 0)]]).toEqual([0, 0, 0]);
   });

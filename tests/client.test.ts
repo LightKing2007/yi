@@ -12,7 +12,15 @@ const storage = new Map<string, string>();
 Object.assign(globalThis, {
   window: globalThis,
   location: { search: '' },
-  localStorage: { getItem: (k: string) => storage.get(k) ?? null, setItem: (k: string, v: string) => { storage.set(k, v); }, removeItem: (k: string) => { storage.delete(k); } },
+  localStorage: {
+    getItem: (k: string) => storage.get(k) ?? null,
+    setItem: (k: string, v: string) => {
+      storage.set(k, v);
+    },
+    removeItem: (k: string) => {
+      storage.delete(k);
+    },
+  },
   document: { hidden: false, title: '', addEventListener() {}, removeEventListener() {} },
 });
 
@@ -20,16 +28,21 @@ Object.assign(globalThis, {
 
 let T = 1000;
 let server: RoomServer;
-let netDown = false;                         // 网络完全不通：新连接一律失败
-let dropTypes: string[] = [];                // 服务端发出的这些消息在路上丢掉（模拟老版本服务端）
+let netDown = false; // 网络完全不通：新连接一律失败
+let dropTypes: string[] = []; // 服务端发出的这些消息在路上丢掉（模拟老版本服务端）
 const q: (() => void)[] = [];
-const pump = () => { for (let i = 0; i < 10000 && q.length; i++) q.shift()!(); };
+const pump = () => {
+  for (let i = 0; i < 10000 && q.length; i++) q.shift()!();
+};
 const newServer = () => new RoomServer({ now: () => T, random: () => 0.3 });
 
 class FakeWS {
-  static CONNECTING = 0; static OPEN = 1; static CLOSING = 2; static CLOSED = 3;
+  static CONNECTING = 0;
+  static OPEN = 1;
+  static CLOSING = 2;
+  static CLOSED = 3;
   readyState = 0;
-  dead = false;                              // 网络静默断开：两边的消息都到不了，也没有断开事件
+  dead = false; // 网络静默断开：两边的消息都到不了，也没有断开事件
   onopen: (() => void) | null = null;
   onmessage: ((e: { data: string }) => void) | null = null;
   onclose: (() => void) | null = null;
@@ -43,7 +56,12 @@ class FakeWS {
   private open() {
     if (this.readyState !== 0) return;
     this.conn = {
-      send: (m: S2C) => { if (!this.dead && !dropTypes.includes(m.t)) q.push(() => { if (this.readyState === 1) this.onmessage?.({ data: JSON.stringify(m) }); }); },
+      send: (m: S2C) => {
+        if (!this.dead && !dropTypes.includes(m.t))
+          q.push(() => {
+            if (this.readyState === 1) this.onmessage?.({ data: JSON.stringify(m) });
+          });
+      },
       close: () => this.fail(),
     };
     this.sess = this.srv.connect(this.conn);
@@ -64,12 +82,18 @@ class FakeWS {
   send(data: string) {
     if (this.dead || this.readyState !== 1) return;
     const m = JSON.parse(data);
-    q.push(() => { if (this.sess && this.conn) this.sess = this.srv.message(this.sess, m, this.conn); });
+    q.push(() => {
+      if (this.sess && this.conn) this.sess = this.srv.message(this.sess, m, this.conn);
+    });
   }
   close() {
     if (this.readyState === 3) return;
     this.readyState = 3;
-    if (!this.dead && this.sess && this.conn) { const s = this.sess, c = this.conn; q.push(() => this.srv.disconnect(s, c)); }
+    if (!this.dead && this.sess && this.conn) {
+      const s = this.sess,
+        c = this.conn;
+      q.push(() => this.srv.disconnect(s, c));
+    }
     q.push(() => this.onclose?.());
   }
 }
@@ -80,13 +104,23 @@ const sockets: FakeWS[] = [];
 class Peer {
   inbox: S2C[] = [];
   sess: Session;
-  conn: Conn = { send: m => { this.inbox.push(m); }, close: () => {} };
+  conn: Conn = {
+    send: m => {
+      this.inbox.push(m);
+    },
+    close: () => {},
+  };
   constructor(public srv: RoomServer) {
     this.sess = srv.connect(this.conn)!;
     this.send({ t: 'hello', v: PROTO_VERSION, name: '乙', uid: 'peer-device-0000000001' });
   }
-  send(m: C2S) { this.sess = this.srv.message(this.sess, m, this.conn); pump(); }
-  has(t: S2C['t']) { return this.inbox.some(m => m.t === t); }
+  send(m: C2S) {
+    this.sess = this.srv.message(this.sess, m, this.conn);
+    pump();
+  }
+  has(t: S2C['t']) {
+    return this.inbox.some(m => m.t === t);
+  }
 }
 
 // ---------------- 被测的客户端 ----------------
@@ -142,10 +176,10 @@ describe('联机客户端', () => {
     net.move(7, 7);
     pump();
     expect(state.game.cur.moves).toBe(1);
-    sockets[sockets.length - 1].dead = true;               // 网络悄悄断了
+    sockets[sockets.length - 1].dead = true; // 网络悄悄断了
     advance(24, peer);
-    expect(net.st.reconnecting).toBe(false);                // 还没到判定时间
-    advance(6, peer);                                       // 25 秒没有任何消息：主动断开并重连
+    expect(net.st.reconnecting).toBe(false); // 还没到判定时间
+    advance(6, peer); // 25 秒没有任何消息：主动断开并重连
     expect(net.st.reconnecting).toBe(false);
     expect(net.st.phase).toBe(net.Phase.Playing);
     expect(peer.inbox.some(m => m.t === 'peer' && m.online)).toBe(true);
@@ -159,7 +193,7 @@ describe('联机客户端', () => {
     startGame();
     state.screen.value = state.Screen.Game;
     const old = sockets[sockets.length - 1];
-    server = newServer();                                   // 重启：旧连接全部断开
+    server = newServer(); // 重启：旧连接全部断开
     old.fail();
     pump();
     expect(net.st.reconnecting).toBe(true);
@@ -176,14 +210,14 @@ describe('联机客户端', () => {
     server = newServer();
     old.fail();
     advance(3);
-    expect(net.st.phase).toBe(net.Phase.Playing);           // 刚连上，还在等
+    expect(net.st.phase).toBe(net.Phase.Playing); // 刚连上，还在等
     advance(4);
     expect(net.st.phase).toBe(net.Phase.Lobby);
   });
 
   it('断线期间对方认输：重连后看到结果', () => {
     const peer = startGame();
-    sockets[sockets.length - 1].cut();                      // 网络断开，两端都察觉到
+    sockets[sockets.length - 1].cut(); // 网络断开，两端都察觉到
     pump();
     expect(net.st.reconnecting).toBe(true);
     peer.send({ t: 'resign' });

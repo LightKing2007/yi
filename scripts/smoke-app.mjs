@@ -11,7 +11,10 @@ import os from 'node:os';
 import path from 'node:path';
 
 const [exe, outDir = 'smoke'] = process.argv.slice(2);
-if (!exe) { console.error('用法：node scripts/smoke-app.mjs <可执行文件> [截图目录]'); process.exit(2); }
+if (!exe) {
+  console.error('用法：node scripts/smoke-app.mjs <可执行文件> [截图目录]');
+  process.exit(2);
+}
 
 const PORT = 9333;
 const START_TIMEOUT_MS = 60_000;
@@ -20,16 +23,25 @@ const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-smoke-'));
 fs.mkdirSync(outDir, { recursive: true });
 
 const failures = [];
-const check = (ok, what) => { console.log(`${ok ? '✓' : '✗'} ${what}`); if (!ok) failures.push(what); };
+const check = (ok, what) => {
+  console.log(`${ok ? '✓' : '✗'} ${what}`);
+  if (!ok) failures.push(what);
+};
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const extra = (process.env.SMOKE_ARGS ?? '').split(' ').filter(Boolean);
 const app = spawn(exe, [`--remote-debugging-port=${PORT}`, `--user-data-dir=${userData}`, ...extra], { stdio: ['ignore', 'pipe', 'pipe'] });
 let output = '';
-app.stdout.on('data', d => { output += d; });
-app.stderr.on('data', d => { output += d; });
+app.stdout.on('data', d => {
+  output += d;
+});
+app.stderr.on('data', d => {
+  output += d;
+});
 let exited = null;
-app.on('exit', code => { exited = code; });
+app.on('exit', code => {
+  exited = code;
+});
 // 无论在哪一步退出（含中途失败），都结束游戏进程并删除临时用户目录，不留下测试数据
 process.on('exit', () => {
   if (exited === null) app.kill();
@@ -44,7 +56,9 @@ async function findPage() {
       const list = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json();
       const page = list.find(t => t.type === 'page' && t.url.startsWith('app://'));
       if (page) return page;
-    } catch { /* 调试端口还没开，稍后再试 */ }
+    } catch {
+      /* 调试端口还没开，稍后再试 */
+    }
     await sleep(500);
   }
   return null;
@@ -58,17 +72,28 @@ if (!page) {
 
 const ws = new WebSocket(page.webSocketDebuggerUrl);
 let seq = 0;
-const waiting = new Map(), problems = [];
+const waiting = new Map(),
+  problems = [];
 ws.onmessage = e => {
   const m = JSON.parse(e.data);
-  if (m.id && waiting.has(m.id)) { waiting.get(m.id)(m); waiting.delete(m.id); }
+  if (m.id && waiting.has(m.id)) {
+    waiting.get(m.id)(m);
+    waiting.delete(m.id);
+  }
   if (m.method === 'Runtime.exceptionThrown') problems.push(m.params.exceptionDetails.exception?.description ?? m.params.exceptionDetails.text);
   if (m.method === 'Runtime.consoleAPICalled' && ['error', 'warning'].includes(m.params.type)) {
     problems.push(`${m.params.type}: ${m.params.args.map(a => a.value ?? a.description).join(' ')}`);
   }
 };
-await new Promise(r => { ws.onopen = r; });
-const call = (method, params = {}) => new Promise(r => { const id = ++seq; waiting.set(id, r); ws.send(JSON.stringify({ id, method, params })); });
+await new Promise(r => {
+  ws.onopen = r;
+});
+const call = (method, params = {}) =>
+  new Promise(r => {
+    const id = ++seq;
+    waiting.set(id, r);
+    ws.send(JSON.stringify({ id, method, params }));
+  });
 /** 在页面中求值；求值出错时打印协议的完整回应，返回 undefined */
 async function evaluate(expr) {
   const r = await call('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true });
@@ -83,7 +108,7 @@ const shot = async name => {
   fs.writeFileSync(path.join(outDir, `${name}.png`), Buffer.from(r.result.data, 'base64'));
 };
 await call('Runtime.enable');
-await sleep(3000);                                                  // 等开始菜单的入场动画
+await sleep(3000); // 等开始菜单的入场动画
 
 const info = (await evaluate(`(async () => {
   // 再向游戏的画布要上下文，在 Linux 软件渲染下偶尔得到 null（游戏照常绘制）；另用一块新画布探测环境是否支持 WebGL2。
@@ -102,7 +127,10 @@ const info = (await evaluate(`(async () => {
 })()`)) ?? { preload: [], buttons: [] };
 console.log(JSON.stringify(info, null, 1));
 check(info.electron === expected, `Electron 版本为 ${expected}（实际 ${info.electron}）`);
-check(['attention', 'log', 'openLogs', 'platform', 'quit'].every(k => info.preload.includes(k)), '预加载接口 yiNative 可用');
+check(
+  ['attention', 'log', 'openLogs', 'platform', 'quit'].every(k => info.preload.includes(k)),
+  '预加载接口 yiNative 可用',
+);
 check(info.sandboxed, '渲染进程中没有 require、process（沙箱生效）');
 check(info.webgl2, `WebGL2 可用（${info.renderer}）`);
 check(info.buttons.length >= 4, '开始菜单的按钮已显示');

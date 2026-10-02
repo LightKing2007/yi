@@ -5,7 +5,13 @@
 import { pageStyle } from './pageStyle';
 
 /** 页面上的一个安装程序；sha256 为 null 表示校验值尚在计算 */
-export interface PagePkg { file: string; version: string; platform: string; size: number; sha256: string | null }
+export interface PagePkg {
+  file: string;
+  version: string;
+  platform: string;
+  size: number;
+  sha256: string | null;
+}
 
 /** 各平台的名称、系统要求与卡片上棋子的颜色，按页面上的顺序排列 */
 export const PLATFORMS: Record<string, { label: string; tag: string; req: string; pip: 'b' | 'w' }> = {
@@ -16,17 +22,34 @@ export const PLATFORMS: Record<string, { label: string; tag: string; req: string
 };
 
 /** 首屏棋盘上依次落下的棋子（15 路，坐标从 0 起）：黑白交替，最后一手带标记 */
-const OPENING: [number, number][] = [[7, 7], [8, 6], [8, 8], [6, 6], [6, 8], [9, 9], [7, 9], [5, 7], [9, 7]];
+const OPENING: [number, number][] = [
+  [7, 7],
+  [8, 6],
+  [8, 8],
+  [6, 6],
+  [6, 8],
+  [9, 9],
+  [7, 9],
+  [5, 7],
+  [9, 7],
+];
 const SIZE = 15;
-const STARS: [number, number][] = [[3, 3], [11, 3], [7, 7], [3, 11], [11, 11]];
+const STARS: [number, number][] = [
+  [3, 3],
+  [11, 3],
+  [7, 7],
+  [3, 11],
+  [11, 11],
+];
 const BYTES_PER_MB = 1048576;
 /** GitHub 上发布说明的地址前缀 */
 const RELEASES = 'https://github.com/LightKing2007/yi/releases/tag/v';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
 const pct = (n: number) => `${((n / (SIZE - 1)) * 100).toFixed(4)}%`;
-const arrow = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
-  + '<path d="M8 2.5v9M4 8l4 4 4-4M3 14h10"/></svg>';
+const arrow =
+  '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<path d="M8 2.5v9M4 8l4 4 4-4M3 14h10"/></svg>';
 
 /** 棋盘：网格与星位（SVG）、依次落下的棋子、最后一手的涟漪、可预览落子的交叉点 */
 function board() {
@@ -43,9 +66,11 @@ function board() {
   const [lx, ly] = OPENING[OPENING.length - 1];
   const ring = `<b class="ring" style="left:${pct(lx)};top:${pct(ly)};--i:${OPENING.length - 1}"></b>`;
   const cells = Array.from({ length: SIZE * SIZE }, (_, k) => (taken.has(k) ? '<i class="o"></i>' : '<i></i>')).join('');
-  return `<div class="board"><div class="grid">`
-    + `<svg viewBox="0 0 ${SIZE - 1} ${SIZE - 1}" preserveAspectRatio="none" aria-hidden="true">${lines.join('')}${stars}</svg>`
-    + `${stones}${ring}<div class="cells" aria-hidden="true">${cells}</div></div></div>`;
+  return (
+    `<div class="board"><div class="grid">` +
+    `<svg viewBox="0 0 ${SIZE - 1} ${SIZE - 1}" preserveAspectRatio="none" aria-hidden="true">${lines.join('')}${stars}</svg>` +
+    `${stones}${ring}<div class="cells" aria-hidden="true">${cells}</div></div></div>`
+  );
 }
 
 function card(p: PagePkg, i: number) {
@@ -79,21 +104,30 @@ const REQUIREMENTS: [string, string][] = [
 ];
 
 const GUIDES: [string, string[]][] = [
-  ['Windows', [
-    '运行下载的安装程序，按提示选择安装位置。',
-    '首次运行时如出现“Windows 已保护你的电脑”提示，请点击“更多信息”，再点击“仍要运行”。',
-    '如需卸载，请在“设置”的“应用”中找到“弈”。',
-  ]],
-  ['macOS', [
-    '打开下载的 .dmg 文件，将“弈”拖入“应用程序”文件夹。',
-    '首次打开时，请在“访达”中按住 Control 键点按该应用程序并选择“打开”，或前往“系统设置”中的“隐私与安全性”，点按“仍要打开”。',
-    '如需卸载，请将“弈”从“应用程序”文件夹移到废纸篓。',
-  ]],
-  ['Linux', [
-    '为下载的文件添加执行权限：<code class="inline">chmod +x Yi-*.AppImage</code>。',
-    '双击文件，或在终端中执行该文件即可运行。',
-    '部分发行版须先安装 FUSE 2，例如 Ubuntu 24.04 上的 libfuse2t64 软件包。',
-  ]],
+  [
+    'Windows',
+    [
+      '运行下载的安装程序，按提示选择安装位置。',
+      '首次运行时如出现“Windows 已保护你的电脑”提示，请点击“更多信息”，再点击“仍要运行”。',
+      '如需卸载，请在“设置”的“应用”中找到“弈”。',
+    ],
+  ],
+  [
+    'macOS',
+    [
+      '打开下载的 .dmg 文件，将“弈”拖入“应用程序”文件夹。',
+      '首次打开时，请在“访达”中按住 Control 键点按该应用程序并选择“打开”，或前往“系统设置”中的“隐私与安全性”，点按“仍要打开”。',
+      '如需卸载，请将“弈”从“应用程序”文件夹移到废纸篓。',
+    ],
+  ],
+  [
+    'Linux',
+    [
+      '为下载的文件添加执行权限：<code class="inline">chmod +x Yi-*.AppImage</code>。',
+      '双击文件，或在终端中执行该文件即可运行。',
+      '部分发行版须先安装 FUSE 2，例如 Ubuntu 24.04 上的 libfuse2t64 软件包。',
+    ],
+  ],
 ];
 
 /** 生成下载页面；assetVersion 用于资源地址的版本参数 */
@@ -102,11 +136,13 @@ export function downloadPage(pkgs: PagePkg[], assetVersion: string) {
   const link = latest ? `<a href="${RELEASES}${esc(latest)}" rel="noopener noreferrer" target="_blank">更新说明</a>` : '';
   const notes = latest ? `<span class="chip">最新版本 ${esc(latest)} · ${link}</span>` : '';
   const cards = pkgs.length ? `<div class="cards">${pkgs.map(card).join('')}</div>` : '<div class="panel empty">暂无可供下载的安装程序。</div>';
-  const features = FEATURES
-    .map(([t, d], i) => `<div class="panel feature reveal"><span class="pip ${i % 2 ? 'w' : 'b'}"></span><h3>${t}</h3><p>${d}</p></div>`).join('');
+  const features = FEATURES.map(
+    ([t, d], i) => `<div class="panel feature reveal"><span class="pip ${i % 2 ? 'w' : 'b'}"></span><h3>${t}</h3><p>${d}</p></div>`,
+  ).join('');
   const reqs = REQUIREMENTS.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('');
-  const guides = GUIDES
-    .map(([os, steps]) => `<div class="panel guide reveal"><h3>${os}</h3><ol>${steps.map(s => `<li>${s}</li>`).join('')}</ol></div>`).join('');
+  const guides = GUIDES.map(([os, steps]) => `<div class="panel guide reveal"><h3>${os}</h3><ol>${steps.map(s => `<li>${s}</li>`).join('')}</ol></div>`).join(
+    '',
+  );
   return `<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>弈 · 下载</title><meta name="description" content="“弈”是一款五子棋与围棋桌面游戏，支持人机对弈与联机对战。下载 macOS、Windows 及 Linux 版本。">

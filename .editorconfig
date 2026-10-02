@@ -1,0 +1,14 @@
+# 文本文件的基本格式（COD-001、COD-002）：UTF-8 无 BOM、LF 换行、文件末尾一个换行符、2 个空格缩进
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+indent_style = space
+indent_size = 2
+trim_trailing_whitespace = true
+
+[*.md]
+# Markdown 中行尾两个空格表示换行，不自动删除
+trim_trailing_whitespace = false

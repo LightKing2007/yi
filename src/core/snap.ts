@@ -11,8 +11,14 @@ export function gomokuSnap(g: Game): GomokuSnap {
 export function goSnap(g: Game): GoSnap {
   const c = g.cur;
   return {
-    b: c.b.slice(), N: g.N, toMove: c.toMove, passes: c.passes, moves: c.moves,
-    lastX: c.lastX, lastY: c.lastY, komi: g.komi,
+    b: c.b.slice(),
+    N: g.N,
+    toMove: c.toMove,
+    passes: c.passes,
+    moves: c.moves,
+    lastX: c.lastX,
+    lastY: c.lastY,
+    komi: g.komi,
     prev: g.hist.length ? g.hist[g.hist.length - 1].b.slice() : null,
   };
 }

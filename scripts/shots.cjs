@@ -19,12 +19,18 @@ app.whenReady().then(async () => {
   await server.listen();
   const port = server.httpServer.address().port;
   const win = new BrowserWindow({
-    width: 1320, height: 900, show: false, useContentSize: true,
+    width: 1320,
+    height: 900,
+    show: false,
+    useContentSize: true,
     // 像素比显式定为 1：Electron 42 之前离屏渲染跟随主显示器（Retina 上为 2），之后默认为 1
     webPreferences: { offscreen: { deviceScaleFactor: 1 }, backgroundThrottling: false },
   });
   win.webContents.setFrameRate(60);
-  win.webContents.on('console-message', e => { if (e.level === 'warning' || e.level === 'error' || (e.message.startsWith('[scenario] ') && !e.message.startsWith('[scenario] 完成'))) console.log(e.message); });
+  win.webContents.on('console-message', e => {
+    if (e.level === 'warning' || e.level === 'error' || (e.message.startsWith('[scenario] ') && !e.message.startsWith('[scenario] 完成')))
+      console.log(e.message);
+  });
   await win.loadURL(`http://localhost:${port}/?scenario=${encodeURIComponent(only)}&set=${set}`);
   const t0 = Date.now();
   let info = null;
@@ -32,7 +38,7 @@ app.whenReady().then(async () => {
     await new Promise(r => setTimeout(r, 500));
     info = await win.webContents.executeJavaScript('window.__scenario ?? null');
   }
-  await new Promise(r => setTimeout(r, 800));                       // 等最后几张图写完
+  await new Promise(r => setTimeout(r, 800)); // 等最后几张图写完
   if (!info) console.error('场景脚本没有跑完');
   else console.log(`截了 ${info.shots.length} 个时刻（每个时刻 3 张画布），存在 .shots/${set}/，窗口 ${info.size.join('×')}`);
   win.destroy();
