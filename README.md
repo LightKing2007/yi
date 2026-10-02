@@ -215,6 +215,8 @@ node dist-server/server.cjs --version
 | UFW | 主机防火墙，默认拒绝入站，仅放行 TCP 22、8443（SEC-041） |
 | `/etc/fail2ban/jail.local` | SSH 10 分钟内失败 5 次封禁 1 小时（SEC-042）。Ubuntu 24.04 的 SSH 单元名为 `ssh.service`，须以 `journalmatch = _SYSTEMD_UNIT=ssh.service + _COMM=sshd` 指明，否则 fail2ban 读不到任何日志 |
 | `/var/lib/yi/deploy.log` | 上线、回滚及配置修改的记录，每次操作追加一行（OPS-048） |
+| `/opt/yi/backup.sh`、`/etc/systemd/system/yi-backup.{service,timer}` | 每日本地备份，每天北京时间 04:30 前后运行（DAT-060、DAT-061），源文件为仓库中的 `scripts/server/`，由 `npm run deploy -- install-backup` 安装 |
+| `/var/lib/yi/backup/` | 段位存档的备份 `yi-ratings-UTC时间.json` 及其 `.sha256` 校验和，保留最近 7 份（DAT-064） |
 
 `yi.service` 的内容如下，其中 `YI_LATEST` 由 `npm run deploy` 维护：
 
@@ -255,6 +257,13 @@ WantedBy=multi-user.target
 - **修改服务配置**：修改 `yi.service` 后，执行 `systemctl daemon-reload && systemctl restart yi`。
 - **防火墙**：阿里云安全组与主机防火墙 UFW 均仅放行 TCP 22、8443 端口，两者须保持一致（SEC-041）。
 - **重启**：重启服务端将中断正在进行的对局，应在无人对局时进行。
+- **备份**：备份在 `/var/lib/yi/backup/`。立即备份一次：`systemctl start yi-backup`；查看结果：`journalctl -u yi-backup -n 5`，失败记录为 error 级，可用 `journalctl -u yi-backup -p err` 筛出。异地备份见整改项 P1-13。
+- **从备份恢复**：恢复会丢失备份时刻之后的段位变化，并须重启服务端，应在无人对局时进行：
+  1. `systemctl stop yi`；
+  2. 核对备份：`cd /var/lib/yi/backup && sha256sum -c yi-ratings-时间.json.sha256`；
+  3. 先留存现有存档（DAT-066）：`cp -p /var/lib/yi/yi-ratings.json /var/lib/yi/yi-ratings.json.before-restore`；
+  4. `install -o yi -g yi -m 600 /var/lib/yi/backup/yi-ratings-时间.json /var/lib/yi/yi-ratings.json`；
+  5. `systemctl start yi`，以 `journalctl -u yi -n 1` 确认已启动，并在 `/var/lib/yi/deploy.log` 中追加一行记录。
 - **旧版服务端**：1.x 版本的 C 语言服务端（端口 7700）已停用并清理，1.x 客户端不再支持联机。
 
 ### 5.5 域名与 TLS

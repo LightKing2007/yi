@@ -1,0 +1,12 @@
+# 每天北京时间 04:30 前后运行一次 yi-backup.service（服务器时区为 Asia/Shanghai）。
+# Persistent：服务器关机错过的那次，开机后补做，保证 RPO ≤ 24 小时（DAT-060）。
+[Unit]
+Description=Daily backup of Yi rating data
+
+[Timer]
+OnCalendar=*-*-* 04:30:00
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
