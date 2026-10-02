@@ -1,0 +1,11 @@
+# gitleaks 配置（SEC-050）：沿用 gitleaks 的默认规则，只在此登记经审查的误报。
+# 每条例外都必须写明原因，范围尽量窄（以 condition = "AND" 要求同时满足文件与内容），与代码中的例外声明一样经 PR 审查。
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "测试中构造的重连令牌格式样例：0 至 f 顺序写两遍，不是真实令牌。真实的重连令牌由服务端每次随机生成，只保存在内存中（2026-10-02 首次全量扫描时发现，提交 7db26bd）"
+condition = "AND"
+paths = ['''^tests/protocol\.test\.ts$''']
+regexes = ['''^0123456789abcdef0123456789abcdef$''']

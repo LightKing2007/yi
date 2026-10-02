@@ -4,6 +4,7 @@ import { isInvalid, parseC2S } from '../src/shared/parse';
 import { NAME_MAX, PROTO_VERSION, clipName, cleanName, type C2S } from '../src/shared/protocol';
 
 const UID = 'test-device-00000001';
+/** 重连令牌的格式样例（32 位小写十六进制），不是真实令牌；已在 .gitleaks.toml 中登记为密钥扫描的例外 */
 const TOKEN = '0123456789abcdef0123456789abcdef';
 
 /** 每种消息一条合法的例子 */
