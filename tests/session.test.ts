@@ -188,23 +188,30 @@ describe('联机', () => {
 
 describe('困难电脑的时限', () => {
   it('时间到了就用已经算完的那一层，不会一直想下去', () => {
+    // 七手之后轮到白棋：不限时的完整搜索要检查时限 6 次（每 1024 个节点检查一次）
     const b = new Uint8Array(MAXN * MAXN);
     const stones = [
-      [7, 7, 1],
-      [8, 8, 2],
-      [6, 8, 1],
-      [8, 6, 2],
-      [9, 7, 1],
-      [6, 6, 2],
-      [7, 9, 1],
-      [9, 9, 2],
-      [5, 7, 1],
-      [10, 8, 2],
+      [7, 7, BLACK],
+      [8, 7, WHITE],
+      [8, 6, BLACK],
+      [6, 8, WHITE],
+      [10, 4, BLACK],
+      [9, 5, WHITE],
+      [7, 6, BLACK],
     ];
     for (const [x, y, c] of stones) b[at(x, y)] = c;
-    const t0 = performance.now();
-    const m = gomokuMove({ b, N: 15, me: BLACK, renju: true }, 2, Math.random, 30);
-    expect(performance.now() - t0).toBeLessThan(400);
-    expect(m && b[at(m.x, m.y)]).toBe(EMPTY);
-  });
+    const snap = { b, N: 15, me: WHITE, renju: true };
+    /** 以限时 budgetMs 想一手：时钟每读一次过去 1 毫秒，与机器快慢无关（TST-020）；返回读时钟的次数与落点 */
+    const think = (budgetMs: number) => {
+      let reads = 0;
+      setClock(() => T + reads++ / 1000);
+      const move = gomokuMove(snap, 2, () => 0.5, budgetMs);
+      return { reads, move };
+    };
+    // 起算读 1 次，此后每次检查读 1 次：限时 1 毫秒在第 2 次检查时超时，2 毫秒在第 3 次；不限时则要检查 6 次
+    const short = think(1),
+      longer = think(2);
+    expect([short.reads, longer.reads]).toEqual([3, 4]);
+    for (const { move } of [short, longer]) expect(move && b[at(move.x, move.y)]).toBe(EMPTY);
+  }, 20000); // 开启覆盖率统计时搜索明显变慢，留足余量（TST-024）
 });
