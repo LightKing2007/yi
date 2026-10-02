@@ -25,7 +25,7 @@
 
 | 编号 | 整改内容 | 对应发现与规则 | 状态 |
 |---|---|---|---|
-| P1-01 | 引入 ESLint（typescript-eslint）、Prettier、EditorConfig、jscpd；测量存量违规并写入 `docs/audits/baseline.json`；CI 启用棘轮 | F-28、F-30；COD 全部、OPS-012、OPS-015 | 待实施（需新增依赖） |
+| P1-01 | 引入 ESLint（typescript-eslint）、Prettier、EditorConfig、jscpd；测量存量违规并写入 `docs/audits/baseline.json`；CI 启用棘轮 | F-28、F-30；COD 全部、OPS-012、OPS-015 | 已完成（#17 全量格式化，#18 ESLint、jscpd 与棘轮；2026-10-02 项目所有者同意新增依赖） |
 | P1-02 | 引入覆盖率工具（`@vitest/coverage-v8`），按 TST-010 设门槛 | F-28；TST-010、TST-011 | 待实施（需新增依赖） |
 | P1-03 | CI 加固：Actions 固定 SHA、最小权限、`npm audit` 门禁、gitleaks、许可证检查、Dependabot、`main` 提交来源校验 | F-05、F-27；OPS-006、OPS-010、OPS-011、SEC-050、SEC-061、SEC-062 | 待实施 |
 | P1-04 | 服务端入站消息集中校验 `parseC2S`；昵称清洗按 API-014 | F-18、F-20；API-010 至 API-016 | 已完成（#9；客户端的 `parseS2C`（API-016）随 P1-06 实施） |

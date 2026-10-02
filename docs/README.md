@@ -52,3 +52,4 @@
 | 文件 | 内容 |
 |---|---|
 | [2026-10-02-baseline.md](audits/2026-10-02-baseline.md) | 基线审查报告：16 项既有规范的审查、38 项发现、实测数据 |
+| [baseline.json](audits/baseline.json) | 违规基线（OPS-015、00-general.md 第 4.3.2 条）：由 `node scripts/ratchet.mjs --update` 生成，各项只允许减少 |

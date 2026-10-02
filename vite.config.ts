@@ -35,6 +35,7 @@ const shots = (): Plugin => ({
 });
 
 // 相对路径：打包进 Electron 后从 file:// 载入
+// 例外 COD-055：Vite 只读取配置文件的默认导出
 export default defineConfig({
   base: './',
   plugins: [shots()],

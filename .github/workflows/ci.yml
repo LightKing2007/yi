@@ -1,4 +1,4 @@
-# 每个 PR 与合并到 main 后：格式检查、类型检查、测试、构建。PR 还要检查标题的格式（合并时它就是 main 上的提交说明）。
+# 每个 PR 与合并到 main 后：格式检查、违规棘轮、类型检查、测试、构建。PR 还要检查标题的格式（合并时它就是 main 上的提交说明）。
 name: CI
 
 on:
@@ -24,6 +24,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run format:check # COD-006：格式由 Prettier 决定
+      - name: 违规棘轮（OPS-015：ESLint、jscpd 与 01-coding.md 的其他度量均不得超过基线，基线也不得高于 main 上的）
+        run: |
+          git fetch --depth=1 origin main
+          git show FETCH_HEAD:docs/audits/baseline.json > "$RUNNER_TEMP/main-baseline.json" 2>/dev/null || cp docs/audits/baseline.json "$RUNNER_TEMP/main-baseline.json"
+          npm run -s ratchet -- --base "$RUNNER_TEMP/main-baseline.json"
       - run: npm run typecheck
       - run: npm test
       - run: npm run build:web
