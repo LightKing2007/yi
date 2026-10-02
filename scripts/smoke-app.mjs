@@ -30,6 +30,11 @@ app.stdout.on('data', d => { output += d; });
 app.stderr.on('data', d => { output += d; });
 let exited = null;
 app.on('exit', code => { exited = code; });
+// 无论在哪一步退出（含中途失败），都结束游戏进程并删除临时用户目录，不留下测试数据
+process.on('exit', () => {
+  if (exited === null) app.kill();
+  fs.rmSync(userData, { recursive: true, force: true });
+});
 
 /** 等调试端口上出现游戏页面 */
 async function findPage() {
@@ -137,7 +142,6 @@ const logFile = path.join(userData, 'logs', 'yi.log');
 const log = fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf8') : '';
 console.log(log.trim());
 check(/启动 .* Electron /.test(log) && !/\[error\]/.test(log), '日志有启动记录且没有 error');
-fs.rmSync(userData, { recursive: true, force: true });
 
 if (failures.length) console.log(`\n游戏进程的输出（末尾）：\n${output.slice(-4000)}`);
 console.log(failures.length ? `\n${failures.length} 项不通过` : '\n全部通过');
