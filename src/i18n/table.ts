@@ -1,6 +1,8 @@
 /** 界面文字的译文表：[中文原文（也是查表的键）, 文言, English]。新增界面文字时在这里补一行 */
 export const TABLE: [string, string, string][] = [
   ["调整游戏内说明文字：玩法、联机、操作、更新日志及关于页面统一采用正式文体书写，安装程序及下载页面的说明文字同步更新。", "改戏中说明之文：棋规、会友、操持、沿革及题记诸页，统以正式之体书之，安装之程及下载之页之说明亦随之更新。", "Changed the in-game descriptive text: the Rules, Online, Keys, Updates and About pages are now written in a uniform formal style, and the text of the installer and the download page has been updated accordingly."],
+  ["优化联机昵称：昵称长度按实际显示的字符计算，上限为 16 个，表情符号及带声调的字母不再被截断；昵称中的不可见字符及控制字符将自动去除。", "联机之名更善：名之长短以所见之字计之，至多十六字，表情之符及带声调之字母不复截断；名中不可见之字及控制之字自去之。", "Improved online nicknames: the length is now counted in visible characters, up to 16, so emoji and accented letters are no longer cut off; invisible and control characters in nicknames are removed automatically."],
+  ["改进联机服务器的稳定性：服务器对收到的每条消息逐项校验，格式不正确的消息不予处理。", "枢纽更稳：所受之讯令逐一校之，格式不合者不予理会。", "Improved the stability of the online server: every message it receives is now checked, and messages in an incorrect format are not processed."],
   ["对局模式", "对局之式", "Game modes"],
   ["对局规则", "对局之规", "Rules of play"],
   ["更新应用程序图标为新版设计，右下角增设红色“棋”字印章。", "图标易以新制，右下添朱红“棋”字印一方。", "Updated the application icon to a new design featuring a red seal bearing the character for chess in the lower right corner."],
@@ -300,6 +302,7 @@ export const TABLE: [string, string, string][] = [
   ["你还没有可以悔的棋", "君尚无可悔之着", "You have no move to undo"],
   ["本局求和次数已用完", "此局议和已尽", "No draw offers left this game"],
   ["协议错误", "讯令有误", "Protocol error"],
+  ["消息格式错误", "讯令格式有误", "Invalid message format"],
   ["客户端版本与服务器不一致，请更新游戏", "此版与枢纽不合，请更新", "Version mismatch, please update the game"],
   ["房主", "席主", "Host"],
   ["你", "君", "You"],

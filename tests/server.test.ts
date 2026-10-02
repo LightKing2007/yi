@@ -222,6 +222,61 @@ describe('好友房间', () => {
     srv.message(s, { t: 'hello', v: 1, name: 'x', uid: '' });
     expect(inbox[0]).toEqual({ t: 'error', text: '客户端版本与服务器不一致，请更新游戏' });
   });
+
+  it('等待中的房间很多、随机房号接连撞上时，仍然发出可以加入的四位房号', () => {
+    const { srv } = world();                                       // 假随机数恒为 0.3：每次随机出的房号都相同
+    const hosts = Array.from({ length: 3 }, (_, i) => new Client(srv, `房主${i}`));
+    const codes = hosts.map(h => {
+      h.send({ t: 'create', type: 0, size: 15, hostColor: 0, renju: true, moveTime: 0 });
+      return h.expect('created')!.code;
+    });
+    expect(new Set(codes).size).toBe(3);
+    for (const c of codes) expect(c).toMatch(/^\d{4}$/);
+    const guest = new Client(srv, '客');
+    guest.send({ t: 'join', code: codes[2] });
+    expect(guest.expect('start')?.white.name).toBe('客');
+  });
+});
+
+describe('入站消息校验', () => {
+  /** 绕过类型检查，发一条任意内容的消息 */
+  const raw = (c: Client, m: unknown) => { c.sess = c.srv.message(c.sess, m, c.conn); };
+  /** n 个未知字段 */
+  const junk = (n: number) => Object.fromEntries(Array.from({ length: n }, (_, i) => [`k${i}`, i]));
+
+  it('非法消息回复格式错误后丢弃，局面不变，对方收不到任何消息', () => {
+    const { srv } = world();
+    const a = new Client(srv, '甲'), b = new Client(srv, '乙');
+    startGame(a, b);
+    a.drain(); b.drain();
+    for (const m of [{ t: 'move', x: 7.5, y: 7 }, { t: 'move', x: '7', y: 7 }, { t: 'move', x: -0, y: 7 }, { t: 'resign', extra: 1, ...junk(17) }]) {
+      raw(a, m);
+      expect(a.inbox).toEqual([{ t: 'error', text: '消息格式错误' }]);
+      a.drain();
+    }
+    expect(b.inbox).toEqual([]);
+    a.send({ t: 'move', x: 0, y: 0 });                              // 第一手仍由甲来下，说明非法的那几手没有被当成 (0, 0) 落下
+    expect(b.expect('moved')).toEqual({ t: 'moved', x: 0, y: 0 });
+  });
+
+  it('取值超出范围的匹配与开房间请求被拒，不再被改成默认值', () => {
+    const { srv } = world();
+    const a = new Client(srv, '甲');
+    raw(a, { t: 'queue', mode: 'match', type: 0, size: 14 });
+    raw(a, { t: 'create', type: 1, size: 19, hostColor: 0, renju: false, moveTime: 600 });
+    expect(a.inbox).toEqual([{ t: 'error', text: '消息格式错误' }, { t: 'error', text: '消息格式错误' }]);
+    expect(srv.queued('match', 0)).toBe(0);
+  });
+
+  it('握手前的非法消息同样被拒；同一连接只记第一条日志', () => {
+    const logs: string[] = [];
+    const { srv } = world(new MemoryStore(), { log: s => logs.push(s) });
+    const inbox: S2C[] = [];
+    const s = srv.connect({ send: m => inbox.push(m), close: () => {} })!;
+    for (const m of [undefined, null, [], { t: 'hello', v: PROTO_VERSION, name: '甲', uid: 'bad uid' }]) srv.message(s, m);
+    expect(inbox).toEqual(Array(4).fill({ t: 'error', text: '消息格式错误' }));
+    expect(logs.filter(l => l.includes('非法消息'))).toHaveLength(1);
+  });
 });
 
 describe('五子棋对局', () => {
@@ -416,7 +471,8 @@ describe('WebSocket 传输', () => {
       expect((await b.next('start')).color).toBe(2);
       a.ws.send(JSON.stringify({ t: 'move', x: 7, y: 7 }));
       expect(await b.next('moved')).toEqual({ t: 'moved', x: 7, y: 7 });
-      a.ws.send('不是 JSON');                              // 乱发的内容被忽略
+      a.ws.send('不是 JSON');                              // 不是 JSON 的内容按非法消息回复，连接照常
+      expect(await a.next('error')).toEqual({ t: 'error', text: '消息格式错误' });
       b.ws.terminate();
       expect((await a.next('peer')).online).toBe(false);
       const b2 = await open('乙', wb.token);

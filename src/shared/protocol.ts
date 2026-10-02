@@ -8,7 +8,9 @@
 
 export const PROTO_VERSION = 3;
 export const PROTO_PORT = 8443;
-export const NAME_MAX = 16;          // 昵称最多几个字
+export const NAME_MAX = 16;          // 昵称最多几个字素（I18N-030）
+/** 本机匿名身份 uid 的格式（API-013）；不合格式的 hello 被服务端拒绝 */
+export const UID_PATTERN = /^[0-9A-Za-z-]{16,64}$/;
 export const UNDO_LIMIT = 3;         // 每局每人最多申请悔棋次数
 export const DRAW_LIMIT = 3;         // 每局每人最多求和次数
 export const ASK_SECS = 20;          // 申请无人回应多久后视为拒绝
@@ -104,9 +106,26 @@ export type S2C =
   | { t: 'info'; text: string }
   | { t: 'error'; text: string };
 
-/** 名字里的控制字符换成空格，截到上限 */
+/** 昵称中删除的字符：控制符、格式符（含双向控制符、零宽字符）、代理项、私用区、行与段分隔符（API-014） */
+const NAME_STRIP = /[\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Zl}\p{Zp}]/gu;
+const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+
+/** 按字素（UAX #29）截到 NAME_MAX 个，不改动其他字符；输入框边输入边截，与 cleanName 计数一致（I18N-030） */
+export function clipName(s: string) {
+  let out = '', n = 0;
+  for (const { segment } of graphemes.segment(s)) {
+    if (n++ >= NAME_MAX) break;
+    out += segment;
+  }
+  return out;
+}
+
+/**
+ * 昵称清洗（API-014）：NFC 规范化 → 删除控制与格式字符 → 合并连续空白 → 去除首尾空白 → 按字素截到 NAME_MAX 个。
+ * 不是字符串或清洗后为空时返回 fallback。客户端发送前与服务端收到后各清洗一次
+ */
 export function cleanName(s: unknown, fallback: string) {
-  const t = String(s ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
-  const out = Array.from(t).slice(0, NAME_MAX).join('').trim();
-  return out || fallback;
+  if (typeof s !== 'string') return fallback;
+  const t = s.normalize('NFC').replace(NAME_STRIP, '').replace(/\s+/gu, ' ').trim();
+  return clipName(t).trim() || fallback;
 }
