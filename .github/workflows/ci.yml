@@ -1,4 +1,4 @@
-# 每个 PR 与合并到 main 后：格式检查、违规棘轮、类型检查、测试与覆盖率、构建、依赖漏洞、许可证（OPS-012 的顺序）。
+# 每个 PR 与合并到 main 后：格式检查、违规棘轮、类型检查、测试与覆盖率、构建、依赖漏洞、许可证（OPS-012 的顺序），另有密钥扫描（SEC-050）。
 # PR 还要检查标题的格式（合并时它就是 main 上的提交说明）；推送到 main 时核对提交来源（OPS-006）。
 # 第三方 Action 固定到完整的提交号并注明版本（OPS-010），由 Dependabot 更新。
 name: CI
@@ -44,6 +44,25 @@ jobs:
       - run: npm run build:node
       - run: node scripts/audit.mjs # 随游戏与服务端分发的依赖没有高危漏洞（SEC-061）
       - run: node scripts/licenses.mjs # 依赖没有 GPL 一类的许可证（COD-071）
+
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      # 官方 Release 中 gitleaks_8.30.1_linux_x64.tar.gz 的 SHA-256（与 checksums.txt、GitHub 记录的附件摘要一致）；升级版本时一并更新
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0 # 扫描全部提交历史：仓库公开，历史中的任何一次提交都可能被看到
+      - name: 下载 gitleaks 并核对校验和（SEC-050；对不上即中止，不运行来路不明的程序）
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/gitleaks.tar.gz" "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
+      - name: 扫描提交历史中的密钥（SEC-050；误报在 .gitleaks.toml 中登记并写明原因）
+        run: '"$RUNNER_TEMP/gitleaks" git --verbose --redact --no-banner --exit-code 1 .' # --verbose 列出每处发现的文件、行号与提交，内容仍打码
 
   pr-title:
     if: github.event_name == 'pull_request'

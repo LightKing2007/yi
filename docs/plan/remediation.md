@@ -27,7 +27,7 @@
 |---|---|---|---|
 | P1-01 | 引入 ESLint（typescript-eslint）、Prettier、EditorConfig、jscpd；测量存量违规并写入 `docs/audits/baseline.json`；CI 启用棘轮 | F-28、F-30；COD 全部、OPS-012、OPS-015 | 已完成（#17 全量格式化，#18 ESLint、jscpd 与棘轮；2026-10-02 项目所有者同意新增依赖） |
 | P1-02 | 引入覆盖率工具（`@vitest/coverage-v8`），按 TST-010 设门槛 | F-28；TST-010、TST-011 | 已完成（#20；`src/online` 暂以现状行 56%、分支 41% 为下限，随 P1-06 补齐测试后提到要求值） |
-| P1-03 | CI 加固：Actions 固定 SHA、最小权限、`npm audit` 门禁、gitleaks、许可证检查、Dependabot、`main` 提交来源校验 | F-05、F-27；OPS-006、OPS-010、OPS-011、SEC-050、SEC-061、SEC-062 | 实施中（#22：Actions 固定 SHA、最小权限、依赖漏洞门禁、许可证检查、`main` 提交来源校验；Dependabot、密钥扫描随后续 PR） |
+| P1-03 | CI 加固：Actions 固定 SHA、最小权限、`npm audit` 门禁、gitleaks、许可证检查、Dependabot、`main` 提交来源校验 | F-05、F-27；OPS-006、OPS-010、OPS-011、SEC-050、SEC-061、SEC-062 | 已完成（#22：Actions 固定 SHA、最小权限、依赖漏洞门禁、许可证检查、`main` 提交来源校验；#23：Dependabot；#24：gitleaks 密钥扫描；2026-10-02 项目所有者同意在 CI 中下载 gitleaks） |
 | P1-04 | 服务端入站消息集中校验 `parseC2S`；昵称清洗按 API-014 | F-18、F-20；API-010 至 API-016 | 已完成（#9；客户端的 `parseS2C`（API-016）随 P1-06 实施） |
 | P1-05 | 服务端限流：令牌桶、握手超时、每 IP 新建连接频率、违规累计断开、HTTP 超时 | F-07；API-041 至 API-047 | 已完成（#16；客户端按关闭码区分重连间隔随 P1-06 实施） |
 | P1-06 | 客户端重连改为带抖动的指数退避；时限常量集中；补齐 `src/online` 的测试，覆盖率门槛提到 TST-010 的要求值（行 75%、分支 65%） | F-19；API-050、API-051、TST-010 | 待实施 |
