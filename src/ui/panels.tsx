@@ -350,6 +350,7 @@ function InfoView({ lines }: { lines: InfoLine[] }) {
     <>
       {lines.map((ln, i) => {
         if (ln[0] === 'H') return <h4 key={i}>{T(ln[1])}</h4>;
+        if (ln[0] === 'U') return <h4 key={i}>{TF('%s（待发布）', ln[1])}</h4>;
         if (ln[0] === 'P') return <p key={i}>{T(ln[1])}</p>;
         if (ln[0] === 'K')
           return (
