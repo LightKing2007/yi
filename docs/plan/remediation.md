@@ -44,7 +44,7 @@
 | P1-16 | 分层检查覆盖四种导入形式与第三方包白名单 | F-26；ARC-011、ARC-012 | 待实施 |
 | P1-17 | 升级 Vitest 至受支持的主版本 | 基线审查报告第 4 章的 `npm audit` 结果；SEC-060 | 已完成（#19，3.2.7 升至 5.0.3；`npm audit` 为 0 项） |
 | P1-18 | 没有 GPU 加速的环境（虚拟机、显卡驱动被 Chromium 列入黑名单的计算机）中，游戏提示“当前环境不支持 WebGL2”而无法使用：Chromium 已取消 WebGL 自动退回 SwiftShader 软件渲染。评估在主进程中启用 `enable-unsafe-swiftshader` 的安全影响（游戏只加载自身代码，SEC-035）后实施，并以 Linux 冒烟检查（不带该开关）验证 | 2026-10-02 Linux 冒烟检查中发现；EDGE 第 8 节“无独立显卡”、EDGE-002 | 待实施（涉及 SEC，须项目所有者确认） |
-| P1-19 | 把 CI 的密钥扫描任务 `secrets` 列为规则集 `main` 的必需检查；开启 GitHub 的 Secret scanning、Push protection、Dependabot alerts 与 Dependabot security updates（2026-10-03 审计发现，高级，期限 2026-11-02） | A-01；SEC-050、SEC-062 | 待实施（仓库设置，须由项目所有者操作） |
+| P1-19 | 把 CI 的密钥扫描任务 `secrets` 列为规则集 `main` 的必需检查；开启 GitHub 的 Secret scanning、Push protection、Dependabot alerts 与 Dependabot security updates（2026-10-03 审计发现，高级，期限 2026-11-02） | A-01；SEC-050、SEC-062 | 已完成（2026-10-03 项目所有者在仓库设置中操作；经 GitHub 接口核实：规则集 `main` 的必需检查为 `pr-title`、`test`、`secrets`，四项安全功能均已开启） |
 
 ## 6 P2（2027-01-01 前或随对应阶段完成）
 
