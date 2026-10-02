@@ -43,7 +43,7 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(pkg.version), // 版本号只写在 package.json 一处
     __PAGE_ASSETS__: JSON.stringify(pageAssets(new URL('./', import.meta.url))), // 只有服务端的下载页面引用（测试中用到）
   },
-  esbuild: { jsx: 'automatic', jsxImportSource: 'preact' },
+  oxc: { jsx: { runtime: 'automatic', importSource: 'preact' } }, // Vite 8 起以 Oxc 转换 TypeScript 与 JSX（原 esbuild 选项已弃用）
   build: { outDir: 'dist', target: 'es2022', chunkSizeWarningLimit: 2000 },
   worker: { format: 'es' },
   server: { port: 5173, strictPort: true },
