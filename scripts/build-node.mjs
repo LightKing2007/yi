@@ -2,6 +2,7 @@
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import { build } from 'esbuild';
+import { pageAssets } from './page-assets.mjs';
 
 // 版本号与提交号写进程序里：服务端启动时打出来，线上跑的是哪一版一看便知
 const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
@@ -17,5 +18,8 @@ const common = {
 await Promise.all([
   build({ ...common, entryPoints: ['electron/main.ts'], outfile: 'dist-electron/main.cjs', external: [...common.external, 'electron'] }),
   build({ ...common, entryPoints: ['electron/preload.ts'], outfile: 'dist-electron/preload.cjs', external: ['electron'] }),
-  build({ ...common, entryPoints: ['server/main.ts'], outfile: 'dist-server/server.cjs', banner: { js: '#!/usr/bin/env node' } }),
+  build({
+    ...common, entryPoints: ['server/main.ts'], outfile: 'dist-server/server.cjs', banner: { js: '#!/usr/bin/env node' },
+    define: { ...common.define, __PAGE_ASSETS__: JSON.stringify(pageAssets(new URL('../', import.meta.url))) },   // 下载页面的标题图、图标与字体
+  }),
 ]);

@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import type { Plugin } from 'vite';
 import { defineConfig } from 'vite';
+import { pageAssets } from './scripts/page-assets.mjs';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
@@ -31,7 +32,10 @@ const shots = (): Plugin => ({
 export default defineConfig({
   base: './',
   plugins: [shots()],
-  define: { __APP_VERSION__: JSON.stringify(pkg.version) },   // 版本号只写在 package.json 一处
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),                  // 版本号只写在 package.json 一处
+    __PAGE_ASSETS__: JSON.stringify(pageAssets(new URL('./', import.meta.url))),   // 只有服务端的下载页面引用（测试中用到）
+  },
   esbuild: { jsx: 'automatic', jsxImportSource: 'preact' },
   build: { outDir: 'dist', target: 'es2022', chunkSizeWarningLimit: 2000 },
   worker: { format: 'es' },

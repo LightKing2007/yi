@@ -202,7 +202,7 @@ node dist-server/server.cjs --version
 | `YI_DATA` | 段位数据文件的路径 |
 | `YI_LATEST` | 最新客户端版本号，例如 `2.0.2`；客户端版本较旧时，开始菜单及联机对战页面提示有新版本 |
 | `YI_DOWNLOAD` | 新版本的下载地址（`http://` 或 `https://`），提示可点击打开 |
-| `YI_FILES` | 安装程序所在目录。设置后，服务端在同一端口提供下载页面 `http://地址:端口/`，列出各平台最新的 `Yi-版本-平台` 安装程序，支持断点续传；每个 IP 同时最多 2 个下载，全服最多 8 个 |
+| `YI_FILES` | 安装程序所在目录。设置后，服务端在同一端口提供下载页面 `http://地址:端口/`，列出各平台最新的 `Yi-版本-平台` 安装程序及其 SHA-256 校验值（另有 `/SHA256SUMS`），支持断点续传；每个 IP 同时最多 2 个下载，全服最多 8 个。页面所用的标题图、图标与字体在构建时嵌入服务端（`scripts/page-assets.mjs`），页面不含脚本 |
 
 同一 IP 同时最多建立 8 条连接；同一连接在一分钟内加入房间失败 5 次后，暂时不得再次尝试。
 
@@ -317,7 +317,7 @@ src/
   ui/                 Preact 界面：panels（菜单、对局、设置、更多）、online（联机对战）、widgets、styles.css、info（“更多”页面的文字）
   i18n/               多语言
 server/               rooms.ts 队列、配对、房间、对局与段位（与传输无关）；store.ts 段位存档；host.ts 接入 WebSocket（可同时监听多个端口）；
-                      files.ts 同一端口上的下载页面；main.ts 入口
+                      files.ts 同一端口上的下载服务（page.ts 页面、pageStyle.ts 样式）；main.ts 入口
 electron/             桌面版主进程（窗口、单实例、匹配成功时的任务栏提醒、错误日志）及预加载脚本
 tests/                vitest：rules（规则与人机）、record（规则层与棋谱）、session（会话与座位）、protocol（消息校验与昵称清洗）、server（联机服务端）、
                       client（联机客户端：断线、重连、服务器重启）、layers（依赖方向）、text（说明文字的译文、标点与更新日志）
