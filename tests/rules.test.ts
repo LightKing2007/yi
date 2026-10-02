@@ -229,7 +229,8 @@ describe('围棋人机', () => {
       const g = go9();
       setStones(g, [3, 4, W, 3, 5, W, 5, 4, W, 5, 5, W, 4, 3, W, 6, 6, W, 2, 2, W, 4, 4, B, 4, 5, B, 6, 2, B, 2, 6, B, 7, 7, B]);
       g.cur.toMove = W;
-      expect(goThink(goSnap(g), lv, { timeScale: 0.3 })).toEqual({ x: 4, y: 6 });
+      // 固定模拟次数与种子：结果不随机器快慢变化（TST-020）。按思考时间搜索时，CI 开启覆盖率后模拟次数不足，偶尔落到别处
+      expect(goThink(goSnap(g), lv, { iterations: 2000, seed: 1 })).toEqual({ x: 4, y: 6 });
     }, 20000);
   }
   for (const lv of [0, 1]) {
