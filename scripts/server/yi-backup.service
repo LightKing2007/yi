@@ -1,0 +1,24 @@
+# 段位存档的每日本地备份（DAT-060、DAT-061、DAT-064；整改项 P0-02），由 yi-backup.timer 触发。
+# 安装到 /etc/systemd/system/，脚本安装到 /opt/yi/backup.sh：npm run deploy -- install-backup
+[Unit]
+Description=Yi daily backup of rating data
+
+[Service]
+Type=oneshot
+User=yi
+Group=yi
+ExecStart=/opt/yi/backup.sh
+Environment=YI_DATA=/var/lib/yi/yi-ratings.json
+Environment=YI_BACKUP_DIR=/var/lib/yi/backup
+Environment=YI_BACKUP_KEEP=7
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+ReadWritePaths=/var/lib/yi
