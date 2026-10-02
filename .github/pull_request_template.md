@@ -7,7 +7,7 @@
 ## 检查（docs/standards/checklists.md 第 1 节）
 
 - [ ] 1. 标题符合 OPS-001、OPS-002，只含一个主题（OPS-004）
-- [ ] 2. 本地 `npm run typecheck && npm test` 通过
+- [ ] 2. 本地 `npm run format:check`、`npm run ratchet`、`npm run typecheck`、`npm run test:coverage` 通过
 - [ ] 3. 新增代码满足 COD 规则（01-coding.md）；修改的函数已一并整改（00-general.md 第 4.3.3 条）
 - [ ] 4. 新增依赖已按 COD-070 说明
 - [ ] 5. 外部输入均经过校验（COD-053、API-010）

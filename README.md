@@ -326,9 +326,11 @@ server/               rooms.ts 队列、配对、房间、对局与段位（与�
                       files.ts 同一端口上的下载服务（page.ts 页面、pageStyle.ts 样式）；main.ts 入口
 electron/             桌面版主进程（窗口、单实例、匹配成功时的任务栏提醒、错误日志）及预加载脚本
 tests/                vitest：rules（规则与人机）、record（规则层与棋谱）、session（会话与座位）、protocol（消息校验与昵称清洗）、server（联机服务端）、ratelimit（限流）、
-                      client（联机客户端：断线、重连、服务器重启）、layers（依赖方向）、text（说明文字的译文、标点与更新日志）
-scripts/              build-node（打包主进程与服务端）、make-fonts（生成内置字体子集）、changelog（读取更新日志、生成发布说明）、
-                      release（发版）、deploy.sh（上线）、shots.cjs 与 compare-shots.mjs（场景截图与逐像素对比）
+                      store（段位存档）、client（联机客户端：断线、重连、服务器重启）、layers（依赖方向）、text（说明文字的译文、标点与更新日志）、
+                      ratchet（违规棘轮）、coverage（改动行覆盖率）、deps（许可证、依赖漏洞门禁、工作流的 Action 固定）
+scripts/              build-node（打包主进程与服务端）、make-fonts（生成内置字体子集）、page-assets（下载页面的图片与字体）、changelog（读取更新日志、生成发布说明）、
+                      release（发版）、deploy.sh（上线）、shots.cjs 与 compare-shots.mjs（场景截图与逐像素对比）、smoke-app（安装后的冒烟检查）、
+                      ratchet（违规棘轮）、diff-coverage（改动行覆盖率）、audit（依赖漏洞门禁）、licenses（许可证检查）
 docs/                 standards/（工程规范）、procedures/（操作规程）、plan/（改造与整改计划）、audits/（审计报告），索引见 docs/README.md
 ```
 
