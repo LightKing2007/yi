@@ -89,6 +89,7 @@
 npm install          # 安装依赖，并启用 .githooks 中的 Git 钩子
 npm run dev          # 启动开发服务器，浏览器打开 http://localhost:5173，修改代码后即时刷新
 npm test             # 运行全部测试
+npm run test:coverage # 运行全部测试并统计覆盖率，低于门槛时失败（TST-010）；node scripts/diff-coverage.mjs 检查改动行覆盖率（TST-011）
 npm run typecheck    # 类型检查
 npm run format       # 按 Prettier 统一代码格式（COD-006；范围见 .prettierignore），CI 以 npm run format:check 检查
 npm run lint         # ESLint（规则与 01-coding.md 的对应见 eslint.config.js）
