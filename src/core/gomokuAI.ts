@@ -7,6 +7,7 @@
  * 三档都会先抓住自己的连五，普通与困难必定挡住对方的连五。
  * 热点循环都用一维下标与预先分配的数组，不在搜索中途分配对象。
  */
+import { now } from './clock';
 import { renjuForbidden } from './renju';
 import { BLACK, EMPTY, MAXN, type Board } from './types';
 
@@ -23,6 +24,7 @@ const STEP = [MAXN, 1, MAXN + 1, MAXN - 1]; // 四个方向在一维下标里的
 const WIN_SCORE = 1e9;
 const HARD_DEPTH = 6;
 const HARD_BUDGET_MS = 1200; // 困难一步最多想多久：慢电脑上也不会一步想好几秒
+const MS_PER_SEC = 1000;
 const ABORT = { abort: true }; // 超时时从搜索里抛出来
 
 const MY = [7, 35, 800, 15000, 800000];
@@ -40,7 +42,7 @@ class Cands {
 
 class Searcher {
   private levels: Cands[] = [];
-  /** 超过这个时刻（performance.now）就放弃当前这一层搜索；Infinity 表示不限时 */
+  /** 超过这个时刻（clock.ts 的 now()，秒）就放弃当前这一层搜索；Infinity 表示不限时 */
   deadline = Infinity;
   private nodes = 0;
   constructor(
@@ -179,7 +181,7 @@ class Searcher {
   }
 
   negamax(me: number, depth: number, alpha: number, beta: number): number {
-    if ((++this.nodes & 1023) === 0 && performance.now() > this.deadline) throw ABORT;
+    if ((++this.nodes & 1023) === 0 && now() > this.deadline) throw ABORT;
     if (depth === 0) return this.evaluate(me);
     const c = this.candidates(me, 10, depth);
     const n = c.n;
@@ -254,7 +256,7 @@ export function gomokuMove(snap: GomokuSnap, level: number, random: () => number
     ys = top.y.slice(0, m),
     order = Array.from({ length: m }, (_, i) => i);
   let pick = 0;
-  s.deadline = performance.now() + budgetMs;
+  s.deadline = now() + budgetMs / MS_PER_SEC; // 时间经 clock.ts 读取，测试可换成手动推进的时钟（ARC-020、TST-020）
   for (const depth of [2, 4, HARD_DEPTH]) {
     let bestI = order[0],
       best = -WIN_SCORE * 4,
