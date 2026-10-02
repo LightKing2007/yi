@@ -48,3 +48,4 @@ jobs:
         with:
           name: linux-smoke
           path: smoke*/*.png
+          retention-days: 7                    # 截图只供当次核对

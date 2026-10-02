@@ -69,6 +69,7 @@ jobs:
             release/*.AppImage
             release/yi-server-*.cjs
           if-no-files-found: error
+          retention-days: 3                  # 只供本次运行的 publish 转交给 Release；Release 里另有一份，附件不必久存
 
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
