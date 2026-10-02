@@ -60,6 +60,7 @@ li{display:flex;justify-content:space-between;align-items:baseline;padding:14px 
 a{color:#8a2b1d;font-size:18px;text-decoration:none}a:hover{text-decoration:underline}
 span,p{color:#6b5a46;font-size:14px}
 </style></head><body><main><h1>弈</h1><p>“弈”是一款围棋与五子棋游戏，支持人机对弈及联机对战。请根据您的操作系统选择对应的安装程序。</p>
+<p>系统要求：macOS 13 或更高版本；Windows 10 或更高版本（64 位）；Linux（x86_64）。</p>
 ${rows ? `<ul>${rows}</ul>` : '<p>暂无可供下载的安装程序。</p>'}
 <p>macOS：首次打开时，请在“访达”中按住 Control 键点按该应用程序并选择“打开”，或前往“系统设置”中的“隐私与安全性”，点按“仍要打开”。</p>
 <p>Windows：首次运行时如出现“Windows 已保护你的电脑”提示，请点击“更多信息”，再点击“仍要运行”。</p>

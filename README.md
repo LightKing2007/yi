@@ -1,6 +1,6 @@
 # 弈 · 五子棋 & 围棋
 
-“弈”是一款围棋与五子棋桌面游戏，支持人机对弈及联机对战。游戏以 TypeScript 编写，通过 Electron 提供 macOS、Windows 及 Linux 平台的安装程序；开发期间亦可在浏览器中运行调试。
+“弈”是一款围棋与五子棋桌面游戏，支持人机对弈及联机对战。游戏以 TypeScript 编写，通过 Electron 提供 macOS、Windows 及 Linux 平台的安装程序；开发期间亦可在浏览器中运行调试。安装程序支持 macOS 13 或更高版本（Apple 芯片、Intel 芯片）、Windows 10 或更高版本（x64）及 Linux（x86_64）。
 
 本文档说明项目的功能、开发方法、打包发行、联机服务端部署及源码结构。项目的工程规范、操作规程、计划与审计报告见 [docs/README.md](docs/README.md)。
 
@@ -91,6 +91,8 @@ npm run dev          # 启动开发服务器，浏览器打开 http://localhost:
 npm test             # 运行全部测试
 npm run typecheck    # 类型检查
 ```
+
+Electron 本体（约 130 MB）不随 `npm install` 下载，而在首次运行 `npm run app`、`npm run shots` 等命令时下载，默认缓存于系统目录。如需将下载缓存保留在项目内，可在首次运行前设置环境变量 `electron_config_cache=.cache/electron`（`.cache/` 不纳入版本控制）。
 
 ### 3.2 画面回归检查
 
