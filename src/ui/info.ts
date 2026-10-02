@@ -4,8 +4,10 @@
  * 更新日志每一条以“新增”“优化”“调整”“修复”等开头，写清楚改了什么。
  */
 import { VERSION } from '../app/state';
+import { newerVersion } from '../online/client';
 
-export type InfoLine = ['H' | 'P', string] | ['K', string, string] | ['G'];
+/** U 为尚未发布的版本的小标题，显示为“版本号（待发布）” */
+export type InfoLine = ['H' | 'P' | 'U', string] | ['K', string, string] | ['G'];
 export interface InfoPage { title: string; lines: InfoLine[] }
 
 const RULES: InfoLine[] = [
@@ -165,10 +167,30 @@ const ABOUT: InfoLine[] = [
   ['K', '思源字体', '内置中文字体（SIL 开放字体许可证）'],
 ];
 
+/**
+ * 更新日志先于发版编写（docs/procedures/release.md 第 4.2 条），最上面一节可能是尚未发布的下一个版本。
+ * 比当前版本新的节：开发时小标题注明“待发布”，便于预览译文；打包时不显示，以免与“关于”中的版本号不一致。
+ */
+export function releasedLog(log: InfoLine[], version: string, dev: boolean): InfoLine[] {
+  const out: InfoLine[] = [];
+  let unreleased = false;
+  for (const ln of log) {
+    if (ln[0] === 'H') {
+      unreleased = newerVersion(ln[1], version);
+      if (unreleased) {
+        if (dev) out.push(['U', ln[1]]);
+        continue;
+      }
+    }
+    if (!unreleased || dev) out.push(ln);
+  }
+  return out;
+}
+
 export const INFO_PAGES: InfoPage[] = [
   { title: '玩法', lines: RULES },
   { title: '联机', lines: ONLINE },
   { title: '操作', lines: KEYS },
-  { title: '日志', lines: LOG },
+  { title: '日志', lines: releasedLog(LOG, VERSION, import.meta.env.DEV) },
   { title: '关于', lines: ABOUT },
 ];

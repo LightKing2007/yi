@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { TABLE } from '../src/i18n/table';
-import { INFO_PAGES } from '../src/ui/info';
+import { INFO_PAGES, releasedLog, type InfoLine } from '../src/ui/info';
 // @ts-expect-error 纯 JS 脚本，没有类型声明
 import { changelog } from '../scripts/changelog.mjs';
 
@@ -68,5 +68,22 @@ describe('更新日志', () => {
       log.some(s => s.version === pkg.version),
       `更新日志里没有当前版本 ${pkg.version}`,
     ).toBe(true);
+  });
+});
+
+describe('日志页中尚未发布的版本', () => {
+  const LOG: InfoLine[] = [['H', '2.0.5'], ['P', '新增甲。'], ['G'], ['H', '2.0.4'], ['P', '修复乙。'], ['G'], ['H', '2.0.3'], ['P', '调整丙。']];
+
+  it('开发时比当前版本新的一节保留内容，小标题改为待发布', () => {
+    expect(releasedLog(LOG, '2.0.4', true)).toEqual([['U', '2.0.5'], ...LOG.slice(1)]);
+  });
+
+  it('打包时比当前版本新的一节连同其后的间距一并不显示，最上面一节即当前版本', () => {
+    expect(releasedLog(LOG, '2.0.4', false)).toEqual(LOG.slice(3));
+  });
+
+  it('发版改了版本号之后，该节按已发布的版本正常显示', () => {
+    expect(releasedLog(LOG, '2.0.5', false)).toEqual(LOG);
+    expect(releasedLog(LOG, '2.0.5', true)).toEqual(LOG);
   });
 });
