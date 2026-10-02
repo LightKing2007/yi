@@ -81,7 +81,9 @@ await call('Runtime.enable');
 await sleep(3000);                                                  // 等开始菜单的入场动画
 
 const info = (await evaluate(`(async () => {
-  const gl = document.getElementById('scene').getContext('webgl2');
+  // 再向游戏的画布要上下文，在 Linux 软件渲染下偶尔得到 null（游戏照常绘制）；另用一块新画布探测环境是否支持 WebGL2。
+  // 游戏自己建不起上下文时会抛出“当前环境不支持 WebGL2”，由下面的“页面没有异常与报错”检出
+  const gl = document.getElementById('scene').getContext('webgl2') ?? document.createElement('canvas').getContext('webgl2');
   await document.fonts.ready;
   return {
     electron: navigator.userAgent.match(/Electron\\/([\\d.]+)/)?.[1],
