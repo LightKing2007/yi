@@ -9,13 +9,14 @@ import { Game } from '../src/core/game';
 import { rejectText } from '../src/shared/reject';
 import { BLACK, GameType, WHITE, other } from '../src/core/types';
 import { isInvalid, parseC2S, type Invalid } from '../src/shared/parse';
+import { BAN_SECS, ConnLimits, type LimitedOp } from './ratelimit';
 import {
-  ASK_SECS, CONFIRM_SECS, DRAW_LIMIT, GRACE_SECS, IDLE_SECS, UNDO_LIMIT, cleanName, newRating, queueRules,
+  ASK_SECS, CLOSE_CODE, CONFIRM_SECS, DRAW_LIMIT, GRACE_SECS, HELLO_SECS, IDLE_SECS, UNDO_LIMIT, cleanName, newRating, queueRules,
   type Act, type AskKind, type C2S, type GameKind, type Opponent, type OverReason, type QueueMode, type Rating, type Ratings, type S2C,
 } from '../src/shared/protocol';
 
-/** 一条连接：服务端只需要能发消息、能关掉 */
-export interface Conn { send(msg: S2C): void; close(): void }
+/** 一条连接：服务端只需要能发消息、能关掉。close 带关闭码（CLOSE_CODE）时按协议关闭，不带时直接切断 */
+export interface Conn { send(msg: S2C): void; close(code?: number): void }
 
 /** 段位分的存放处（独立服务端存到文件，测试里放内存） */
 export interface RatingStore { get(key: string): Ratings | undefined; set(key: string, r: Ratings, name: string): void }
@@ -43,6 +44,8 @@ const CODE_TRIES = 100;
 const TOKEN_BYTES = 16;
 /** 匿名身份散列保留的十六进制位数（DAT-075） */
 const UID_HASH_CHARS = 32;
+/** 超出频率限制时的提示（v3 以文本下发；协议 v4 起为错误码 rate.limited，E3） */
+const LIMITED_TEXT = '操作过于频繁，请稍后再试';
 
 interface QEntry { p: Player; mode: QueueMode; type: number; size: number; since: number }
 
@@ -66,7 +69,9 @@ interface Player {
   queued: QEntry | null;          // 正在匹配
   match: Match | null;            // 已配对、等双方确认
   joinFails: number[];            // 最近几次加入房间失败的时刻
-  invalid: number;                // 这条连接发来的非法消息数（只记第一条的日志；违规累计断开见 API-045）
+  invalid: number;                // 这条连接发来的非法消息数（只记第一条的日志）
+  since: number;                  // 连接建立的时刻（握手时限从此算起，API-042）
+  limits: ConnLimits;             // 消息限速、操作频率与违规累计（API-043 至 API-045）
 }
 
 /** 房间状态：等待对手、对局中（含点目）、已结束 */
@@ -111,6 +116,8 @@ export class RoomServer {
   private rooms = new Map<number, Room>();
   private queue: QEntry[] = [];
   private matches = new Set<Match>();
+  /** 因累计违规被断开的匿名身份（散列）→ 解除的时刻（API-045） */
+  private banned = new Map<string, number>();
   private nextPlayer = 1;
   private nextRoom = 1;
   private now: () => number;
@@ -129,23 +136,25 @@ export class RoomServer {
 
   // ---------------- 对外接口 ----------------
 
-  /** 新连接；满员时返回 null（调用方应关闭连接） */
+  /** 新连接；满员时告知“服务器繁忙”后返回 null，调用方应以 CLOSE_CODE.overload 关闭连接（API-046） */
   connect(conn: Conn): Session | null {
-    if (this.players.size >= MAX_PLAYERS) return null;
+    if (this.players.size >= MAX_PLAYERS) { conn.send({ t: 'error', text: '服务器繁忙，请稍后再试' }); return null; }
+    const now = this.now();
     const p: Player = {
       id: 0, conn, name: '', token: '', key: '', ratings: { gomoku: newRating(), go: newRating() },
-      lastSeen: this.now(), offAt: 0, room: 0, queued: null, match: null, joinFails: [], invalid: 0,
+      lastSeen: now, offAt: 0, room: 0, queued: null, match: null, joinFails: [], invalid: 0, since: now, limits: new ConnLimits(now),
     };
     this.players.add(p);
     return p;
   }
 
   /**
-   * 收到一条消息：raw 为 JSON 解析的结果，不是 JSON 时为 undefined。先经 parseC2S 校验（API-010），
-   * 非法的回复错误后丢弃（API-015）。返回此后该连接对应的会话（带令牌重连时换成原来的玩家）
+   * 收到一条消息：raw 为 JSON 解析的结果，不是 JSON 时为 undefined。先按令牌桶限速（API-043），
+   * 再经 parseC2S 校验（API-010），非法的回复错误后丢弃（API-015）。返回此后该连接对应的会话（带令牌重连时换成原来的玩家）
    */
   message(p: Session, raw: unknown, conn?: Conn): Session {
     if (!this.players.has(p) || !p.conn || (conn && p.conn !== conn)) return p;
+    if (!p.limits.message(this.now())) { this.limited(p); return p; }
     const m = parseC2S(raw);
     if (isInvalid(m)) { this.rejectInvalid(p, m); return p; }
     if (!p.id) return this.hello(p, m);
@@ -188,14 +197,11 @@ export class RoomServer {
       if (r.ask && now > r.askUntil) this.resolveAsk(r, false);            // 申请无人回应，视为拒绝
       if (r.state === RoomState.Play && r.deadline && now > r.deadline) this.finish(r, 3 - r.g.cur.toMove, 'timeout');
     }
+    for (const [key, until] of this.banned) if (now >= until) this.banned.delete(key);
     for (const p of [...this.players]) {
       if (!this.players.has(p)) continue;
-      if (p.conn && now - p.lastSeen > IDLE_SECS) {                         // 太久没消息：当作断线
-        const c = p.conn;
-        this.disconnect(p);
-        c.close();
-        continue;
-      }
+      if (p.conn && !p.id && now - p.since > HELLO_SECS) { this.drop(p, CLOSE_CODE.helloTimeout); continue; }   // 握手超时（API-042）
+      if (p.conn && now - p.lastSeen > IDLE_SECS) { this.drop(p); continue; }   // 太久没消息：当作断线
       if (!p.conn && now - p.offAt > GRACE_SECS) {                           // 掉线太久：对局判负并清理
         const r = this.rooms.get(p.room);
         if (r && r.state === RoomState.Play) this.finish(r, 3 - this.colorOf(r, p), 'disconnect');
@@ -236,6 +242,40 @@ export class RoomServer {
       const r = this.rooms.get(o.room);
       if (r && r.kind === 'ranked' && r.state === RoomState.Play) return true;
     }
+    return false;
+  }
+
+  // ---------------- 限流与违规（API-042 至 API-045） ----------------
+
+  /** 服务端主动断开一条连接：先按断线处理（对局中保留席位），再关闭；code 为关闭码，不带时直接切断 */
+  private drop(p: Player, code?: number) {
+    const c = p.conn;
+    if (!c) return;
+    this.disconnect(p);
+    c.close(code);
+  }
+
+  /** 超出频率限制（E3）：丢弃这次请求，1 秒内只提示一次，并累计一次违规 */
+  private limited(p: Player) {
+    if (p.limits.notice(this.now())) this.send(p, { t: 'error', text: LIMITED_TEXT });
+    this.violate(p);
+  }
+
+  /**
+   * 累计一次违规（E3、E4）；60 秒内达到 10 次时以 1008 断开，并在 5 分钟内拒绝同一匿名身份再连上（API-045）。
+   * 断开后对局照常保留席位，但被拒期间无法重连，到时按掉线判负
+   */
+  private violate(p: Player) {
+    if (!p.conn || !p.limits.violate(this.now())) return;
+    if (p.key) this.banned.set(p.key, this.now() + BAN_SECS);
+    this.log(`${p.id ? `玩家 ${p.id}（${p.name}）` : '未握手的连接'} 累计违规过多，已断开`);
+    this.drop(p, CLOSE_CODE.policy);
+  }
+
+  /** 受频率限制的操作（API-044）：没超出时返回 true；超出时按限流处理并返回 false */
+  private allow(p: Player, op: LimitedOp) {
+    if (p.limits.allow(op, this.now())) return true;
+    this.limited(p);
     return false;
   }
 
@@ -464,15 +504,25 @@ export class RoomServer {
     this.send(p, { t: 'turn', color: r.g.cur.toMove, secs: r.deadline ? Math.round(r.deadline - this.now()) : -1 });
   }
 
-  /** 非法消息（API-015）：版本不符时提示更新，其余回复格式错误后丢弃；每条连接只记第一条的日志，免得被刷屏 */
+  /** 非法消息（API-015）：版本不符时提示更新，其余回复格式错误后丢弃；都累计一次违规。每条连接只记第一条的日志，免得被刷屏 */
   private rejectInvalid(p: Player, m: Invalid) {
-    if (m.invalid === 'version') { this.send(p, { t: 'error', text: '客户端版本与服务器不一致，请更新游戏' }); return; }
-    this.send(p, { t: 'error', text: '消息格式错误' });
-    if (p.invalid++ === 0) this.log(`非法消息（${p.id ? `玩家 ${p.id}` : '未握手的连接'}）：${m.why}`);
+    if (m.invalid === 'version') this.send(p, { t: 'error', text: '客户端版本与服务器不一致，请更新游戏' });
+    else {
+      this.send(p, { t: 'error', text: '消息格式错误' });
+      if (p.invalid++ === 0) this.log(`非法消息（${p.id ? `玩家 ${p.id}` : '未握手的连接'}）：${m.why}`);
+    }
+    this.violate(p);
   }
 
   private hello(p: Player, m: C2S): Player {
-    if (m.t !== 'hello') { this.send(p, { t: 'error', text: '协议错误' }); return p; }
+    if (m.t !== 'hello') { this.send(p, { t: 'error', text: '协议错误' }); this.violate(p); return p; }
+    // 匿名身份：只存散列，存档里看不出原来的 uid（DAT-075）
+    const key = createHash('sha256').update('yi:' + m.uid).digest('hex').slice(0, UID_HASH_CHARS);
+    if ((this.banned.get(key) ?? 0) > this.now()) {                  // 刚因累计违规被断开（API-045）
+      this.send(p, { t: 'error', text: LIMITED_TEXT });
+      this.drop(p, CLOSE_CODE.policy);
+      return p;
+    }
     p.lastSeen = this.now();
     const resuming = m.token !== undefined;
     if (resuming) {                                           // 带令牌：找回掉线的自己
@@ -504,8 +554,7 @@ export class RoomServer {
     p.name = cleanName(m.name, '棋手');
     p.id = this.nextPlayer++;
     p.token = hex(TOKEN_BYTES);
-    // 匿名身份：只存散列，存档里看不出原来的 uid（DAT-075）
-    p.key = createHash('sha256').update('yi:' + m.uid).digest('hex').slice(0, UID_HASH_CHARS);
+    p.key = key;
     const saved = this.store.get(p.key);
     p.ratings = { gomoku: { ...newRating(), ...saved?.gomoku }, go: { ...newRating(), ...saved?.go } };
     this.send(p, { t: 'welcome', id: p.id, token: p.token, ratings: p.ratings, ...this.latest });
@@ -529,15 +578,25 @@ export class RoomServer {
     switch (m.t) {
       case 'ping': this.send(p, { t: 'pong' }); return true;
       case 'leave': this.leaveRoom(p); return true;
-      case 'name': if (!this.busy(p)) p.name = cleanName(m.name, p.name); return true;
-      case 'queue': this.queueFor(p, m.mode, m.type, m.size); return true;
-      case 'unqueue': this.unqueue(p); return true;
+      case 'name': this.rename(p, m.name); return true;
+      case 'queue': if (this.allow(p, 'queue')) this.queueFor(p, m.mode, m.type, m.size); return true;
+      case 'unqueue': if (this.allow(p, 'queue')) this.unqueue(p); return true;
       case 'confirm': this.confirm(p, m.ok); return true;
       case 'create': this.createRoom(p, m); return true;
       case 'close': this.closeRoom(p); return true;
       case 'join': this.joinRoom(p, m.code); return true;
       default: return false;
     }
+  }
+
+  /**
+   * 改名（不在房间里时）。客户端每次匹配、开房、加入前都会先发一次 name，与当前昵称相同的不算改名，
+   * 不计入频率；真正改名的每 10 秒至多 1 次（API-044）
+   */
+  private rename(p: Player, raw: string) {
+    if (this.busy(p)) return;
+    const name = cleanName(raw, p.name);
+    if (name !== p.name && this.allow(p, 'name')) p.name = name;
   }
 
   private queueFor(p: Player, mode: QueueMode, type: number, size: number) {
@@ -568,7 +627,7 @@ export class RoomServer {
   private joinRoom(p: Player, code: string) {
     const now = this.now();
     p.joinFails = p.joinFails.filter(t0 => now - t0 < JOIN_WINDOW_SECS);
-    if (p.joinFails.length >= JOIN_FAILS) { this.send(p, { t: 'joinNo', reason: '尝试次数太多，请稍后再试' }); return; }
+    if (p.joinFails.length >= JOIN_FAILS) { this.send(p, { t: 'joinNo', reason: '尝试次数太多，请稍后再试' }); this.violate(p); return; }   // E3
     const r = [...this.rooms.values()].find(o => o.state === RoomState.Wait && o.code === code);
     if (this.busy(p)) { this.send(p, { t: 'joinNo', reason: '你已经在一个房间里了' }); return; }
     const noRoom = () => { p.joinFails.push(now); this.send(p, { t: 'joinNo', reason: '房号不存在，或房间已经开始' }); };

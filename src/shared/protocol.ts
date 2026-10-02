@@ -19,6 +19,25 @@ export const IDLE_SECS = 35;         // 多久没收到任何消息就判定连�
 export const PING_SECS = 10;         // 客户端心跳间隔
 export const SILENT_SECS = 25;       // 客户端多久没收到服务端的任何消息（含心跳回应）就判定连接已断
 export const CONFIRM_SECS = 15;      // 匹配成功后双方确认的时限
+/** 连接建立后多久内必须完成握手（发来合法的 hello），否则以 CLOSE_CODE.helloTimeout 关闭（API-042） */
+export const HELLO_SECS = 10;
+
+/**
+ * WebSocket 关闭码（04-api.md 第 4.2 条，严禁使用表外的关闭码）：客户端据此决定是否重连、多久后重连。
+ * 3.0 起的 4001 至 4003 随账号系统加入
+ */
+export const CLOSE_CODE = {
+  normal: 1000,          // 正常关闭（玩家离开联机页面），不重连
+  restart: 1001,         // 服务端重启或维护
+  badUtf8: 1007,         // 帧内容不是合法 UTF-8
+  policy: 1008,          // 累计违规达到上限（API-045），30 秒后再重连
+  tooBig: 1009,          // 消息过大（API-002）
+  internal: 1011,        // 服务端内部错误
+  overload: 1013,        // 服务端满员，或同一 IP 的连接过多、新建过频（API-040、API-041）
+  version: 4000,         // 协议版本不支持
+  helloTimeout: 4008,    // 握手超时（API-042）
+  idle: 4009,            // 空闲超时
+} as const;
 
 export type QueueMode = 'match' | 'ranked';
 /** 一局的来历：匹配、排位、好友房间 */
