@@ -71,7 +71,7 @@ export function notes(version) {
     `| 版本类型 | ${kind} |`,
     `| 发布日期 | ${date} |`,
     `| 联机协议 | 第 ${proto} 版 |`,
-    `| 支持平台 | macOS（Apple 芯片、Intel 芯片）、Windows（x64）、Linux（x86_64） |`,
+    `| 支持平台 | macOS 13 或更高版本（Apple 芯片、Intel 芯片）、Windows 10 或更高版本（x64）、Linux（x86_64） |`,
     '',
     '## 1 变更内容',
     '',

@@ -10,6 +10,9 @@ const path = require('node:path');
 const set = (process.argv.slice(2).find(a => !a.startsWith('-') && !a.endsWith('.cjs')) ?? 'now').replace(/[^\w.-]/g, '_');
 const only = process.argv.find(a => a.startsWith('--scenario='))?.slice(11) ?? 'all';
 
+// Electron 的数据目录放在项目内（.shots/ 不进仓库），不写到系统的 Application Support 下
+app.setPath('userData', path.join(__dirname, '..', '.shots', '.userdata'));
+
 app.whenReady().then(async () => {
   const { createServer } = await import('vite');
   const server = await createServer({ root: path.join(__dirname, '..'), server: { port: 0, strictPort: false }, logLevel: 'error' });
@@ -17,7 +20,8 @@ app.whenReady().then(async () => {
   const port = server.httpServer.address().port;
   const win = new BrowserWindow({
     width: 1320, height: 900, show: false, useContentSize: true,
-    webPreferences: { offscreen: true, backgroundThrottling: false },
+    // 像素比显式定为 1：Electron 42 之前离屏渲染跟随主显示器（Retina 上为 2），之后默认为 1
+    webPreferences: { offscreen: { deviceScaleFactor: 1 }, backgroundThrottling: false },
   });
   win.webContents.setFrameRate(60);
   win.webContents.on('console-message', e => { if (e.level === 'warning' || e.level === 'error' || (e.message.startsWith('[scenario] ') && !e.message.startsWith('[scenario] 完成'))) console.log(e.message); });

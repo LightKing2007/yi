@@ -16,3 +16,4 @@ yi-ratings.json.*
 .claude/
 .shots/
 .fonts-src/
+.cache/

@@ -34,7 +34,7 @@
     "@preact/signals": "^2.0.0",
     "@types/node": "^22.0.0",
     "@types/ws": "^8.5.0",
-    "electron": "^38.0.0",
+    "electron": "^44.5.1",
     "electron-builder": "^26.0.0",
     "esbuild": "^0.25.0",
     "preact": "^10.26.0",
@@ -113,7 +113,6 @@
     ]
   },
   "allowScripts": {
-    "electron@38.8.6": true,
     "esbuild@0.25.12": true,
     "esbuild@0.28.2": true,
     "electron-winstaller@5.4.0": true
