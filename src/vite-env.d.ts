@@ -13,3 +13,5 @@ interface ImportMeta {
 declare const __APP_VERSION__: string;
 /** 构建时的提交号（只有服务端与桌面版主进程有，见 scripts/build-node.mjs） */
 declare const __APP_COMMIT__: string;
+/** 下载页面的资源：文件名 → base64 内容（构建时嵌入，只有服务端引用，见 scripts/page-assets.mjs） */
+declare const __PAGE_ASSETS__: Record<string, string>;

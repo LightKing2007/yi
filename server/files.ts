@@ -1,25 +1,44 @@
 /**
- * 安装包下载：联机端口上的普通网页请求（不是 WebSocket 的）走这里，不用另开端口。
- *   GET /         下载页：列出目录里的安装包
- *   GET /<文件名>  下载这个文件，支持断点续传
- * 目录里只认 Yi-版本-平台 这样命名的文件，其他文件与子目录一概不给。
+ * 安装包下载：联机端口上的普通网页请求（不是 WebSocket 的）走这里，不用另开端口。路径白名单（API-060）：
+ *   GET /             下载页面（page.ts）
+ *   GET /<文件名>     下载这个文件，支持断点续传；目录里只认 Yi-版本-平台 这样命名的文件，其他文件与子目录一概不给
+ *   GET /SHA256SUMS   各安装程序的 SHA-256（SEC-070）
+ *   GET /assets/<名>  下载页面的标题图、图标与字体：名单见 ASSET_TYPES，内容在构建时嵌入，运行时不读取磁盘
  * 每个 IP 同时最多 2 个下载、全服最多 8 个，免得下载把带宽占满影响对局。
  */
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { PLATFORMS, downloadPage, type PagePkg } from './page';
 
 const PER_IP = 2, TOTAL = 8;
 const NAME = /^Yi-(\d+(?:\.\d+)*)-(mac-arm64|mac-x64|win-x64|linux-x86_64)[\w.-]*\.(dmg|exe|AppImage)$/;
-const LABEL: Record<string, string> = {
-  'mac-arm64': 'macOS（Apple 芯片）',
-  'mac-x64': 'macOS（Intel 芯片）',
-  'win-x64': 'Windows',
-  'linux-x86_64': 'Linux',
-};
-const ORDER = ['win-x64', 'mac-arm64', 'mac-x64', 'linux-x86_64'];
+const ORDER = Object.keys(PLATFORMS);
+/** 下载并发已满或校验值尚未算完时，建议客户端多久后重试 */
+const RETRY_AFTER_SECS = 30;
+/** 资源的浏览器缓存时长：地址带版本参数，换版本即换地址 */
+const ASSET_MAX_AGE_SECS = 7 * 24 * 3600;
 
-interface Pkg { file: string; version: string; platform: string; size: number }
+/** /assets/ 下允许的资源与内容类型（API-060 的名单）；内容见 scripts/page-assets.mjs */
+const ASSET_TYPES: Record<string, string> = {
+  'title-yi.png': 'image/png',
+  'icon.png': 'image/png',
+  'yi-serif-900.woff2': 'font/woff2',
+};
+
+/** 所有响应都带的头（API-063） */
+const BASE_HEADERS = { 'X-Content-Type-Options': 'nosniff' };
+/** HTML 响应另带的头（API-063）：不允许任何脚本 */
+const HTML_HEADERS = {
+  ...BASE_HEADERS,
+  'Content-Type': 'text/html; charset=utf-8',
+  'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; font-src 'self'",
+  'Referrer-Policy': 'no-referrer',
+  'Cache-Control': 'no-cache',
+};
+
+interface Pkg { file: string; version: string; platform: string; size: number; mtimeMs: number }
 
 const cmpVer = (a: string, b: string) => {
   const x = a.split('.').map(Number), y = b.split('.').map(Number);
@@ -36,55 +55,86 @@ function list(dir: string): Pkg[] {
     const m = NAME.exec(file);
     if (!m) continue;
     let st: fs.Stats;
-    try { st = fs.statSync(path.join(dir, file)); } catch { continue; }
+    try { st = fs.statSync(path.join(dir, file)); } catch { continue; }   // 刚好被删掉或改名：本次不列出
     if (!st.isFile()) continue;
-    const p = { file, version: m[1], platform: m[2], size: st.size };
+    const p = { file, version: m[1], platform: m[2], size: st.size, mtimeMs: st.mtimeMs };
     const old = best.get(p.platform);
     if (!old || cmpVer(p.version, old.version) > 0) best.set(p.platform, p);
   }
-  return ORDER.filter(k => best.has(k)).map(k => best.get(k)!);
+  return ORDER.filter(k => best.has(k)).map(k => best.get(k)!);   // 例外 COD-052：best.has(k) 刚确认过有这一项
 }
 
-const esc = (s: string) => s.replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
-const mb = (n: number) => `${(n / 1048576).toFixed(0)} MB`;
-
-function page(pkgs: Pkg[]) {
-  const rows = pkgs.map(p => `<li><a href="/${encodeURIComponent(p.file)}">${esc(LABEL[p.platform])}</a><span>${esc(p.version)}　${mb(p.size)}</span></li>`).join('');
-  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>弈 · 下载</title>
-<style>
-body{margin:0;background:#f3ead8;color:#2b2118;font:16px/1.7 "PingFang SC","Microsoft YaHei",sans-serif}
-main{max-width:560px;margin:0 auto;padding:48px 16px}
-h1{font:900 56px/1 "Songti SC","SimSun",serif;margin:0 0 8px}
-ul{list-style:none;padding:0;margin:32px 0}
-li{display:flex;justify-content:space-between;align-items:baseline;padding:14px 0;border-bottom:1px solid #d8c9aa}
-a{color:#8a2b1d;font-size:18px;text-decoration:none}a:hover{text-decoration:underline}
-span,p{color:#6b5a46;font-size:14px}
-</style></head><body><main><h1>弈</h1><p>“弈”是一款围棋与五子棋游戏，支持人机对弈及联机对战。请根据您的操作系统选择对应的安装程序。</p>
-<p>系统要求：macOS 13 或更高版本；Windows 10 或更高版本（64 位）；Linux（x86_64）。</p>
-${rows ? `<ul>${rows}</ul>` : '<p>暂无可供下载的安装程序。</p>'}
-<p>macOS：首次打开时，请在“访达”中按住 Control 键点按该应用程序并选择“打开”，或前往“系统设置”中的“隐私与安全性”，点按“仍要打开”。</p>
-<p>Windows：首次运行时如出现“Windows 已保护你的电脑”提示，请点击“更多信息”，再点击“仍要运行”。</p>
-</main></body></html>`;
+/**
+ * 安装程序的 SHA-256：在后台流式计算一次，按文件名、大小与修改时间缓存；文件被替换后自动重算。
+ * 尚未算完时 get 返回 null
+ */
+function checksums(dir: string) {
+  const done = new Map<string, string>(), running = new Set<string>();
+  const key = (p: Pkg) => `${p.file}:${p.size}:${p.mtimeMs}`;
+  return {
+    get(p: Pkg): string | null {
+      const k = key(p), hex = done.get(k);
+      if (hex) return hex;
+      if (!running.has(k)) {
+        running.add(k);
+        const hash = createHash('sha256');
+        fs.createReadStream(path.join(dir, p.file))
+          .on('data', d => hash.update(d))
+          .on('end', () => { done.set(k, hash.digest('hex')); running.delete(k); })
+          .on('error', () => { running.delete(k); });   // 文件在计算途中被替换：下次请求时按新文件重算
+      }
+      return null;
+    },
+  };
 }
 
+/** 下载页面与安装包的请求处理；dir 为安装包所在的目录 */
 export function fileServer(dir: string) {
   const perIp = new Map<string, number>();
   let total = 0;
+  const sums = checksums(dir);
+  const notFound = (res: ServerResponse) => {
+    res.writeHead(404, { ...BASE_HEADERS, 'Content-Type': 'text/plain; charset=utf-8' }).end('未找到所请求的文件。');
+  };
 
   return (req: IncomingMessage, res: ServerResponse) => {
-    if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, { Allow: 'GET, HEAD' }).end(); return; }
+    if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, { ...BASE_HEADERS, Allow: 'GET, HEAD' }).end(); return; }
     let name: string;
-    try { name = decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname.slice(1)); } catch { res.writeHead(400).end(); return; }
+    try { name = decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname.slice(1)); } catch { res.writeHead(400, BASE_HEADERS).end(); return; }
+    const head = req.method === 'HEAD';
 
     if (name === '') {
-      const body = page(list(dir));
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-cache' });
-      res.end(req.method === 'HEAD' ? undefined : body);
+      const pkgs: PagePkg[] = list(dir).map(p => ({ ...p, sha256: sums.get(p) }));
+      const body = downloadPage(pkgs, __APP_VERSION__);
+      res.writeHead(200, { ...HTML_HEADERS, 'Content-Length': Buffer.byteLength(body) }).end(head ? undefined : body);
+      return;
+    }
+
+    if (name.startsWith('assets/')) {
+      const asset = name.slice('assets/'.length);
+      const type = Object.hasOwn(ASSET_TYPES, asset) ? ASSET_TYPES[asset] : undefined;
+      const data = type && __PAGE_ASSETS__[asset] ? Buffer.from(__PAGE_ASSETS__[asset], 'base64') : undefined;
+      if (!type || !data) { notFound(res); return; }
+      res.writeHead(200, { ...BASE_HEADERS, 'Content-Type': type, 'Content-Length': data.length, 'Cache-Control': `public, max-age=${ASSET_MAX_AGE_SECS}` });
+      res.end(head ? undefined : data);
+      return;
+    }
+
+    if (name === 'SHA256SUMS') {
+      const pkgs = list(dir), lines = pkgs.map(p => [sums.get(p), p.file] as const);
+      if (lines.some(([hex]) => !hex)) {
+        res.writeHead(503, { ...BASE_HEADERS, 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': String(RETRY_AFTER_SECS) }).end('校验值正在计算，请稍后再试。');
+        return;
+      }
+      const body = lines.map(([hex, file]) => `${hex}  ${file}\n`).join('');
+      const type = 'text/plain; charset=utf-8';
+      res.writeHead(200, { ...BASE_HEADERS, 'Content-Type': type, 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-cache' });
+      res.end(head ? undefined : body);
       return;
     }
 
     const pkg = NAME.test(name) ? list(dir).find(p => p.file === name) : undefined;
-    if (!pkg) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }).end('未找到所请求的文件。'); return; }
+    if (!pkg) { notFound(res); return; }
 
     // 断点续传：只认 bytes=开始-结束 一段
     let start = 0, end = pkg.size - 1;
@@ -92,20 +142,21 @@ export function fileServer(dir: string) {
     if (range && (range[1] || range[2])) {
       if (range[1]) { start = Number(range[1]); if (range[2]) end = Math.min(end, Number(range[2])); }
       else start = Math.max(0, pkg.size - Number(range[2]));
-      if (start > end) { res.writeHead(416, { 'Content-Range': `bytes */${pkg.size}` }).end(); return; }
+      if (start > end) { res.writeHead(416, { ...BASE_HEADERS, 'Content-Range': `bytes */${pkg.size}` }).end(); return; }
     }
-    const head = {
+    const headers = {
+      ...BASE_HEADERS,
       'Content-Type': 'application/octet-stream',
       'Content-Length': end - start + 1,
       'Content-Disposition': `attachment; filename="${pkg.file}"`,
       'Accept-Ranges': 'bytes',
       ...(range ? { 'Content-Range': `bytes ${start}-${end}/${pkg.size}` } : {}),
     };
-    if (req.method === 'HEAD') { res.writeHead(range ? 206 : 200, head).end(); return; }
+    if (head) { res.writeHead(range ? 206 : 200, headers).end(); return; }
 
     const ip = req.socket.remoteAddress ?? '';
     if ((perIp.get(ip) ?? 0) >= PER_IP || total >= TOTAL) {
-      res.writeHead(503, { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '30' }).end('当前下载请求过多，请稍后再试。');
+      res.writeHead(503, { ...BASE_HEADERS, 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': String(RETRY_AFTER_SECS) }).end('当前下载请求过多，请稍后再试。');
       return;
     }
     perIp.set(ip, (perIp.get(ip) ?? 0) + 1); total++;
@@ -117,7 +168,7 @@ export function fileServer(dir: string) {
       if (n > 0) perIp.set(ip, n); else perIp.delete(ip);
     };
     res.on('close', release);
-    res.writeHead(range ? 206 : 200, head);
+    res.writeHead(range ? 206 : 200, headers);
     const stream = fs.createReadStream(path.join(dir, pkg.file), { start, end });
     stream.on('error', () => res.destroy());
     stream.pipe(res);

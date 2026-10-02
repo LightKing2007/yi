@@ -1,4 +1,5 @@
 /** 联机服务端：匹配 / 排位、配对确认、好友房间、段位、对局中的各种请求、断线重连、超时（用假时钟直接驱动 RoomServer），以及真实的 WebSocket 连接 */
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -512,6 +513,40 @@ describe('安装包下载', () => {
       const ws = new WebSocket(`ws://127.0.0.1:${host.port}`);  // 联机照常
       await new Promise((res, rej) => { ws.on('open', res); ws.on('error', rej); });
       ws.close();
+    } finally {
+      await host.close();
+      fs.rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('下载页面带安全响应头，只提供名单内的资源；SHA256SUMS 与页面上的校验值一致（API-060、API-063、SEC-070）', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-files-'));
+    fs.writeFileSync(path.join(dir, 'Yi-2.0.3-win-x64-setup.exe'), 'windows');
+    fs.writeFileSync(path.join(dir, 'Yi-2.0.3-linux-x86_64.AppImage'), 'linux');
+    const host = await startHost(0, { host: '127.0.0.1', files: dir });
+    const base = `http://127.0.0.1:${host.port}`;
+    const sha = (s: string) => createHash('sha256').update(s).digest('hex');
+    try {
+      const page = await fetch(base + '/');
+      expect(page.headers.get('content-security-policy')).toBe("default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; font-src 'self'");
+      expect(page.headers.get('x-content-type-options')).toBe('nosniff');
+      expect(page.headers.get('referrer-policy')).toBe('no-referrer');
+      const html = await page.text();
+      expect(html).not.toMatch(/<script/i);
+      expect(html).toContain('/assets/title-yi.png');
+      for (const [name, type] of [['title-yi.png', 'image/png'], ['icon.png', 'image/png'], ['yi-serif-900.woff2', 'font/woff2']]) {
+        const r = await fetch(`${base}/assets/${name}?v=1`);
+        expect(r.status, name).toBe(200);
+        expect(r.headers.get('content-type')).toBe(type);
+        expect((await r.arrayBuffer()).byteLength).toBeGreaterThan(1000);
+      }
+      for (const bad of ['/assets/nope.png', '/assets/', '/assets/..%2Fpackage.json', '/assets/toString']) expect((await fetch(base + bad)).status, bad).toBe(404);
+      let sums = await fetch(base + '/SHA256SUMS');
+      for (let i = 0; i < 50 && sums.status === 503; i++) { await new Promise(r => setTimeout(r, 20)); sums = await fetch(base + '/SHA256SUMS'); }
+      expect(await sums.text()).toBe(`${sha('windows')}  Yi-2.0.3-win-x64-setup.exe\n${sha('linux')}  Yi-2.0.3-linux-x86_64.AppImage\n`);
+      const again = await (await fetch(base + '/')).text();
+      expect(again).toContain(sha('windows'));
+      expect(again).toContain('macOS 13 Ventura 或更高版本');
     } finally {
       await host.close();
       fs.rmSync(dir, { recursive: true });
