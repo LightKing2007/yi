@@ -47,5 +47,25 @@ export default defineConfig({
   build: { outDir: 'dist', target: 'es2022', chunkSizeWarningLimit: 2000 },
   worker: { format: 'es' },
   server: { port: 5173, strictPort: true },
-  test: { environment: 'node', include: ['tests/**/*.test.ts'] },
+  test: {
+    environment: 'node',
+    include: ['tests/**/*.test.ts'],
+    // 测试覆盖率（TST-010）：npm run test:coverage。render、fx、scene、ui、audio 以画面回归覆盖，不计入（TST-012）
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.{ts,tsx}', 'server/**/*.ts'],
+      exclude: ['**/*.d.ts', 'src/render/**', 'src/fx/**', 'src/scene/**', 'src/ui/**', 'src/audio/**'],
+      reportsDirectory: '.vitest/coverage',
+      reporter: ['text-summary', 'json'], // json 即 coverage-final.json，供 scripts/diff-coverage.mjs 计算改动行的覆盖率（TST-011）
+      thresholds: {
+        lines: 75, // 全项目（不含上述五个目录）
+        'src/core/**': { lines: 90, branches: 85 },
+        'src/shared/**': { lines: 90, branches: 85 },
+        'server/**': { lines: 85, branches: 75 },
+        'src/session/**': { lines: 85, branches: 75 },
+        // TST-010 要求行 75%、分支 65%；现状不足，暂以现状为下限，整改项 P1-06 补齐测试后提到要求值
+        'src/online/**': { lines: 56, branches: 41 },
+      },
+    },
+  },
 } as any);
