@@ -3,8 +3,8 @@
 | 项目 | 内容 |
 |---|---|
 | 性质 | 规程，强制执行；依据 [07-operations.md](../standards/07-operations.md)、[08-versioning.md](../standards/08-versioning.md)、[09-text-and-i18n.md](../standards/09-text-and-i18n.md) |
-| 文件版本 | 1.1 |
-| 修订日期 | 2026-10-02 |
+| 文件版本 | 1.1.1 |
+| 修订日期 | 2026-10-03 |
 | 适用范围 | 从修改代码到玩家获得新版本的全部步骤：分支、提交、PR、更新日志、发版、上线、回滚、紧急修复 |
 
 本规程只规定操作步骤。各步骤须满足的要求以规则编号引用，规则内容以 `docs/standards/` 为准。
@@ -56,7 +56,7 @@ fix(联机): 返回时界面闪烁
 
 3.3 CI 全部通过后压缩合并（OPS-003），合并后远端分支自动删除。合并前的审查要求见 GEN-010。
 
-3.4 合并后执行 `git switch main && git pull`，并删除本地分支。
+3.4 合并后确认 `main` 上随之触发的 CI 通过（`gh run list --branch main --limit 1`）；失败时按 OPS-016 先修复，修复前严禁合并其他 PR。PR 上的 CI 运行在合并提交上，与推送到 `main` 时的检出方式不同，通过不代表 `main` 也通过。随后执行 `git switch main && git pull`，并删除本地分支。
 
 ## 4 版本号与更新日志
 
