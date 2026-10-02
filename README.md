@@ -94,6 +94,8 @@ npm run typecheck    # 类型检查
 npm run format       # 按 Prettier 统一代码格式（COD-006；范围见 .prettierignore），CI 以 npm run format:check 检查
 npm run lint         # ESLint（规则与 01-coding.md 的对应见 eslint.config.js）
 npm run ratchet      # 违规棘轮：各项违规数不得超过 docs/audits/baseline.json，减少后以 --update 更新基线（OPS-015）
+node scripts/audit.mjs     # 依赖漏洞门禁：随游戏与服务端分发的依赖不得有高危漏洞（SEC-061）
+node scripts/licenses.mjs  # 许可证检查：依赖不得使用 GPL、AGPL、LGPL、SSPL（COD-071）
 ```
 
 Electron 本体（约 130 MB）不随 `npm install` 下载，而在首次运行 `npm run app`、`npm run shots` 等命令时下载，默认缓存于系统目录。如需将下载缓存保留在项目内，可在首次运行前设置环境变量 `electron_config_cache=.cache/electron`（`.cache/` 不纳入版本控制）。
