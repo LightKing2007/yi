@@ -23,7 +23,7 @@ jobs:
     env:
       ELECTRON_SKIP_BINARY_DOWNLOAD: '1' # 只跑类型检查与测试，不需要 Electron 本体
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 2 # 改动行覆盖率以 HEAD^1 为基准：PR 的检查运行在合并提交上，其第一个父提交即 main
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
@@ -54,7 +54,7 @@ jobs:
       # 官方 Release 中 gitleaks_8.30.1_linux_x64.tar.gz 的 SHA-256（与 checksums.txt、GitHub 记录的附件摘要一致）；升级版本时一并更新
       GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # 扫描全部提交历史：仓库公开，历史中的任何一次提交都可能被看到
       - name: 下载 gitleaks 并核对校验和（SEC-050；对不上即中止，不运行来路不明的程序）
