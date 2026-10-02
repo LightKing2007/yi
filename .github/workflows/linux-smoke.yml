@@ -1,0 +1,50 @@
+# Linux 冒烟检查（checklists.md 第 3 节中可以自动化的部分，见 scripts/smoke-app.mjs）：在 Ubuntu 上从当前提交打出 AppImage，
+# 在虚拟显示器中启动并检查；截图作为附件。手动运行，发版前对待发布的提交运行一次。
+# 先在开启 Chromium 沙箱的情况下运行，这才是玩家的实际情况；不通过时再以 --no-sandbox 运行一次，用来区分是否为沙箱的问题。
+name: Linux 冒烟检查
+
+on:
+  workflow_dispatch:
+  pull_request:                              # 改动检查本身时自动运行一次
+    paths:
+      - .github/workflows/linux-smoke.yml
+      - scripts/smoke-app.mjs
+
+permissions:
+  contents: read
+
+jobs:
+  appimage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      APPIMAGE_EXTRACT_AND_RUN: '1'          # 运行机器上没有 FUSE 2：AppImage 解压后运行
+      # 运行机器没有 GPU。Chromium 已取消 WebGL 自动退回软件渲染，须显式允许 SwiftShader，否则游戏提示“当前环境不支持 WebGL2”
+      SMOKE_ARGS: --enable-unsafe-swiftshader
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx electron-builder --linux --publish never
+      - run: sudo apt-get update -q && sudo apt-get install -yq xvfb
+      - name: 启动 AppImage 并检查（开启沙箱）
+        id: sandboxed
+        continue-on-error: true
+        run: xvfb-run -a -s "-screen 0 1600x1000x24" node scripts/smoke-app.mjs "$(ls release/*.AppImage)" smoke
+      - name: 启动 AppImage 并检查（--no-sandbox，仅用于诊断）
+        if: steps.sandboxed.outcome == 'failure'
+        env:
+          SMOKE_ARGS: --enable-unsafe-swiftshader --no-sandbox
+        run: xvfb-run -a -s "-screen 0 1600x1000x24" node scripts/smoke-app.mjs "$(ls release/*.AppImage)" smoke-no-sandbox
+      - name: 开启沙箱时未通过
+        if: steps.sandboxed.outcome == 'failure'
+        run: exit 1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-smoke
+          path: smoke*/*.png
