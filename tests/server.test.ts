@@ -1,13 +1,15 @@
-/** 联机服务端：匹配 / 排位、配对确认、好友房间、段位、对局中的各种请求、断线重连、超时（用假时钟直接驱动 RoomServer），以及真实的 WebSocket 连接 */
+/** 联机服务端：匹配 / 排位、配对确认、好友房间、段位、对局中的各种请求、断线重连、超时、限流（用假时钟直接驱动 RoomServer），以及真实的 WebSocket 连接 */
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { MemoryStore, RoomServer, type Conn, type RoomServerOptions, type Session } from '../server/rooms';
-import { startHost } from '../server/host';
-import { PROTO_VERSION, type C2S, type S2C } from '../src/shared/protocol';
+import { HTTP_LIMITS, hardenHttp, startHost } from '../server/host';
+import { fileServer } from '../server/files';
+import { CLOSE_CODE, HELLO_SECS, PROTO_VERSION, type C2S, type S2C } from '../src/shared/protocol';
 
 type Msg<T extends S2C['t']> = Extract<S2C, { t: T }>;
 
@@ -21,9 +23,10 @@ class Client {
   id = 0;
   token = '';
   closed = false;
+  closeCode?: number;             // 服务端关闭这条连接时用的关闭码（直接切断时为 undefined）
   welcome?: Msg<'welcome'>;
   constructor(public srv: RoomServer, public name: string, token?: string, public uid = newUid()) {
-    this.conn = { send: m => { if (!this.closed) this.inbox.push(m); }, close: () => { this.closed = true; } };
+    this.conn = { send: m => { if (!this.closed) this.inbox.push(m); }, close: code => { this.closed = true; this.closeCode = code; } };
     this.sess = srv.connect(this.conn)!;
     this.send({ t: 'hello', v: PROTO_VERSION, name, uid, token });
     const w = this.welcome = this.expect('welcome');
@@ -652,5 +655,189 @@ describe('2.0.1 联机修复', () => {
     expect(a.welcome?.url).toBe('https://example.com/yi');
     const { srv: plain } = world();
     expect(new Client(plain, '乙').welcome?.latest).toBeUndefined();
+  });
+});
+
+describe('限流与违规（API-042 至 API-046）', () => {
+  const LIMITED = { t: 'error', text: '操作过于频繁，请稍后再试' };
+  /** 绕过类型检查，发一条任意内容的消息 */
+  const raw = (c: Client, m: unknown) => { c.sess = c.srv.message(c.sess, m, c.conn); };
+
+  it('消息洪泛：超出令牌桶的消息被丢弃且只提示一次，持续洪泛即以 1008 断开，5 分钟内同一身份连不上', () => {
+    const { srv, advance } = world();
+    const a = new Client(srv, '甲');
+    a.drain();
+    for (let i = 0; i < 50; i++) a.send({ t: 'ping' });             // 握手已用掉 1 个令牌，余 39 个
+    expect(a.inbox.filter(m => m.t === 'pong')).toHaveLength(39);
+    expect(a.inbox.filter(m => m.t === 'error')).toEqual([LIMITED]);
+    expect(a.closeCode).toBe(CLOSE_CODE.policy);                    // 第 10 条被丢弃的消息累计到上限
+    const again = new Client(srv, '甲', undefined, a.uid);
+    expect(again.welcome).toBeUndefined();
+    expect(again.inbox).toEqual([LIMITED]);
+    expect(again.closeCode).toBe(CLOSE_CODE.policy);
+    expect(new Client(srv, '乙').welcome).toBeTruthy();             // 其他身份不受影响
+    advance(5 * 60);
+    expect(new Client(srv, '甲', undefined, a.uid).welcome).toBeTruthy();
+  });
+
+  it('令牌按每秒 20 个恢复：洪泛停下 1 秒后照常处理', () => {
+    const { srv, advance } = world();
+    const a = new Client(srv, '甲');
+    for (let i = 0; i < 40; i++) a.send({ t: 'ping' });
+    expect(a.inbox.at(-1)).toEqual(LIMITED);
+    advance(1);
+    a.drain();
+    for (let i = 0; i < 20; i++) a.send({ t: 'ping' });
+    expect(a.inbox).toEqual(Array(20).fill({ t: 'pong' }));
+    expect(a.closed).toBe(false);
+  });
+
+  it('对局中 60 秒内累计 10 次非法消息即被断开，带令牌也重连不上，到时按掉线判负', () => {
+    const { srv, idle } = world();
+    const a = new Client(srv, '甲'), b = new Client(srv, '乙');
+    startGame(a, b);
+    for (let i = 0; i < 9; i++) raw(a, { t: 'move', x: -1, y: 0 });
+    expect(a.closed).toBe(false);
+    raw(a, { t: 'move', x: -1, y: 0 });
+    expect(a.closeCode).toBe(CLOSE_CODE.policy);
+    expect(b.expect('peer')?.online).toBe(false);
+    const back = new Client(srv, '甲', a.token, a.uid);
+    expect(back.closeCode).toBe(CLOSE_CODE.policy);
+    idle(61, b);
+    expect(b.expect('over')).toEqual({ t: 'over', winner: 2, reason: 'disconnect' });
+  });
+
+  it('违规分散在 60 秒以外的不累计', () => {
+    const { srv, idle } = world();
+    const a = new Client(srv, '甲');
+    for (let i = 0; i < 9; i++) raw(a, { t: 'nope' });
+    idle(60, a);
+    for (let i = 0; i < 9; i++) raw(a, { t: 'nope' });
+    expect(a.closed).toBe(false);
+  });
+
+  it('握手超时：10 秒内没有发来合法的 hello 即以 4008 关闭，心跳回应不延长时限', () => {
+    const { srv, advance } = world();
+    let code: number | undefined;
+    const s = srv.connect({ send: () => {}, close: c => { code = c; } })!;
+    srv.message(s, { t: 'ping' });
+    advance(HELLO_SECS - 1);
+    srv.touch(s);
+    expect(code).toBeUndefined();
+    advance(2);
+    expect(code).toBe(CLOSE_CODE.helloTimeout);
+    const a = new Client(srv, '甲');
+    advance(HELLO_SECS * 2);
+    expect(a.closed).toBe(false);
+  });
+
+  it('改名：与当前昵称相同的不计次数，真正改名每 10 秒至多 1 次（API-044）', () => {
+    const { srv } = world();
+    const a = new Client(srv, '甲'), b = new Client(srv, '丁');
+    a.drain();
+    for (let i = 0; i < 5; i++) a.send({ t: 'name', name: '甲' });   // 客户端每次匹配前都会发一次
+    a.send({ t: 'name', name: '乙' });
+    expect(a.inbox).toEqual([]);
+    a.send({ t: 'name', name: '丙' });
+    expect(a.inbox).toEqual([LIMITED]);
+    a.send({ t: 'queue', mode: 'match', type: 0, size: 15 });
+    b.send({ t: 'queue', mode: 'match', type: 0, size: 15 });
+    expect(b.expect('found')?.opp.name).toBe('乙');
+  });
+
+  it('进入、退出匹配队列合计每 10 秒至多 10 次（API-044）', () => {
+    const { srv, idle } = world();
+    const a = new Client(srv, '甲');
+    for (let i = 0; i < 5; i++) { a.send({ t: 'queue', mode: 'match', type: 0, size: 15 }); a.send({ t: 'unqueue' }); }
+    a.drain();
+    a.send({ t: 'queue', mode: 'match', type: 0, size: 15 });
+    expect(a.inbox).toEqual([LIMITED]);
+    expect(srv.queued('match', 0)).toBe(0);
+    idle(10, a);
+    a.send({ t: 'queue', mode: 'match', type: 0, size: 15 });
+    expect(srv.queued('match', 0)).toBe(1);
+  });
+
+  it('玩家数达到上限时告知服务器繁忙，不再静默拒绝（API-046）', () => {
+    const { srv } = world();
+    for (let i = 0; i < 2048; i++) srv.connect({ send: () => {}, close: () => {} });
+    const inbox: S2C[] = [];
+    expect(srv.connect({ send: m => inbox.push(m), close: () => {} })).toBeNull();
+    expect(inbox).toEqual([{ t: 'error', text: '服务器繁忙，请稍后再试' }]);
+  });
+});
+
+describe('连接层的限制（API-041、API-042、API-047）', () => {
+  /** 连上并握手：收到 welcome 时返回 'welcome' 并断开，连接被关闭时返回关闭码 */
+  const attempt = (url: string) => new Promise<number | 'welcome'>((res, rej) => {
+    const ws = new WebSocket(url);
+    ws.on('open', () => ws.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, name: '甲', uid: newUid() })));
+    ws.on('message', () => { ws.terminate(); res('welcome'); });
+    ws.on('close', code => res(code));
+    ws.on('error', rej);
+  });
+  const until = async (ok: () => boolean) => { while (!ok()) await new Promise(r => setTimeout(r, 5)); };
+
+  it('同一 IP 每分钟新建连接超过 30 次即以 1013 关闭，此后 60 秒内仍被拒', async () => {
+    let t = 1000;
+    const host = await startHost(0, { host: '127.0.0.1', now: () => t });
+    const url = `ws://127.0.0.1:${host.port}`;
+    try {
+      for (let i = 0; i < 30; i++) {
+        expect(await attempt(url)).toBe('welcome');
+        await until(() => host.server.online() === 0);            // 等服务端处理完断开，免得撞上同时连接数的上限
+      }
+      expect(await attempt(url)).toBe(CLOSE_CODE.overload);
+      t += 59;
+      expect(await attempt(url)).toBe(CLOSE_CODE.overload);
+      t += 1;
+      expect(await attempt(url)).toBe('welcome');
+    } finally {
+      await host.close();
+    }
+  });
+
+  it('真实连接上握手超时以 4008 关闭', async () => {
+    let t = 1000;
+    const host = await startHost(0, { host: '127.0.0.1', now: () => t });
+    try {
+      const ws = new WebSocket(`ws://127.0.0.1:${host.port}`);
+      const closed = new Promise<number>(r => ws.on('close', code => r(code)));
+      await new Promise((res, rej) => { ws.on('open', res); ws.on('error', rej); });
+      t += HELLO_SECS + 1;
+      expect(await closed).toBe(CLOSE_CODE.helloTimeout);
+    } finally {
+      await host.close();
+    }
+  });
+
+  it('HTTP 服务器设有超时与请求头上限（API-047）', () => {
+    const s = http.createServer();
+    hardenHttp(s);
+    expect({ headersTimeout: s.headersTimeout, requestTimeout: s.requestTimeout, keepAliveTimeout: s.keepAliveTimeout, maxHeadersCount: s.maxHeadersCount })
+      .toEqual(HTTP_LIMITS);
+  });
+
+  it('下载方长时间不读取时断开下载，释放下载名额（API-047）', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-files-'));
+    const file = 'Yi-2.0.5-linux-x86_64.AppImage';
+    fs.closeSync(fs.openSync(path.join(dir, file), 'w'));
+    fs.truncateSync(path.join(dir, file), 256 * 1024 * 1024);      // 稀疏文件：远大于套接字缓冲区，不占磁盘
+    const handle = fileServer(dir, { stallMs: 100, minBytesPerSec: 1024 });
+    /** 服务端这一侧的响应关闭时，是否已把文件写完 */
+    let finished: (done: boolean) => void = () => {};
+    const closed = new Promise<boolean>(r => { finished = r; });
+    const srv = http.createServer((req, res) => { res.on('close', () => finished(res.writableFinished)); handle(req, res); });
+    await new Promise<void>(r => srv.listen(0, '127.0.0.1', r));
+    try {
+      const { port } = srv.address() as { port: number };
+      const req = http.get(`http://127.0.0.1:${port}/${file}`, r => r.pause());   // 收到响应头后不再读取
+      req.on('error', () => {});                                    // 被断开时的 ECONNRESET 正是预期
+      expect(await closed).toBe(false);
+    } finally {
+      srv.closeAllConnections();
+      await new Promise(r => srv.close(r));
+      fs.rmSync(dir, { recursive: true });
+    }
   });
 });

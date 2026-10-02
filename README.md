@@ -204,7 +204,7 @@ node dist-server/server.cjs --version
 | `YI_DOWNLOAD` | 新版本的下载地址（`http://` 或 `https://`），提示可点击打开 |
 | `YI_FILES` | 安装程序所在目录。设置后，服务端在同一端口提供下载页面 `http://地址:端口/`，列出各平台最新的 `Yi-版本-平台` 安装程序及其 SHA-256 校验值（另有 `/SHA256SUMS`），支持断点续传；每个 IP 同时最多 2 个下载，全服最多 8 个。页面所用的标题图、图标与字体在构建时嵌入服务端（`scripts/page-assets.mjs`），页面不含脚本 |
 
-同一 IP 同时最多建立 8 条连接；同一连接在一分钟内加入房间失败 5 次后，暂时不得再次尝试。
+服务端对同一 IP 的连接数与新建频率、握手时限、每条连接的消息频率、违规累计断开及 HTTP 超时的限制，按 [docs/standards/04-api.md](docs/standards/04-api.md) 第 5 节（API-040 至 API-047）执行，各项数值以常量定义于 `server/ratelimit.ts` 与 `server/host.ts`。
 
 ### 5.3 线上部署
 
@@ -316,10 +316,10 @@ src/
   shared/protocol.ts  联机协议（客户端与服务端共用）、段位表及昵称清洗；parse.ts 入站消息的集中校验；reject.ts 不合法着法的提示文字
   ui/                 Preact 界面：panels（菜单、对局、设置、更多）、online（联机对战）、widgets、styles.css、info（“更多”页面的文字）
   i18n/               多语言
-server/               rooms.ts 队列、配对、房间、对局与段位（与传输无关）；store.ts 段位存档；host.ts 接入 WebSocket（可同时监听多个端口）；
+server/               rooms.ts 队列、配对、房间、对局与段位（与传输无关）；ratelimit.ts 限流与违规累计；store.ts 段位存档；host.ts 接入 WebSocket（可同时监听多个端口）；
                       files.ts 同一端口上的下载服务（page.ts 页面、pageStyle.ts 样式）；main.ts 入口
 electron/             桌面版主进程（窗口、单实例、匹配成功时的任务栏提醒、错误日志）及预加载脚本
-tests/                vitest：rules（规则与人机）、record（规则层与棋谱）、session（会话与座位）、protocol（消息校验与昵称清洗）、server（联机服务端）、
+tests/                vitest：rules（规则与人机）、record（规则层与棋谱）、session（会话与座位）、protocol（消息校验与昵称清洗）、server（联机服务端）、ratelimit（限流）、
                       client（联机客户端：断线、重连、服务器重启）、layers（依赖方向）、text（说明文字的译文、标点与更新日志）
 scripts/              build-node（打包主进程与服务端）、make-fonts（生成内置字体子集）、changelog（读取更新日志、生成发布说明）、
                       release（发版）、deploy.sh（上线）、shots.cjs 与 compare-shots.mjs（场景截图与逐像素对比）

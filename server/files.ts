@@ -4,7 +4,7 @@
  *   GET /<文件名>     下载这个文件，支持断点续传；目录里只认 Yi-版本-平台 这样命名的文件，其他文件与子目录一概不给
  *   GET /SHA256SUMS   各安装程序的 SHA-256（SEC-070）
  *   GET /assets/<名>  下载页面的标题图、图标与字体：名单见 ASSET_TYPES，内容在构建时嵌入，运行时不读取磁盘
- * 每个 IP 同时最多 2 个下载、全服最多 8 个，免得下载把带宽占满影响对局。
+ * 每个 IP 同时最多 2 个下载、全服最多 8 个，免得下载把带宽占满影响对局；下载速率持续过低的连接被断开（API-047）。
  */
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -19,6 +19,11 @@ const ORDER = Object.keys(PLATFORMS);
 const RETRY_AFTER_SECS = 30;
 /** 资源的浏览器缓存时长：地址带版本参数，换版本即换地址 */
 const ASSET_MAX_AGE_SECS = 7 * 24 * 3600;
+
+/** 下载速率的下限（API-047）：每 stallMs 毫秒内送出的字节数低于 minBytesPerSec 对应的量时断开，免得慢速读取长期占住下载名额 */
+export interface StallLimit { stallMs: number; minBytesPerSec: number }
+/** 写入速率低于 1 KB/s 持续 60 秒即断开 */
+const STALL: StallLimit = { stallMs: 60_000, minBytesPerSec: 1024 };
 
 /** /assets/ 下允许的资源与内容类型（API-060 的名单）；内容见 scripts/page-assets.mjs */
 const ASSET_TYPES: Record<string, string> = {
@@ -88,8 +93,8 @@ function checksums(dir: string) {
   };
 }
 
-/** 下载页面与安装包的请求处理；dir 为安装包所在的目录 */
-export function fileServer(dir: string) {
+/** 下载页面与安装包的请求处理；dir 为安装包所在的目录，stall 为下载速率的下限（测试时可调小） */
+export function fileServer(dir: string, stall: StallLimit = STALL) {
   const perIp = new Map<string, number>();
   let total = 0;
   const sums = checksums(dir);
@@ -167,9 +172,15 @@ export function fileServer(dir: string) {
       const n = (perIp.get(ip) ?? 1) - 1;
       if (n > 0) perIp.set(ip, n); else perIp.delete(ip);
     };
-    res.on('close', release);
     res.writeHead(range ? 206 : 200, headers);
     const stream = fs.createReadStream(path.join(dir, pkg.file), { start, end });
+    // 管道按对方的读取速度送数据：对方不读时 data 事件随之停下，以此计量实际送出的字节数
+    let sent = 0;
+    stream.on('data', chunk => { sent += chunk.length; });
+    const minBytes = stall.minBytesPerSec * stall.stallMs / 1000;
+    const watch = setInterval(() => { if (sent < minBytes) res.destroy(); else sent = 0; }, stall.stallMs);
+    stream.on('end', () => clearInterval(watch));          // 文件已读完：剩下的只是套接字缓冲区里有限的数据
+    res.on('close', () => { clearInterval(watch); stream.destroy(); release(); });
     stream.on('error', () => res.destroy());
     stream.pipe(res);
   };
