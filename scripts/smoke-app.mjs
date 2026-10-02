@@ -64,7 +64,15 @@ ws.onmessage = e => {
 };
 await new Promise(r => { ws.onopen = r; });
 const call = (method, params = {}) => new Promise(r => { const id = ++seq; waiting.set(id, r); ws.send(JSON.stringify({ id, method, params })); });
-const evaluate = async expr => (await call('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true })).result?.result?.value;
+/** 在页面中求值；求值出错时打印协议的完整回应，返回 undefined */
+async function evaluate(expr) {
+  const r = await call('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true });
+  if (r.error || r.result?.exceptionDetails || !r.result?.result || !('value' in r.result.result)) {
+    console.error(`求值出错：${JSON.stringify(r).slice(0, 2000)}`);
+    return undefined;
+  }
+  return r.result.result.value;
+}
 const shot = async name => {
   const r = await call('Page.captureScreenshot', { format: 'png' });
   fs.writeFileSync(path.join(outDir, `${name}.png`), Buffer.from(r.result.data, 'base64'));
@@ -72,7 +80,7 @@ const shot = async name => {
 await call('Runtime.enable');
 await sleep(3000);                                                  // 等开始菜单的入场动画
 
-const info = await evaluate(`(async () => {
+const info = (await evaluate(`(async () => {
   const gl = document.getElementById('scene').getContext('webgl2');
   await document.fonts.ready;
   return {
@@ -84,7 +92,7 @@ const info = await evaluate(`(async () => {
     fonts: [...document.fonts].filter(f => f.status === 'loaded').map(f => f.family + ' ' + f.weight),
     buttons: [...document.querySelectorAll('button')].map(b => b.textContent),
   };
-})()`);
+})()`)) ?? { preload: [], buttons: [] };
 console.log(JSON.stringify(info, null, 1));
 check(info.electron === expected, `Electron 版本为 ${expected}（实际 ${info.electron}）`);
 check(['attention', 'log', 'openLogs', 'platform', 'quit'].every(k => info.preload.includes(k)), '预加载接口 yiNative 可用');
@@ -129,5 +137,6 @@ console.log(log.trim());
 check(/启动 .* Electron /.test(log) && !/\[error\]/.test(log), '日志有启动记录且没有 error');
 fs.rmSync(userData, { recursive: true, force: true });
 
+if (failures.length) console.log(`\n游戏进程的输出（末尾）：\n${output.slice(-4000)}`);
 console.log(failures.length ? `\n${failures.length} 项不通过` : '\n全部通过');
 process.exit(failures.length ? 1 : 0);
