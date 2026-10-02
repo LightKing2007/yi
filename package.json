@@ -39,7 +39,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@preact/signals": "^2.0.0",
-    "@types/node": "^22.0.0",
+    "@types/node": "^24.19.1",
     "@types/ws": "^8.5.0",
     "@vitest/coverage-v8": "^5.0.3",
     "electron": "^44.5.1",
