@@ -34,7 +34,8 @@ jobs:
       - run: npm run format:check # COD-006：格式由 Prettier 决定
       - name: 违规棘轮（OPS-015：ESLint、jscpd 与 01-coding.md 的其他度量均不得超过基线，基线也不得高于 main 上的）
         run: |
-          git fetch --depth=1 origin main
+          # 取 2 层：推送到 main 时 HEAD 就是 main，只取 1 层会把检出时的历史截短，后面改动行覆盖率要用的 HEAD^1 随之消失
+          git fetch --depth=2 origin main
           git show FETCH_HEAD:docs/audits/baseline.json > "$RUNNER_TEMP/main-baseline.json" 2>/dev/null || cp docs/audits/baseline.json "$RUNNER_TEMP/main-baseline.json"
           npm run -s ratchet -- --base "$RUNNER_TEMP/main-baseline.json"
       - run: npm run typecheck
