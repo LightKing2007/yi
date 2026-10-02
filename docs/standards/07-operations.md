@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1 |
+| 文件版本 | 1.1.1 |
 | 修订日期 | 2026-10-02 |
 | 规则前缀 | `OPS` |
 
@@ -26,7 +26,7 @@
 |---|---|---|---|
 | OPS-010 | A | 工作流中引用的第三方 Action 必须固定到完整的 40 位提交 SHA，并以注释标明版本号；Dependabot 负责更新 | 未满足（F-27） |
 | OPS-011 | A | 每个工作流必须声明顶层 `permissions: contents: read`，需要更高权限的 job 单独声明 | 部分满足（`release.yml` 的 publish 已声明，`ci.yml` 未声明） |
-| OPS-012 | A | PR 的 CI 必须依次执行以下检查，任一失败即阻断合并：格式检查（Prettier `--check`）→ 代码规范（ESLint，`--max-warnings 0`）→ 类型检查 → 测试与覆盖率 → 前端构建 → 服务端构建 → 依赖漏洞（`npm audit --omit=dev --audit-level=high`）→ 许可证检查 → 密钥扫描 → PR 标题格式 | 部分满足（只有类型检查、测试、构建、标题） |
+| OPS-012 | A | PR 的 CI 必须依次执行以下检查，任一失败即阻断合并：格式检查（Prettier `--check`，COD-006）→ 代码规范（ESLint 与 jscpd；存量违规清零前按 OPS-015 的棘轮执行，任一项违规数增加即阻断，清零后改为 ESLint `--max-warnings 0`）→ 类型检查 → 测试与覆盖率（TST-010、TST-011）→ 前端构建 → 服务端构建 → 依赖漏洞（SEC-061）→ 许可证检查（COD-071）→ 密钥扫描（SEC-050）→ PR 标题格式 | 部分满足（只有类型检查、测试、构建、标题） |
 | OPS-013 | A | 每个 job 必须声明 `timeout-minutes`：检查类 ≤ 15，打包类 ≤ 30 | 满足 |
 | OPS-014 | A | CI 必须使用 `.nvmrc` 指定的 Node.js 版本；服务器上的 Node.js 主版本必须与之相同 | 满足 |
 | OPS-015 | B | B 级规则的违规数由 CI 统计并与 `docs/audits/baseline.json` 比较，任一项增加即阻断 | 未满足 |

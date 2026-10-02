@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1 |
+| 文件版本 | 1.1.1 |
 | 修订日期 | 2026-10-02 |
 | 用途 | PR、发布、平台验证、上线后的逐项检查 |
 
@@ -12,7 +12,7 @@
 在 PR 模板中逐项勾选，未勾选的项必须写明“不适用”及原因：
 
 1. 标题符合 OPS-001、OPS-002；只含一个主题（OPS-004）。
-2. 本地 `npm run typecheck && npm test` 通过。
+2. 本地 `npm run format:check`、`npm run ratchet`、`npm run typecheck`、`npm run test:coverage` 通过（与 CI 的检查一致，OPS-012）。
 3. 新增代码满足 [01-coding.md](01-coding.md)；修改的函数已一并整改（[00-general.md](00-general.md) 第 4.3.3 条）。
 4. 新增依赖已按 COD-070 说明。
 5. 外部输入均经过校验（COD-053、API-010）。
