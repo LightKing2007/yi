@@ -17,6 +17,10 @@ updates:
     groups:
       npm-minor-patch:
         update-types: [minor, patch]
+    ignore:
+      # @types/node 的主版本跟随 .nvmrc 中的 Node.js 主版本（VER-031、OPS-014），升级 Node.js 时一并手工升级
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: github-actions
     directory: /
