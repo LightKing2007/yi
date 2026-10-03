@@ -1,8 +1,9 @@
 /** 入口：启动画面循环与界面 */
+import { render } from 'preact';
 import './ui/styles.css';
 import { onFrame, startApp } from './app/app';
 import { initAudio } from './audio/engine';
-import { mountUI } from './ui/App';
+import { App } from './ui/App';
 import * as net from './online/client';
 import * as controller from './app/controller';
 import { catchErrors, logError } from './app/native';
@@ -31,7 +32,7 @@ try {
   throw e;
 }
 initAudio();
-mountUI(document.getElementById('ui')!);
+render(<App />, document.getElementById('ui')!);
 if (scenarios && scenarioName) {
   const q = new URLSearchParams(location.search);
   scenarios.run(scenarioName, q.get('set') ?? 'now', q.has('hold')).catch(e => console.error('[scenario]', e));

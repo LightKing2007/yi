@@ -1,5 +1,4 @@
 /** 界面根：右侧面板（切换时旧面板左移淡出、新面板从右侧淡入）与棋盘坐标 */
-import { render } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import { layout } from '../app/app';
 import { settings } from '../app/settings';
@@ -106,9 +105,4 @@ export function App() {
       <PanelHost />
     </>
   );
-}
-
-/** 把界面挂到页面的 el 元素上（入口 main.tsx 调用；入口不直接使用界面库，ARC-012） */
-export function mountUI(el: HTMLElement) {
-  render(<App />, el);
 }

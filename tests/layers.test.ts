@@ -43,7 +43,7 @@ const PACKAGES: Record<string, string[]> = {
   online: [],
   app: ['@preact/signals'],
   ui: ['preact', '@preact/signals'],
-  main: [],
+  main: ['preact'],
   server: ['ws', 'node:*'],
   electron: ['electron', 'node:*'],
 };
