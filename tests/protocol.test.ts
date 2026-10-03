@@ -72,6 +72,7 @@ describe('入站消息校验', () => {
       { t: 'queue', mode: 'match', type: 2, size: 15 },
       { t: 'queue', mode: 'match', type: 0, size: 14 },
       { t: 'queue', mode: 'match', type: 0 },
+      JSON.parse('{"t":"queue","mode":"match","type":-0,"size":15}'), // 负零不等于零（JSON 文本中的 -0 解析出来就是负零）
       { t: 'create', type: 0, size: 15, hostColor: 3, renju: true, moveTime: 0 },
       { t: 'create', type: 0, size: 15, hostColor: 0, renju: 1, moveTime: 0 },
       { t: 'create', type: 0, size: 15, hostColor: 0, renju: true, moveTime: 45 },

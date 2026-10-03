@@ -1,5 +1,8 @@
-/** 玩家设置：保存在本机（浏览器 / 桌面版的本地存储），修改后自动保存 */
+/** 玩家设置：保存在本机（浏览器 / 桌面版的本地存储），修改后自动保存；读取时逐字段校验（DAT-080） */
 import { signal } from '@preact/signals';
+import { bool, intIn, numIn, text } from '../shared/check';
+import { NAME_MAX } from '../shared/protocol';
+import { loadStored, saveStored, type StoreSpec } from './storage';
 
 export enum Lang {
   WY = 0,
@@ -49,37 +52,67 @@ export const DEFAULTS: Settings = {
   uiScale: 1,
 };
 
-const KEY = 'yi.settings';
+/** 界面缩放的几档（相对于自动适配的倍率）：小、标准、大、特大 */
+export const UI_SCALES = [0.85, 1, 1.15, 1.3];
+/** 一个字素最多按几个 UTF-16 码元计（带肤色的表情、组合字符） */
+const CHARS_PER_GRAPHEME = 8;
+/** 昵称原文的长度上限（UTF-16 码元数）：昵称最多 NAME_MAX 个字素 */
+export const NICK_MAX_CHARS = NAME_MAX * CHARS_PER_GRAPHEME;
+/** 三档选项（落子动画、预览跟随、终局特效、电脑难度、语言）的最大取值 */
+const LEVEL_MAX = 2;
+/** 光影的最大取值：0 无 1 黄昏 2 晨曦 3 月夜 4 竹影 */
+const LIGHT_MAX = 4;
 
-function load(): Settings {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (raw) return { ...DEFAULTS, ...JSON.parse(raw) };
-  } catch {
-    /* 隐私模式等读不到时用默认值 */
-  }
-  return { ...DEFAULTS };
+const level = intIn(0, LEVEL_MAX);
+const unit = numIn(0, 1);
+
+/** 设置在本地存储中的格式（DAT-080）：第 1 版起带版本号 v，之前写入的算作第 0 版，字段相同 */
+const STORE: StoreSpec<Settings> = {
+  key: 'yi.settings',
+  version: 1,
+  defaults: DEFAULTS,
+  fields: {
+    music: bool,
+    musicVol: unit,
+    sound: bool,
+    volume: unit,
+    animSpeed: level,
+    follow: level,
+    fx: level,
+    shake: bool,
+    light: intIn(0, LIGHT_MAX),
+    lastMark: bool,
+    humanWhite: bool,
+    aiLevel: level,
+    renju: bool,
+    nick: text(NICK_MAX_CHARS),
+    lang: level,
+    theme: intIn(0, 1),
+    coords: bool,
+    uiScale: numIn(Math.min(...UI_SCALES), Math.max(...UI_SCALES)),
+  },
+};
+
+const loaded = loadStored(STORE);
+/** 由更新版本的程序写入的设置只读使用，不写回（VER-012） */
+const writable = loaded.writable;
+
+export const settings = signal<Settings>(loaded.value);
+
+/** 保存当前设置 */
+function save() {
+  if (writable) saveStored(STORE, settings.value);
 }
-
-export const settings = signal<Settings>(load());
 
 export function setSettings(patch: Partial<Settings>) {
   settings.value = { ...settings.value, ...patch };
-  try {
-    localStorage.setItem(KEY, JSON.stringify(settings.value));
-  } catch {
-    /* 忽略 */
-  }
+  save();
 }
 
 export function resetSettings() {
   const keep = { nick: settings.value.nick, lang: settings.value.lang };
   settings.value = { ...DEFAULTS, ...keep };
-  try {
-    localStorage.setItem(KEY, JSON.stringify(settings.value));
-  } catch {
-    /* 忽略 */
-  }
+  save();
 }
 
 /** 人机对弈时电脑执的颜色 */

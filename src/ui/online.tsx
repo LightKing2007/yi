@@ -7,7 +7,7 @@ import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { goScreen, newGame, toggleReview } from '../app/controller';
 import { layout } from '../app/app';
-import { Lang, setSettings, settings } from '../app/settings';
+import { Lang, NICK_MAX_CHARS, setSettings, settings } from '../app/settings';
 import { game, screen, Screen, uiTick, boardView } from '../app/state';
 import { now } from '../core/clock';
 import { BLACK, GameType, WHITE } from '../core/types';
@@ -16,7 +16,7 @@ import { T, TF } from '../i18n';
 import * as net from '../online/client';
 import { Phase, netTick, ratingOf, st, tr } from '../online/client';
 import { seatPlates } from '../scene/online';
-import { NAME_MAX, RANKS, clipName, queueRules, rankIndex, rankName, type Opponent } from '../shared/protocol';
+import { RANKS, clipName, queueRules, rankIndex, rankName, type Opponent } from '../shared/protocol';
 import { Row, UpdateNote } from './panels';
 import { Button, Field, Fit, Hair, Seg, StoneIcon } from './widgets';
 
@@ -46,7 +46,7 @@ function Notice({ style }: { style?: Record<string, string> }) {
 }
 
 /** 昵称输入框的码元上限只是兜底：一个字素可能由多个码元组成，实际按字素截到 NAME_MAX 个（I18N-030） */
-const NICK_INPUT_MAX = NAME_MAX * 8;
+const NICK_INPUT_MAX = NICK_MAX_CHARS;
 
 const labelW = () => (settings.value.lang === Lang.EN ? 118 : 80);
 

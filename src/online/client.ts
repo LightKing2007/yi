@@ -13,11 +13,14 @@ import { setSettings, settings } from '../app/settings';
 import { game, screen, Screen, VERSION, boardView, session, uiTick } from '../app/state';
 import { ONLINE_SERVER } from './config';
 import { logError, logWarn, native } from '../app/native';
+import { loadStored, saveStored, type StoreSpec } from '../app/storage';
+import { match, type Guard } from '../shared/check';
 import { isInvalid, parseS2C } from '../shared/parse';
 import { isFaultClose, retryWaitSecs } from './retry';
 import {
   CLOSE_CODE,
   CONNECT_SECS,
+  DOWNLOAD_URL_PATTERN,
   GRACE_SECS,
   PING_SECS,
   PROTO_VERSION,
@@ -25,6 +28,7 @@ import {
   RETRY_RESET_SECS,
   SILENT_SECS,
   UID_PATTERN,
+  VERSION_PATTERN,
   cleanName,
   newRating,
   type Act,
@@ -74,6 +78,25 @@ let goScreen: (s: Screen) => void = s => {
 export function bindNavigation(go: (s: Screen) => void) {
   goScreen = go;
 }
+
+/** 服务端告知的新版本：版本号与下载地址，没有时为空串 */
+interface UpdateNote {
+  version: string;
+  url: string;
+}
+/** 空串，或通过 guard 校验的字符串 */
+const emptyOr =
+  (guard: Guard<string>): Guard<string> =>
+  (val): val is string =>
+    val === '' || guard(val);
+/** 新版本在本地存储中的格式（DAT-080）：第 1 版起带版本号 v；之前写入的算作第 0 版，没有新版本时存的是 null */
+const UPDATE_STORE: StoreSpec<UpdateNote> = {
+  key: 'yi.update',
+  version: 1,
+  defaults: { version: '', url: '' },
+  fields: { version: emptyOr(match(VERSION_PATTERN)), url: emptyOr(match(DOWNLOAD_URL_PATTERN)) },
+};
+const updateStored = loadStored(UPDATE_STORE);
 
 export const st = {
   phase: Phase.Off,
@@ -136,23 +159,15 @@ export function newerVersion(a: string, b: string) {
 }
 
 /** 服务端告知过的新版本（存在本地，比当前版本新才算） */
-function loadUpdate(): { version: string; url: string } | null {
-  try {
-    const v = JSON.parse(localStorage.getItem('yi.update') ?? 'null');
-    if (v && typeof v.version === 'string' && newerVersion(v.version, VERSION)) return { version: v.version, url: String(v.url ?? '') };
-  } catch {
-    /* 读不到就算了 */
-  }
-  return null;
+function loadUpdate(): UpdateNote | null {
+  const saved = updateStored.value;
+  return saved.version && newerVersion(saved.version, VERSION) ? saved : null;
 }
 
+/** 记下服务端告知的新版本；由更新版本的程序写入的记录不写回（VER-012） */
 function saveUpdate(latest: string | undefined, url: string | undefined) {
   st.update = latest && newerVersion(latest, VERSION) ? { version: latest, url: url ?? '' } : null;
-  try {
-    localStorage.setItem('yi.update', JSON.stringify(st.update));
-  } catch {
-    /* 忽略 */
-  }
+  if (updateStored.writable) saveStored(UPDATE_STORE, st.update ?? UPDATE_STORE.defaults);
 }
 
 export function note(...parts: Msg[]) {

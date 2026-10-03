@@ -1,7 +1,7 @@
 /** 右侧面板：开始菜单、对局、设置、更多 */
 import { useState } from 'preact/hooks';
 import { confirmScore, goScreen, newGame, pass, requestNewGame, requestUndo, resumeGame, setVsAI, toggleReview } from '../app/controller';
-import { Lang, resetSettings, setSettings, settings } from '../app/settings';
+import { Lang, UI_SCALES, resetSettings, setSettings, settings } from '../app/settings';
 import { game, Screen, uiTick, VERSION, boardView, session } from '../app/state';
 import { sfx } from '../audio';
 import { now } from '../core/clock';
@@ -238,7 +238,7 @@ function OnOff({ label, on, set }: { label: string; on: boolean; set: (v: boolea
   );
 }
 
-const SCALES = [0.85, 1, 1.15, 1.3];
+const SCALES = UI_SCALES;
 
 export function SettingsPanel({ h }: { h: number }) {
   const [tab, setTab] = useState(0);
