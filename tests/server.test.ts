@@ -9,7 +9,7 @@ import WebSocket from 'ws';
 import { MemoryStore, RoomServer, type Conn, type RoomServerOptions, type Session } from '../server/rooms';
 import { HTTP_LIMITS, hardenHttp, startHost } from '../server/host';
 import { fileServer } from '../server/files';
-import { CLOSE_CODE, HELLO_SECS, PROTO_VERSION, type C2S, type S2C } from '../src/shared/protocol';
+import { CLOSE_CODE, GRACE_SECS, HELLO_SECS, PROTO_VERSION, type C2S, type S2C } from '../src/shared/protocol';
 import { parseS2C } from '../src/shared/parse';
 
 type Msg<T extends S2C['t']> = Extract<S2C, { t: T }>;
@@ -814,6 +814,71 @@ describe('2.0.1 联机修复', () => {
     expect(a.welcome?.url).toBe('https://example.com/yi');
     const { srv: plain } = world();
     expect(new Client(plain, '乙').welcome?.latest).toBeUndefined();
+  });
+});
+
+describe('重连令牌（SEC-020、SEC-022）', () => {
+  /** 甲（gone）与乙（stay）开局后甲掉线 */
+  const dropped = () => {
+    const env = world();
+    const gone = new Client(env.srv, '甲'),
+      stay = new Client(env.srv, '乙');
+    startGame(gone, stay);
+    gone.drop();
+    return { ...env, gone, stay };
+  };
+
+  it('重连成功后换发新令牌：随 welcome 下发，与原来的不同，格式不变', () => {
+    const { srv, gone } = dropped();
+    const back = new Client(srv, '甲', gone.token, gone.uid);
+    expect(back.id).toBe(gone.id);
+    expect(back.token).not.toBe(gone.token);
+    expect(back.token).toMatch(/^[0-9a-f]{32}$/);
+  });
+
+  it('收到新连接上的下一条消息后，原来的令牌作废；新令牌照常可用', () => {
+    const { srv, gone } = dropped();
+    const back = new Client(srv, '甲', gone.token, gone.uid);
+    back.send({ t: 'ping' });
+    back.drop();
+    const stale = new Client(srv, '甲', gone.token, gone.uid);
+    expect(stale.has('resumeFailed')).toBe(true);
+    expect(stale.id).not.toBe(gone.id);
+    const again = new Client(srv, '甲', back.token, gone.uid);
+    expect(again.id).toBe(gone.id);
+    expect(again.has('start')).toBe(true);
+  });
+
+  it('新令牌没送到（重连后连接随即中断）：仍可用原来的令牌找回对局，并再换发一枚；没送到的那枚作废', () => {
+    const { srv, gone } = dropped();
+    const lost = new Client(srv, '甲', gone.token, gone.uid);
+    lost.drop(); // 新令牌随这条连接一起丢了
+    const again = new Client(srv, '甲', gone.token, gone.uid);
+    expect(again.id).toBe(gone.id);
+    expect(new Set([gone.token, lost.token, again.token]).size).toBe(3);
+    again.send({ t: 'ping' });
+    again.drop();
+    for (const token of [gone.token, lost.token]) expect(new Client(srv, '甲', token, gone.uid).has('resumeFailed'), token).toBe(true);
+    expect(new Client(srv, '甲', again.token, gone.uid).id).toBe(gone.id);
+  });
+
+  it('反复重连都没送到新令牌：确认后只留下最新的一枚，作废的令牌不在服务端残留', () => {
+    const { srv, gone } = dropped();
+    for (let i = 0; i < 5; i++) new Client(srv, '甲', gone.token, gone.uid).drop();
+    expect(srv.tokenCount()).toBe(3); // 甲的新令牌与待确认的原令牌，加上乙的一枚
+    const back = new Client(srv, '甲', gone.token, gone.uid);
+    back.send({ t: 'ping' });
+    expect(srv.tokenCount()).toBe(2);
+  });
+
+  it('掉线太久被移除后，令牌随之作废', () => {
+    const { srv, idle, gone, stay } = dropped();
+    idle(GRACE_SECS + 1, stay);
+    expect(stay.expect('over')).toEqual({ t: 'over', winner: 2, reason: 'disconnect' });
+    expect(srv.tokenCount()).toBe(1); // 只剩乙的一枚
+    const late = new Client(srv, '甲', gone.token, gone.uid);
+    expect(late.has('resumeFailed')).toBe(true);
+    expect(late.id).not.toBe(gone.id);
   });
 });
 
