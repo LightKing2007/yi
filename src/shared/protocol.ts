@@ -9,6 +9,10 @@
 export const PROTO_VERSION = 3;
 export const PROTO_PORT = 8443;
 export const NAME_MAX = 16; // 昵称最多几个字素（I18N-030）
+/** 新版本号的格式（welcome.latest）：数字、字母与 `.+-`，最长 32 个字符；服务端按配置原样下发，比较大小由客户端的 newerVersion 负责 */
+export const VERSION_PATTERN = /^[0-9A-Za-z.+-]{1,32}$/;
+/** 新版本下载地址的格式（welcome.url）：只接受 http(s) 地址，最长 2048 个字符（客户端只用系统浏览器打开这种地址） */
+export const DOWNLOAD_URL_PATTERN = /^https?:\/\/[^\s]{1,2040}$/;
 /** 本机匿名身份 uid 的格式（API-013）；不合格式的 hello 被服务端拒绝 */
 export const UID_PATTERN = /^[0-9A-Za-z-]{16,64}$/;
 export const UNDO_LIMIT = 3; // 每局每人最多申请悔棋次数

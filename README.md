@@ -310,7 +310,8 @@ src/
     renju.ts            五子棋禁手判定（三三、四四、长连）
     gomokuAI.ts         五子棋人机；goAI.ts 围棋人机（蒙特卡洛树搜索、估算死子）
   app/                app（主循环、布局、输入）、stage（每帧的场景更新与绘制顺序）、controller（对局操作与快捷键）、
-                      state（界面与对局状态）、settings（设置，保存于本地存储）、native（桌面版的系统功能与错误日志）、scenarios（开发用场景脚本）
+                      state（界面与对局状态）、settings（设置，保存于本地存储）、storage（本地存储的读写：版本号、逐字段校验、损坏时另存原值）、
+                      native（桌面版的系统功能与错误日志）、scenarios（开发用场景脚本）
   session/            对局会话：session（三种模式下的落子方、悔棋步数）、seats（人、电脑、联机的一方）、
                       think 与 computer.worker（电脑在后台线程中计算着法、估算死子，可随时取消）
   presentation/       boardView（棋盘的动画状态：落子、提子、悔棋倒放、换棋盘、胜负动画、提示）
@@ -321,7 +322,8 @@ src/
   online/config.ts    在线服务器地址（构建时由 VITE_YI_SERVER 读取）
   online/client.ts    联机会话：匹配及排位队列、配对确认、好友房间、对局中的各类请求；确认后的每一步交由本地规则执行
   online/retry.ts     断线后的重连策略：按关闭码决定是否重连、多久后重连，间隔为带完全抖动的指数退避
-  shared/protocol.ts  联机协议（客户端与服务端共用）、段位表及昵称清洗；parse.ts 联机消息的集中校验（服务端用 parseC2S，客户端用 parseS2C）；reject.ts 不合法着法的提示文字
+  shared/protocol.ts  联机协议（客户端与服务端共用）、段位表及昵称清洗；parse.ts 联机消息的集中校验（服务端用 parseC2S，客户端用 parseS2C）；
+                      check.ts 取值校验函数（联机消息与本地存储共用）；reject.ts 不合法着法的提示文字
   ui/                 Preact 界面：panels（菜单、对局、设置、更多）、online（联机对战）、widgets、styles.css、info（“更多”页面的文字）
   i18n/               多语言
 server/               rooms.ts 队列、配对、房间、对局与段位（与传输无关）；ratelimit.ts 限流与违规累计；store.ts 段位存档；host.ts 接入 WebSocket（可同时监听多个端口）；
@@ -329,7 +331,7 @@ server/               rooms.ts 队列、配对、房间、对局与段位（与�
 electron/             桌面版主进程（窗口、单实例、匹配成功时的任务栏提醒、错误日志）及预加载脚本
 tests/                vitest：rules（规则与人机）、record（规则层与棋谱）、session（会话与座位）、protocol（消息校验与昵称清洗）、server（联机服务端）、ratelimit（限流）、
                       store（段位存档）、client（联机客户端：断线、重连、服务器重启、非法消息）、lobby（联机大厅：匹配、排位、好友房间）、
-                      onlineGame（联机对局中的请求、点目与回放）、reconnect 与 retry（断线重连的退避与关闭码）、
+                      onlineGame（联机对局中的请求、点目与回放）、reconnect 与 retry（断线重连的退避与关闭码）、storage（本地存储与设置）、updateNote（新版本提示的本地记录）、
                       fakeNet（联机客户端测试用的假网络与浏览器环境）、layers（依赖方向）、text（说明文字的译文、标点与更新日志）、
                       ratchet（违规棘轮）、coverage（改动行覆盖率）、deps（许可证、依赖漏洞门禁、工作流的 Action 固定）
 scripts/              build-node（打包主进程与服务端）、make-fonts（生成内置字体子集）、page-assets（下载页面的图片与字体）、changelog（读取更新日志、生成发布说明）、

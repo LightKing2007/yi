@@ -3,11 +3,14 @@
  * 通过后才交给处理函数。只校验结构与取值范围；是否轮到、房号是否存在、落点是否在本局棋盘内等业务判断仍由规则层与服务端负责。
  */
 import { MAXN } from '../core/types';
+import { bool, intIn, isRecord, match, member, oneOf, text, type Check } from './check';
 import {
   ACTS_MAX,
+  DOWNLOAD_URL_PATTERN,
   DRAWN,
   PROTO_VERSION,
   UID_PATTERN,
+  VERSION_PATTERN,
   type Act,
   type AskKind,
   type C2S,
@@ -49,10 +52,6 @@ const TOKEN_PATTERN = /^[0-9a-f]{32}$/;
 
 /** 服务端下发的提示文字（info、error、joinNo 与 unmatched 的原因）的长度上限（UTF-16 码元数）：现有提示都不超过 30 个字 */
 const TEXT_MAX = 200;
-/** 新版本号：数字、字母与 `.+-`，最长 32 个字符（服务端按配置原样下发，比较大小由 newerVersion 负责） */
-const VERSION_PATTERN = /^[0-9A-Za-z.+-]{1,32}$/;
-/** 下载地址：只接受 http(s) 地址，最长 2048 个字符（客户端只用系统浏览器打开这种地址） */
-const URL_PATTERN = /^https?:\/\/[^\s]{1,2040}$/;
 /**
  * 服务端下发的秒数（配对确认时限、本手剩余时间、掉线后等待）的绝对值上限：协议中的时限都不超过 2 分钟，
  * 留足余量，又不至于让界面算出离谱的截止时刻
@@ -61,7 +60,6 @@ const SECS_MAX = 3600;
 /** 一次悔棋最多退几手：轮到申请方时连对方已应的一手一起退（server/rooms.ts 的 resolveAsk） */
 const UNDO_PLIES_MAX = 2;
 
-type Check = (val: unknown) => boolean;
 /** 校验失败时 Take 的返回值 */
 const BAD = Symbol('不合法');
 /** 校验并取出一个值：标量原样返回，对象与数组重建为只含已知字段的新值；不合法时返回 BAD */
@@ -80,35 +78,8 @@ type Schema<U extends Record<D, string>, D extends string> = {
   [K in U[D]]: { [F in Exclude<keyof Extract<U, Record<D, K>>, D>]-?: Field };
 };
 
-/** 是不是 JSON 对象（不是 null，也不是数组） */
-const isRecord = (val: unknown): val is Record<string, unknown> => typeof val === 'object' && val !== null && !Array.isArray(val);
-
-/** 有限整数且在 [lo, hi] 内；NaN、Infinity、小数、负零一律不合法（10-edge-cases.md 第 4 节） */
-const intIn =
-  (lo: number, hi: number): Check =>
-  val =>
-    typeof val === 'number' && Number.isInteger(val) && !Object.is(val, -0) && val >= lo && val <= hi;
 /** 非负的安全整数（段位分、胜负局数） */
 const count = intIn(0, Number.MAX_SAFE_INTEGER);
-/** 取值属于列出的几项（数值按 Object.is 比较，负零不等于零） */
-const oneOf =
-  (xs: readonly (string | number)[]): Check =>
-  val =>
-    xs.some(x => Object.is(x, val));
-/** 取值是表中的一个键；表的类型为 Record<联合类型, true>，联合类型新增成员而表中漏写时类型检查不通过 */
-const member =
-  <K extends string>(all: Record<K, true>): Check =>
-  val =>
-    typeof val === 'string' && Object.hasOwn(all, val);
-const bool: Check = val => typeof val === 'boolean';
-const match =
-  (re: RegExp): Check =>
-  val =>
-    typeof val === 'string' && re.test(val);
-const text =
-  (max: number): Check =>
-  val =>
-    typeof val === 'string' && val.length <= max;
 
 const need = (check: Check): Field => ({ take: val => (check(val) ? val : BAD) });
 const opt = (check: Check): Field => ({ ...need(check), optional: true });
@@ -242,7 +213,7 @@ const S2C_SCHEMA: Schema<S2C, 't'> = {
     token: need(match(TOKEN_PATTERN)),
     ratings: record({ gomoku: RATING, go: RATING }),
     latest: opt(match(VERSION_PATTERN)),
-    url: opt(match(URL_PATTERN)),
+    url: opt(match(DOWNLOAD_URL_PATTERN)),
   },
   resumeFailed: {},
   pong: {},
