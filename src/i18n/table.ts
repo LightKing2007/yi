@@ -1,5 +1,6 @@
 /** 界面文字的译文表：[中文原文（也是查表的键）, 文言, English]。新增界面文字时在这里补一行 */
 export const TABLE: [string, string, string][] = [
+  ["优化界面文字的显示：文字不再自动缩小，较长的提示折为两行。", "界面之文更善：字不复自缩，较长之示析为两行。", "Improved text display: text is no longer shrunk, and long messages wrap."],
   ["调整字母与数字的字体：各操作系统统一使用游戏附带的字体。", "易字母与数字之体：诸系统统用戏中所附之字体。", "Changed letters and digits to use the bundled typeface on all operating systems."],
   ["调整英文界面的提示文字：统一采用完整的书面形式，不再使用缩写。", "改英文界面之提示：统以完整之书面语书之，不复用缩写。", "Changed English interface messages to use full forms instead of contractions."],
   ["改进联机服务器的稳定性：服务器限制单个连接发送消息的频率及同一网络地址新建连接的频率，频繁发送异常消息的连接将被断开。", "枢纽更稳：单连发讯之频与同址新连之频皆有其限，屡发异讯者断其连。", "Improved the stability of the online server: the rate at which a single connection may send messages, and the rate at which new connections may be made from the same network address, are now limited; connections that repeatedly send invalid messages are disconnected."],
@@ -268,7 +269,7 @@ export const TABLE: [string, string, string][] = [
   ["再来一局", "再弈一局", "Rematch"],
   ["已确认", "已定", "Confirmed"],
   ["对方已确认结果", "彼已定局", "Opponent confirmed"],
-  ["求和", "议和", "Offer draw"],
+  ["求和", "议和", "Draw"],
   ["认输", "投子", "Resign"],
   ["V 查看棋局   Esc 离开", "V 观局   Esc 离席", "V view board   Esc leave"],
   ["Esc 离开", "Esc 离席", "Esc leave"],

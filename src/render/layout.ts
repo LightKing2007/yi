@@ -24,6 +24,8 @@ export interface Layout {
 }
 
 export const PAD = 0.92; // 棋盘边缘到第一条线的距离（格）
+/** 右侧面板的设计宽度（像素）：按英文的宽度定，文字按设计字号放得下（I18N-020）；与 styles.css 中 .panel 的 width 一致 */
+export const PANEL_W = 320;
 export const DESIGN_W = 1320,
   DESIGN_H = 900;
 
@@ -35,7 +37,7 @@ export function uiUnit(W: number, H: number, userScale = 1) {
 export function computeLayout(W: number, H: number, N: number, userScale = 1): Layout {
   const u = uiUnit(W, H, userScale);
   const margin = Math.max(28 * u, Math.min(W, H) * 0.055);
-  const panelW = 300 * u,
+  const panelW = PANEL_W * u,
     gap = Math.max(40 * u, W * 0.04);
   const vertical = W < H * 1.1;
   let board: Rect, panel: Rect, bs: number;
