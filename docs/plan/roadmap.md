@@ -390,7 +390,7 @@ server/
 
 | 消息 | 变化 |
 |---|---|
-| `hello` | `{ v: 4, app, name, uid, auth?: string, resume?: string }`：`app` 是客户端版本号；`auth` 是登录令牌；`resume` 是断线重连令牌（原来的 `token` 改名） |
+| `hello` | `{ v: 4, app, name, uid, auth?: string, resume?: string }`：`app` 是客户端版本号；`auth` 是登录令牌；`resume` 是断线重连令牌（原来的 `token` 改名；与 v3 相同，每次重连成功都换发新的一枚，SEC-020） |
 | `move` | 增加 `seq`：客户端认为这是第几手（从 1 开始）。不一致就拒绝，防止重复提交和乱序 |
 | `pass`、`undo`、`draw`、`resign`、`mark`、`agree`、`resume` | 同样带 `seq` |
 | `resync` | 新：客户端发现局面散列不一致时请求完整同步 |

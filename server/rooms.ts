@@ -4,7 +4,7 @@
  * 对局规则直接复用 src/core/game.ts：每个房间一份 Game，客户端发来的每一手都在这里校验，
  * 所以服务端与客户端的判定完全一致。协议见 src/shared/protocol.ts。
  */
-import { createHash } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { Game } from '../src/core/game';
 import { rejectText } from '../src/shared/reject';
 import { BLACK, GameType, WHITE, other } from '../src/core/types';
@@ -97,7 +97,8 @@ interface Player {
   id: number; // 0 表示还没握手
   conn: Conn | null; // null 表示掉线（对局中还可以用令牌回来）
   name: string;
-  token: string;
+  tokenHash: string; // 当前重连令牌的散列；服务端不保存令牌原文（SEC-022）
+  prevTokenHash: string; // 重连后、对方还没确认收到新令牌时仍然有效的上一枚令牌的散列；没有时为空串
   key: string; // 段位的归属（由客户端的匿名 uid 散列而来）
   ratings: Ratings;
   lastSeen: number;
@@ -158,6 +159,10 @@ export interface RoomServerOptions {
 export type Session = Player;
 
 const typeKey = (type: number) => (type ? 'go' : 'gomoku') as keyof Ratings;
+/** 令牌的散列（十六进制）：按令牌查找时以它为键（SEC-022） */
+const tokenHash = (token: string) => createHash('sha256').update(token).digest('hex');
+/** 两个十六进制散列是否相同：常量时间比较（SEC-022）；长度不同（含空串）时不同 */
+const sameHash = (left: string, right: string) => left.length === right.length && timingSafeEqual(Buffer.from(left, 'hex'), Buffer.from(right, 'hex'));
 const hex = (n: number) => {
   const b = new Uint8Array(n);
   globalThis.crypto.getRandomValues(b);
@@ -166,6 +171,8 @@ const hex = (n: number) => {
 
 export class RoomServer {
   private players = new Set<Player>();
+  /** 令牌散列 → 玩家：重连时按令牌查找，不遍历全部玩家（SEC-022）。只含已握手的玩家，玩家移除时一并删除 */
+  private byToken = new Map<string, Player>();
   private rooms = new Map<number, Room>();
   private queue: QEntry[] = [];
   private matches = new Set<Match>();
@@ -200,7 +207,8 @@ export class RoomServer {
       id: 0,
       conn,
       name: '',
-      token: '',
+      tokenHash: '',
+      prevTokenHash: '',
       key: '',
       ratings: { gomoku: newRating(), go: newRating() },
       lastSeen: now,
@@ -233,6 +241,7 @@ export class RoomServer {
       return p;
     }
     if (!p.id) return this.hello(p, m);
+    this.confirmToken(p);
     this.handle(p, m);
     return p;
   }
@@ -248,7 +257,7 @@ export class RoomServer {
     p.conn = null;
     p.offAt = this.now();
     if (!p.id) {
-      this.players.delete(p);
+      this.forget(p);
       return;
     }
     this.log(`${p.name} 断开`);
@@ -260,13 +269,13 @@ export class RoomServer {
         r.paused = r.deadline - this.now();
         r.deadline = 0;
       } // 有人掉线时双方都不计时
-      const other = this.seat(r, 3 - this.colorOf(r, p));
-      this.send(other, { t: 'peer', online: false, wait: GRACE_SECS });
-      if (r.paused > 0) this.send(other, { t: 'turn', color: r.g.cur.toMove, secs: -1 });
+      const opp = this.seat(r, other(this.colorOf(r, p)));
+      this.send(opp, { t: 'peer', online: false, wait: GRACE_SECS });
+      if (r.paused > 0) this.send(opp, { t: 'turn', color: r.g.cur.toMove, secs: -1 });
       return;
     }
     this.leaveRoom(p);
-    this.players.delete(p);
+    this.forget(p);
   }
 
   /** 定时调用（建议每 0.25 秒）：检查各种超时 */
@@ -277,33 +286,30 @@ export class RoomServer {
       if (now > m.deadline)
         this.dropMatch(
           m,
-          m.side.filter((_, i) => !m.ok[i]).map(e => e.p),
+          m.side.filter((_, i) => !m.ok[i]).map(side => side.p),
           '对方未确认',
         );
     }
-    for (const r of [...this.rooms.values()]) {
-      if (!this.rooms.has(r.id)) continue;
-      if (r.ask && now > r.askUntil) this.resolveAsk(r, false); // 申请无人回应，视为拒绝
-      if (r.state === RoomState.Play && r.deadline && now > r.deadline) this.finish(r, 3 - r.g.cur.toMove, 'timeout');
-    }
+    for (const r of [...this.rooms.values()]) if (this.rooms.has(r.id)) this.tickRoom(r, now);
     for (const [key, until] of this.banned) if (now >= until) this.banned.delete(key);
-    for (const p of [...this.players]) {
-      if (!this.players.has(p)) continue;
-      if (p.conn && !p.id && now - p.since > HELLO_SECS) {
-        this.drop(p, CLOSE_CODE.helloTimeout);
-        continue;
-      } // 握手超时（API-042）
-      if (p.conn && now - p.lastSeen > IDLE_SECS) {
-        this.drop(p);
-        continue;
-      } // 太久没消息：当作断线
-      if (!p.conn && now - p.offAt > GRACE_SECS) {
-        // 掉线太久：对局判负并清理
-        const r = this.rooms.get(p.room);
-        if (r && r.state === RoomState.Play) this.finish(r, 3 - this.colorOf(r, p), 'disconnect');
-        this.leaveRoom(p);
-        this.players.delete(p);
-      }
+    for (const p of [...this.players]) if (this.players.has(p)) this.tickPlayer(p, now);
+  }
+
+  /** 房间的时限：申请无人回应，视为拒绝；本手超时，判负 */
+  private tickRoom(r: Room, now: number) {
+    if (r.ask && now > r.askUntil) this.resolveAsk(r, false);
+    if (r.state === RoomState.Play && r.deadline && now > r.deadline) this.finish(r, other(r.g.cur.toMove), 'timeout');
+  }
+
+  /** 玩家的时限：握手超时（API-042）；太久没消息，当作断线；掉线太久，对局判负并清理 */
+  private tickPlayer(p: Player, now: number) {
+    if (p.conn && !p.id && now - p.since > HELLO_SECS) this.drop(p, CLOSE_CODE.helloTimeout);
+    else if (p.conn && now - p.lastSeen > IDLE_SECS) this.drop(p);
+    else if (!p.conn && now - p.offAt > GRACE_SECS) {
+      const r = this.rooms.get(p.room);
+      if (r && r.state === RoomState.Play) this.finish(r, other(this.colorOf(r, p)), 'disconnect');
+      this.leaveRoom(p);
+      this.forget(p);
     }
   }
 
@@ -311,6 +317,10 @@ export class RoomServer {
     let n = 0;
     for (const p of this.players) if (p.conn && p.id) n++;
     return n;
+  }
+  /** 当前有效的重连令牌数（监控用）：每位已握手的玩家一枚，重连后等待确认期间多一枚 */
+  tokenCount() {
+    return this.byToken.size;
   }
   /** 正在匹配的人数（按队列） */
   queued(mode: QueueMode, type: number) {
@@ -320,6 +330,7 @@ export class RoomServer {
   shutdown() {
     for (const p of this.players) p.conn?.close();
     this.players.clear();
+    this.byToken.clear();
     this.rooms.clear();
     this.queue = [];
     this.matches.clear();
@@ -713,48 +724,86 @@ export class RoomServer {
       return p;
     }
     p.lastSeen = this.now();
-    const resuming = m.token !== undefined;
-    if (resuming) {
-      // 带令牌：找回掉线的自己
-      for (const o of this.players) {
-        if (o === p || !o.id || o.token !== m.token) continue;
-        const old = o.conn;
-        if (old) {
-          // 旧连接其实已经断了，只是还没被发现：由新连接接管
-          o.conn = null;
-          old.close();
-        }
-        o.conn = p.conn;
-        o.lastSeen = this.now();
-        this.players.delete(p);
-        p.conn = null;
-        this.send(o, { t: 'welcome', id: o.id, token: o.token, ratings: o.ratings, ...this.latest });
-        const r = this.rooms.get(o.room);
-        if (r && r.state !== RoomState.Wait) {
-          const resume = r.state === RoomState.Play && r.paused > 0 && this.bothOnline(r);
-          if (resume) {
-            r.deadline = this.now() + r.paused;
-            r.paused = 0;
-          }
-          this.resync(r, o);
-          const opp = this.seat(r, other(this.colorOf(r, o)));
-          this.send(opp, { t: 'peer', online: true });
-          if (resume) this.send(opp, { t: 'turn', color: r.g.cur.toMove, secs: Math.round(r.deadline - this.now()) });
-        }
-        this.log(`${o.name} 重新连上`);
-        return o;
-      }
-    }
+    const found = m.token === undefined ? null : this.findByToken(m.token);
+    if (found) return this.resume(p, found.player, found.hash); // p 还没握手，不会是 found.player
     p.name = cleanName(m.name, '棋手');
     p.id = this.nextPlayer++;
-    p.token = hex(TOKEN_BYTES);
+    const token = this.issueToken(p);
     p.key = key;
     const saved = this.store.get(p.key);
     p.ratings = { gomoku: { ...newRating(), ...saved?.gomoku }, go: { ...newRating(), ...saved?.go } };
-    this.send(p, { t: 'welcome', id: p.id, token: p.token, ratings: p.ratings, ...this.latest });
-    if (resuming) this.send(p, { t: 'resumeFailed' }); // 原来的对局已经不在了（服务器重启过，或掉线太久）
+    this.send(p, { t: 'welcome', id: p.id, token, ratings: p.ratings, ...this.latest });
+    if (m.token !== undefined) this.send(p, { t: 'resumeFailed' }); // 原来的对局已经不在了（服务器重启过，或掉线太久）
     this.log(`${p.name} 上线（玩家 ${p.id}）`);
     return p;
+  }
+
+  /**
+   * 带令牌重连，找回掉线的玩家 back：由新连接（p 的连接）接管，并换发新令牌（SEC-020）。usedHash 为这次所用令牌的散列，
+   * 在收到新连接上的下一条消息之前仍然有效：新令牌若随连接再次中断而没送到，客户端仍可用原来的令牌回来
+   */
+  private resume(p: Player, back: Player, usedHash: string): Player {
+    const old = back.conn;
+    if (old) {
+      // 旧连接其实已经断了，只是还没被发现：由新连接接管
+      back.conn = null;
+      old.close();
+    }
+    back.conn = p.conn;
+    back.lastSeen = this.now();
+    this.players.delete(p); // p 还没握手，没有令牌
+    p.conn = null;
+    this.send(back, { t: 'welcome', id: back.id, token: this.issueToken(back, usedHash), ratings: back.ratings, ...this.latest });
+    const r = this.rooms.get(back.room);
+    if (r && r.state !== RoomState.Wait) this.resumeRoom(r, back);
+    this.log(`${back.name} 重新连上`);
+    return back;
+  }
+
+  /** 重连的玩家回到房间：回放整局；双方都在线时恢复计时，并告诉对方 */
+  private resumeRoom(r: Room, back: Player) {
+    const resume = r.state === RoomState.Play && r.paused > 0 && this.bothOnline(r);
+    if (resume) {
+      r.deadline = this.now() + r.paused;
+      r.paused = 0;
+    }
+    this.resync(r, back);
+    const opp = this.seat(r, other(this.colorOf(r, back)));
+    this.send(opp, { t: 'peer', online: true });
+    if (resume) this.send(opp, { t: 'turn', color: r.g.cur.toMove, secs: Math.round(r.deadline - this.now()) });
+  }
+
+  // ---------------- 重连令牌（SEC-020、SEC-022） ----------------
+
+  /** 给玩家换发一枚新令牌并返回原文（只随 welcome 下发一次）；keep 为仍须保留的旧令牌散列，其余旧令牌立即作废 */
+  private issueToken(p: Player, keep = ''): string {
+    for (const hash of [p.tokenHash, p.prevTokenHash]) if (hash && hash !== keep) this.byToken.delete(hash);
+    const token = hex(TOKEN_BYTES);
+    p.tokenHash = tokenHash(token);
+    p.prevTokenHash = keep;
+    this.byToken.set(p.tokenHash, p);
+    return token;
+  }
+
+  /** 按令牌找到玩家：以散列查表，再以常量时间比较确认；找不到时返回 null */
+  private findByToken(token: string): { player: Player; hash: string } | null {
+    const hash = tokenHash(token),
+      player = this.byToken.get(hash);
+    if (!player || (!sameHash(hash, player.tokenHash) && !sameHash(hash, player.prevTokenHash))) return null;
+    return { player, hash };
+  }
+
+  /** 新连接上收到了重连之后的消息：连接确实通了，新令牌已送到，上一枚令牌作废 */
+  private confirmToken(p: Player) {
+    if (!p.prevTokenHash) return;
+    this.byToken.delete(p.prevTokenHash);
+    p.prevTokenHash = '';
+  }
+
+  /** 移除玩家，连同他的令牌 */
+  private forget(p: Player) {
+    this.players.delete(p);
+    for (const hash of [p.tokenHash, p.prevTokenHash]) if (hash) this.byToken.delete(hash);
   }
 
   /** 握手之后的消息：先看是不是不在对局中也能发的，再按房间的状态交给对局中或终局后的处理 */

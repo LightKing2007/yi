@@ -146,7 +146,8 @@ export interface Opponent {
 
 /** 服务端 → 客户端 */
 export type S2C =
-  | { t: 'welcome'; id: number; token: string; ratings: Ratings; latest?: string; url?: string } // latest / url：最新版本号与下载地址（服务端配置了才有）
+  // token：重连令牌，每次重连成功都换发新的一枚（SEC-020），以最近收到的为准；latest / url：最新版本号与下载地址（服务端配置了才有）
+  | { t: 'welcome'; id: number; token: string; ratings: Ratings; latest?: string; url?: string }
   | { t: 'resumeFailed' } // 带令牌重连，但原来的对局已经不在了（服务器重启或掉线太久）
   | { t: 'pong' }
   | { t: 'queued'; mode: QueueMode; type: number; size: number } // 已进入队列
