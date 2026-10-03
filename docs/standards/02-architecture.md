@@ -3,8 +3,8 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1 |
-| 修订日期 | 2026-10-02 |
+| 文件版本 | 1.1.1 |
+| 修订日期 | 2026-10-03 |
 | 规则前缀 | `ARC` |
 
 参考：ISO/IEC/IEEE 42010:2022（架构描述）；ISO/IEC 25010:2023 维护性中的模块性、可复用性、可测试性；GB/T 8567—2006 第 6 章（软件设计说明）。
@@ -27,7 +27,7 @@
 | online | 联机客户端 | core、shared、app、audio、i18n | 无 |
 | app | 主循环、状态、控制器 | 上述全部（除 ui、main） | `@preact/signals` |
 | ui | Preact 界面 | core、shared、app、audio、fx、i18n、online、scene、render | `preact`、`@preact/signals` |
-| main | 前端入口 | app、audio、online、ui | 无 |
+| main | 前端入口 | app、audio、online、ui | `preact`（只用于把界面挂到页面上） |
 | server | 联机服务端 | core、shared | `ws`、`node:*` |
 | electron | 桌面版主进程与预加载 | 无（严禁依赖 `src/`） | `electron`、`node:*` |
 
