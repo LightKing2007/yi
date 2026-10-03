@@ -151,11 +151,24 @@ export class Peer {
     },
     close: () => {},
   };
-  constructor(public srv: RoomServer = fake.server) {
+  /** token：带令牌重连，找回掉线的自己；uid：本机匿名身份，默认与客户端不同 */
+  constructor(
+    public srv: RoomServer = fake.server,
+    token?: string,
+    uid = 'peer-device-0000000001',
+  ) {
     const sess = srv.connect(this.conn);
     expect(sess).not.toBeNull();
     this.sess = sess as Session;
-    this.send({ t: 'hello', v: PROTO_VERSION, name: '乙', uid: 'peer-device-0000000001' });
+    this.send({ t: 'hello', v: PROTO_VERSION, name: '乙', uid, token });
+  }
+  /** 收到的最后一条该类型的消息 */
+  last<K extends S2C['t']>(type: K) {
+    return this.inbox.filter((m): m is Extract<S2C, { t: K }> => m.t === type).at(-1);
+  }
+  /** 网络断开（服务端察觉到） */
+  drop() {
+    this.srv.disconnect(this.sess, this.conn);
   }
   send(m: C2S) {
     this.sess = this.srv.message(this.sess, m, this.conn);
