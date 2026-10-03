@@ -12,8 +12,10 @@ import { sfx } from '../audio';
 import { setSettings, settings } from '../app/settings';
 import { game, screen, Screen, VERSION, boardView, session, uiTick } from '../app/state';
 import { ONLINE_SERVER } from './config';
-import { native } from '../app/native';
+import { logWarn, native } from '../app/native';
+import { isInvalid, parseS2C } from '../shared/parse';
 import {
+  CONNECT_SECS,
   GRACE_SECS,
   PING_SECS,
   PROTO_VERSION,
@@ -169,6 +171,9 @@ function serverUrl() {
   return q || ONLINE_SERVER;
 }
 
+/** 毫秒与秒的换算 */
+const MS_PER_SEC = 1000;
+
 /** 本机匿名身份的随机字节数（32 位十六进制） */
 const UID_BYTES = 16;
 
@@ -230,13 +235,14 @@ export function connect() {
     return;
   }
   ws = sock;
+  badLogged = false;
   let opened = false;
   const timer = setTimeout(() => {
     if (ws === sock && !opened) {
       netClose();
       lost();
     }
-  }, 8000);
+  }, CONNECT_SECS * MS_PER_SEC);
   sock.onopen = () => {
     if (ws !== sock) return;
     opened = true;
@@ -245,17 +251,8 @@ export function connect() {
     sock.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, name: nick(), uid: uid(), token: st.reconnecting ? st.token : undefined } satisfies C2S));
     st.pingAt = now() + PING_SECS;
   };
-  sock.onmessage = e => {
-    if (ws !== sock || typeof e.data !== 'string') return;
-    let m: S2C;
-    try {
-      m = JSON.parse(e.data);
-    } catch {
-      return;
-    }
-    st.lastRecv = now();
-    handle(m);
-    changed();
+  sock.onmessage = ev => {
+    if (ws === sock) receive(ev.data);
   };
   sock.onclose = () => {
     if (ws !== sock) return;
@@ -263,6 +260,28 @@ export function connect() {
     ws = null;
     lost();
   };
+  changed();
+}
+
+/** 每条连接只记第一条非法消息的日志，免得伪造的消息洪泛撑大日志 */
+let badLogged = false;
+
+/** 收到服务端的一帧：先经 parseS2C 校验（API-016），不合法的丢弃并写 warn 日志，严禁据此修改对局状态 */
+function receive(data: unknown) {
+  let raw: unknown;
+  try {
+    raw = typeof data === 'string' ? JSON.parse(data) : undefined;
+  } catch {
+    raw = undefined; // 不是 JSON：交给 parseS2C 按非法消息处理
+  }
+  const m = parseS2C(raw);
+  if (isInvalid(m)) {
+    if (!badLogged) logWarn('联机', `丢弃服务端的非法消息：${m.why}`);
+    badLogged = true;
+    return;
+  }
+  st.lastRecv = now();
+  handle(m);
   changed();
 }
 

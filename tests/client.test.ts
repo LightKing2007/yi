@@ -1,6 +1,7 @@
 /**
  * 联机客户端（src/online/client.ts）的状态机：用假的 WebSocket 把它直接接到进程内的 RoomServer 上（假时钟），
- * 模拟网络静默断开（服务端还没发现）、服务器重启、网络完全不通、断线期间对局结束等情况。
+ * 模拟网络静默断开（服务端还没发现）、服务器重启、网络完全不通、断线期间对局结束等情况，
+ * 以及冒充服务端发来的非法消息（API-016）。
  */
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { RoomServer, type Conn, type Session } from '../server/rooms';
@@ -9,6 +10,8 @@ import { PROTO_VERSION, type C2S, type S2C } from '../src/shared/protocol';
 // ---------------- 浏览器环境的替身（必须在导入客户端之前装好） ----------------
 
 const storage = new Map<string, string>();
+/** 写进桌面版日志文件的内容：[级别, 文字] */
+const logs: [string, string][] = [];
 Object.assign(globalThis, {
   window: globalThis,
   location: { search: '' },
@@ -22,6 +25,15 @@ Object.assign(globalThis, {
     },
   },
   document: { hidden: false, title: '', addEventListener() {}, removeEventListener() {} },
+  yiNative: {
+    platform: 'test',
+    quit() {},
+    attention() {},
+    openLogs() {},
+    log: (level: string, text: string) => {
+      logs.push([level, text]);
+    },
+  },
 });
 
 // ---------------- 假的网络 ----------------
@@ -44,7 +56,7 @@ class FakeWS {
   readyState = 0;
   dead = false; // 网络静默断开：两边的消息都到不了，也没有断开事件
   onopen: (() => void) | null = null;
-  onmessage: ((e: { data: string }) => void) | null = null;
+  onmessage: ((e: { data: unknown }) => void) | null = null;
   onclose: (() => void) | null = null;
   private srv = server;
   private sess: Session | null = null;
@@ -99,6 +111,12 @@ class FakeWS {
 }
 const sockets: FakeWS[] = [];
 (globalThis as any).WebSocket = FakeWS;
+
+/** 冒充服务端：不经服务端，直接往客户端当前的连接里送一帧（文本帧之外的取值模拟二进制帧） */
+function inject(data: unknown) {
+  sockets[sockets.length - 1].onmessage?.({ data: typeof data === 'string' || data instanceof ArrayBuffer ? data : JSON.stringify(data) });
+}
+const warns = () => logs.filter(([level]) => level === 'warn').map(([, text]) => text);
 
 /** 另一位棋手：直接接在服务端上 */
 class Peer {
@@ -168,6 +186,7 @@ beforeEach(() => {
   dropTypes = [];
   sockets.length = 0;
   q.length = 0;
+  logs.length = 0;
 });
 
 describe('联机客户端', () => {
@@ -236,6 +255,42 @@ describe('联机客户端', () => {
     expect(net.st.over).toBe(true);
     expect(net.st.winner).toBe(2);
     expect(net.st.notice.map(m => m[0])).toContain('你掉线太久，对局已判负');
+  });
+
+  it('收到伪造的悔棋十亿次、路数越界的开局、非 JSON 与二进制帧时一律丢弃，局面不变，只记一条 warn 日志（A-05、API-016）', () => {
+    const peer = startGame();
+    net.move(7, 7);
+    pump();
+    expect(state.game.cur.moves).toBe(1);
+    inject({ t: 'undone', n: 1e9 });
+    inject({ t: 'start', kind: 'friend', color: 2, type: 0, size: 99, renju: true, moveTime: 30, black: { name: '甲' }, white: { name: '乙' } });
+    inject({ t: 'moved', x: 19, y: 0 });
+    inject('不是 JSON');
+    inject(new ArrayBuffer(4));
+    expect(state.game.cur.moves).toBe(1);
+    expect([net.st.size, net.st.myColor, net.st.phase]).toEqual([15, 1, net.Phase.Playing]);
+    expect(warns()).toEqual(['联机: 丢弃服务端的非法消息：undone.n 不合法：1000000000']);
+    peer.send({ t: 'move', x: 8, y: 8 }); // 服务端的合法消息照常处理
+    pump();
+    expect(state.game.cur.moves).toBe(2);
+  });
+
+  it('每条连接只记第一条非法消息的日志，新的连接重新记', () => {
+    net.connect();
+    pump();
+    inject({ t: 'shout' });
+    inject({ t: 'shout' });
+    expect(warns()).toHaveLength(1);
+    net.disconnect();
+    net.connect();
+    pump();
+    const notice = net.st.notice;
+    inject({ t: 'info', text: '字'.repeat(10000) });
+    expect(warns()).toEqual([
+      '联机: 丢弃服务端的非法消息：未知的消息类型 "shout"',
+      '联机: 丢弃服务端的非法消息：info.text 不合法："' + '字'.repeat(39), // 日志中的取值截到 40 个字符
+    ]);
+    expect(net.st.notice).toBe(notice); // 超长的提示没有显示
   });
 
   it('服务端告知新版本：比本机新才提示，并记在本地', () => {
