@@ -1,6 +1,7 @@
 /**
- * 译文的完整性（实现 I18N-010、I18N-013，见 docs/standards/09-text-and-i18n.md 第 10 章）：
- * 译文表没有重复的键、每行都有文言与英文译文、三种语言的格式占位符一致；src/ 与 server/ 中显示在界面上的每一处中文都在译文表中。
+ * 译文的完整性与英文的写法（实现 I18N-010、I18N-012、I18N-013，见 docs/standards/09-text-and-i18n.md 第 10 章）：
+ * 译文表没有重复的键、每行都有文言与英文译文、三种语言的格式占位符一致；英文不用长破折号、缩写形式与美式拼写；
+ * src/ 与 server/ 中显示在界面上的每一处中文都在译文表中。
  * 界面上的中文包括 T()、TF() 的参数、禁着提示表、服务端下发的提示与“更多”页面的文字，它们都以字面量写在源码中，所以逐一扫描全部含汉字的字面量，
  * 只排除诊断信息（tests/uiText.ts）与下面两张清单中不翻译的文字。
  */
@@ -55,6 +56,52 @@ describe('译文表', () => {
   it('三种语言的格式占位符种类与顺序一致，TF() 按顺序代入参数时不会错位', () => {
     const bad = TABLE.filter(r => placeholders(r[1]).join() !== placeholders(r[0]).join() || placeholders(r[2]).join() !== placeholders(r[0]).join());
     expect(bad).toEqual([]);
+  });
+});
+
+/** 缩写形式（I18N-012 列出的 n't 're 'll 've 'm 'd，以及代词与疑问词后的 's）；名词所有格的 's 不算。直撇号与弯撇号都查 */
+const CONTRACTION = /n['’]t\b|['’](?:re|ll|ve|m|d)\b|\b(?:it|that|there|here|what|who|where|how|let|he|she)['’]s\b/i;
+
+/** I18N-012 列出的美式拼写词及其屈折形式，英国拼写为 colour、centre、organise、recognise、behaviour、favourite、analyse、cancelled、grey */
+const AMERICAN = /\b(?:colors?|colored|coloring|centers?|centered|organiz\w*|recogniz\w*|behaviors?|favorites?|analyz\w*|cancel(?:ed|ing)|gray\w*)\b/i;
+
+/** 长破折号（I18N-082）：— 与 – */
+const DASH = /[—–]/;
+
+/** 一条英文译文违反的写法 */
+export const englishIssues = (text: string) =>
+  [DASH.test(text) && '长破折号', CONTRACTION.test(text) && '缩写形式', AMERICAN.test(text) && '美式拼写'].filter(issue => issue !== false);
+
+describe('英文译文的写法（I18N-012、I18N-080 至 I18N-082）', () => {
+  it('不含长破折号、缩写形式与美式拼写', () => {
+    expect(TABLE.filter(r => englishIssues(r[2]).length).map(r => `${englishIssues(r[2]).join('、')}：${r[2]}`)).toEqual([]);
+  });
+
+  it('检查能发现每一类写法', () => {
+    for (const text of ['A — B', 'A – B']) expect(englishIssues(text), text).toEqual(['长破折号']);
+    for (const text of ["can't", 'isn’t', "you're", "we'll", "I've", "I'm", "you'd", "It's", "that's", "who's", "Let's"])
+      expect(englishIssues(text), text).toEqual(['缩写形式']);
+    for (const text of ['color', 'Colors', 'centered', 'organize', 'Recognized', 'behaviors', 'favorite', 'analyzing', 'canceled', 'gray'])
+      expect(englishIssues(text), text).toEqual(['美式拼写']);
+  });
+
+  it('名词所有格、英国拼写与例外的 dialog 不误报', () => {
+    const fine = [
+      "Black's turn",
+      "the opponent's stones",
+      "one's own",
+      'colour',
+      'centre',
+      'organise',
+      'recognise',
+      'behaviour',
+      'favourite',
+      'analyse',
+      'cancelled',
+      'grey',
+      'dialog',
+    ];
+    for (const text of fine) expect(englishIssues(text), text).toEqual([]);
   });
 });
 
