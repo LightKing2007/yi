@@ -11,9 +11,11 @@ import { BLACK, GameType, WHITE, other } from '../src/core/types';
 import { isInvalid, parseC2S, type Invalid } from '../src/shared/parse';
 import { BAN_SECS, ConnLimits, type LimitedOp } from './ratelimit';
 import {
+  ACTS_MAX,
   ASK_SECS,
   CLOSE_CODE,
   CONFIRM_SECS,
+  DRAWN,
   DRAW_LIMIT,
   GRACE_SECS,
   HELLO_SECS,
@@ -58,13 +60,10 @@ export class MemoryStore implements RatingStore {
 
 const MAX_PLAYERS = 2048;
 const MAX_ROOMS = 1024;
-const MAX_ACTS = 4096;
 const ELO_K = 32;
 const JOIN_FAILS = 5; // 一条连接一分钟内最多几次加入失败，超过就暂时不让再试（防止遍历房号）
 /** 统计加入失败次数的时间窗 */
 const JOIN_WINDOW_SECS = 60;
-/** 对局结果 winner 的取值：和棋 */
-const DRAWN = 3;
 /** 房号为四位数：[CODE_MIN, CODE_MIN + CODE_SPAN) */
 const CODE_MIN = 1000,
   CODE_SPAN = 9000;
@@ -345,8 +344,8 @@ export class RoomServer {
   private broadcast(r: Room, msg: S2C) {
     for (const c of [BLACK, WHITE]) this.send(this.seat(r, c), msg);
   }
-  private addAct(r: Room, a: Act) {
-    if (r.acts.length < MAX_ACTS) r.acts.push(a);
+  private addAct(r: Room, act: Act) {
+    if (r.acts.length < ACTS_MAX) r.acts.push(act);
   }
   private busy(p: Player) {
     return !!(p.room || p.match);

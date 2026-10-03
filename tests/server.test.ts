@@ -1,4 +1,4 @@
-/** 联机服务端：匹配 / 排位、配对确认、好友房间、段位、对局中的各种请求、断线重连、超时、限流（用假时钟直接驱动 RoomServer），以及真实的 WebSocket 连接 */
+/** 联机服务端：匹配 / 排位、配对确认、好友房间、段位、对局中的各种请求、断线重连、超时、限流（用假时钟直接驱动 RoomServer），以及真实的 WebSocket 连接；服务端发出的每条消息都检查能否通过客户端的校验 */
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -10,8 +10,16 @@ import { MemoryStore, RoomServer, type Conn, type RoomServerOptions, type Sessio
 import { HTTP_LIMITS, hardenHttp, startHost } from '../server/host';
 import { fileServer } from '../server/files';
 import { CLOSE_CODE, HELLO_SECS, PROTO_VERSION, type C2S, type S2C } from '../src/shared/protocol';
+import { parseS2C } from '../src/shared/parse';
 
 type Msg<T extends S2C['t']> = Extract<S2C, { t: T }>;
+
+/** 服务端发出的每条消息经 JSON 传输后都必须通过客户端的校验（API-016），否则客户端会把它丢掉 */
+function expectClientAccepts(m: S2C) {
+  const wire = JSON.parse(JSON.stringify(m));
+  expect(parseS2C(wire), m.t).toEqual(wire);
+  return m;
+}
 
 let uidSeq = 0;
 const newUid = () => 'test-device-' + String(++uidSeq).padStart(8, '0');
@@ -33,6 +41,7 @@ class Client {
   ) {
     this.conn = {
       send: m => {
+        expectClientAccepts(m); // 连接关闭后发出的消息也要检查
         if (!this.closed) this.inbox.push(m);
       },
       close: code => {
@@ -268,7 +277,7 @@ describe('好友房间', () => {
   it('版本不一致被拒', () => {
     const { srv } = world();
     const inbox: S2C[] = [];
-    const s = srv.connect({ send: m => inbox.push(m), close: () => {} })!;
+    const s = srv.connect({ send: m => inbox.push(expectClientAccepts(m)), close: () => {} })!;
     srv.message(s, { t: 'hello', v: 1, name: 'x', uid: '' });
     expect(inbox[0]).toEqual({ t: 'error', text: '客户端版本与服务器不一致，请更新游戏' });
   });
@@ -334,7 +343,7 @@ describe('入站消息校验', () => {
     const logs: string[] = [];
     const { srv } = world(new MemoryStore(), { log: s => logs.push(s) });
     const inbox: S2C[] = [];
-    const s = srv.connect({ send: m => inbox.push(m), close: () => {} })!;
+    const s = srv.connect({ send: m => inbox.push(expectClientAccepts(m)), close: () => {} })!;
     for (const m of [undefined, null, [], { t: 'hello', v: PROTO_VERSION, name: '甲', uid: 'bad uid' }]) srv.message(s, m);
     expect(inbox).toEqual(Array(4).fill({ t: 'error', text: '消息格式错误' }));
     expect(logs.filter(l => l.includes('非法消息'))).toHaveLength(1);
@@ -924,7 +933,7 @@ describe('限流与违规（API-042 至 API-046）', () => {
     const { srv } = world();
     for (let i = 0; i < 2048; i++) srv.connect({ send: () => {}, close: () => {} });
     const inbox: S2C[] = [];
-    expect(srv.connect({ send: m => inbox.push(m), close: () => {} })).toBeNull();
+    expect(srv.connect({ send: m => inbox.push(expectClientAccepts(m)), close: () => {} })).toBeNull();
     expect(inbox).toEqual([{ t: 'error', text: '服务器繁忙，请稍后再试' }]);
   });
 });

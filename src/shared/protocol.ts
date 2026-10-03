@@ -21,6 +21,12 @@ export const SILENT_SECS = 25; // 客户端多久没收到服务端的任何消�
 export const CONFIRM_SECS = 15; // 匹配成功后双方确认的时限
 /** 连接建立后多久内必须完成握手（发来合法的 hello），否则以 CLOSE_CODE.helloTimeout 关闭（API-042） */
 export const HELLO_SECS = 10;
+/** 客户端发起连接后多久还没连上就放弃这次连接（API-051） */
+export const CONNECT_SECS = 8;
+/** 每局记录的对局动作（重连时以 sync 回放）最多几条；服务端超出后不再记录，客户端收到更长的 sync 按非法消息丢弃 */
+export const ACTS_MAX = 4096;
+/** over.winner 与对局胜方取这个值时表示和棋（1 黑胜，2 白胜） */
+export const DRAWN = 3;
 
 /**
  * WebSocket 关闭码（04-api.md 第 4.2 条，严禁使用表外的关闭码）：客户端据此决定是否重连、多久后重连。

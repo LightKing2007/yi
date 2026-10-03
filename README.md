@@ -320,14 +320,14 @@ src/
   audio/              合成音效与程序生成的背景音乐（在 Worker 中合成）
   online/config.ts    在线服务器地址（构建时由 VITE_YI_SERVER 读取）
   online/client.ts    联机会话：匹配及排位队列、配对确认、好友房间、对局中的各类请求；确认后的每一步交由本地规则执行
-  shared/protocol.ts  联机协议（客户端与服务端共用）、段位表及昵称清洗；parse.ts 入站消息的集中校验；reject.ts 不合法着法的提示文字
+  shared/protocol.ts  联机协议（客户端与服务端共用）、段位表及昵称清洗；parse.ts 联机消息的集中校验（服务端用 parseC2S，客户端用 parseS2C）；reject.ts 不合法着法的提示文字
   ui/                 Preact 界面：panels（菜单、对局、设置、更多）、online（联机对战）、widgets、styles.css、info（“更多”页面的文字）
   i18n/               多语言
 server/               rooms.ts 队列、配对、房间、对局与段位（与传输无关）；ratelimit.ts 限流与违规累计；store.ts 段位存档；host.ts 接入 WebSocket（可同时监听多个端口）；
                       files.ts 同一端口上的下载服务（page.ts 页面、pageStyle.ts 样式）；main.ts 入口
 electron/             桌面版主进程（窗口、单实例、匹配成功时的任务栏提醒、错误日志）及预加载脚本
 tests/                vitest：rules（规则与人机）、record（规则层与棋谱）、session（会话与座位）、protocol（消息校验与昵称清洗）、server（联机服务端）、ratelimit（限流）、
-                      store（段位存档）、client（联机客户端：断线、重连、服务器重启）、layers（依赖方向）、text（说明文字的译文、标点与更新日志）、
+                      store（段位存档）、client（联机客户端：断线、重连、服务器重启、非法消息）、layers（依赖方向）、text（说明文字的译文、标点与更新日志）、
                       ratchet（违规棘轮）、coverage（改动行覆盖率）、deps（许可证、依赖漏洞门禁、工作流的 Action 固定）
 scripts/              build-node（打包主进程与服务端）、make-fonts（生成内置字体子集）、page-assets（下载页面的图片与字体）、changelog（读取更新日志、生成发布说明）、
                       release（发版）、deploy.sh（上线）、shots.cjs 与 compare-shots.mjs（场景截图与逐像素对比）、smoke-app（安装后的冒烟检查）、
