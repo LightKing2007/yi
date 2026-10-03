@@ -17,5 +17,7 @@ yi-ratings.json.*
 .claude/
 .shots/
 .fonts-src/
+# 会话交接记录：只存在主仓库检出目录的根部，不纳入版本控制（编写规范见该文件开头）
+HANDOFF.md
 .cache/
 smoke*/
