@@ -191,7 +191,8 @@ function standardTable() {
       .map(cell => cell.trim());
     // “上述全部（除 …）”：表中排在前面的各层
     const layers = deps.startsWith('上述全部') ? [...table.keys()] : deps === '—' || deps.startsWith('无') ? [] : deps.split('、');
-    table.set(layer, [layers, pkgs.startsWith('无') ? [] : pkgs.split('、').map(cell => cell.replace(/`/g, ''))]);
+    // 包名写在反引号中，括号里的说明不算；“无”即没有
+    table.set(layer, [layers, [...pkgs.matchAll(/`([^`]+)`/g)].map(found => found[1])]);
   }
   return table;
 }
