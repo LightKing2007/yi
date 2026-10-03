@@ -38,7 +38,7 @@ function Notice({ style }: { style?: Record<string, string> }) {
     show = st.notice.length > 0 && age < 4;
   return (
     <div class="msg" style={{ opacity: show && age < 3.4 ? 1 : 0, ...style }}>
-      <Fit size={14} min={10}>
+      <Fit size={14} lines={2}>
         {show ? st.notice.map(tr).join('  ·  ') : ''}
       </Fit>
     </div>
@@ -114,17 +114,13 @@ function rankCard(type: number) {
           <Fit size={15}>{TF('%d 分', r.points)}</Fit>
         </div>
         <div class="dim" style={{ fontSize: '12px', marginTop: '3px' }}>
-          <Fit size={12} min={9}>
-            {games ? TF('%d 胜  ·  %d 负  ·  %d 和', r.win, r.loss, r.draw) : T('还没有排位记录')}
-          </Fit>
+          <Fit size={12}>{games ? TF('%d 胜  ·  %d 负  ·  %d 和', r.win, r.loss, r.draw) : T('还没有排位记录')}</Fit>
         </div>
         <div class="rank-bar">
           <div style={{ width: prog * 100 + '%' }} />
         </div>
         <div class="faint" style={{ fontSize: '11px', marginTop: '4px' }}>
-          <Fit size={11} min={9}>
-            {top ? T('已是最高段位') : TF('距 %s 还差 %d 分', T(RANKS[i + 1]), Math.ceil(840 + (i + 1) * 60 - r.points))}
-          </Fit>
+          <Fit size={11}>{top ? T('已是最高段位') : TF('距 %s 还差 %d 分', T(RANKS[i + 1]), Math.ceil(840 + (i + 1) * 60 - r.points))}</Fit>
         </div>
       </div>
     </div>
@@ -266,9 +262,7 @@ function searching(h: number) {
         {T(ranked ? '正在排位' : '正在匹配')}
       </h1>
       <div class="sub" style={{ height: '30px' }}>
-        <Fit size={14} min={10}>
-          {summary(queueRules(st.qMode, st.qType, st.qSize))}
-        </Fit>
+        <Fit size={14}>{summary(queueRules(st.qMode, st.qType, st.qSize))}</Fit>
       </div>
       {ranked && (
         <div class="sub" style={{ height: '26px' }}>
@@ -302,15 +296,11 @@ function found(h: number) {
         {T('找到对手')}
       </h1>
       <div class="sub" style={{ height: '30px' }}>
-        <Fit size={14} min={10}>
-          {summary(queueRules(st.qMode, st.qType, st.qSize))}
-        </Fit>
+        <Fit size={14}>{summary(queueRules(st.qMode, st.qType, st.qSize))}</Fit>
       </div>
       <div class="opp-card">
         <div class="opp-name">
-          <Fit size={24} min={14}>
-            {o.name}
-          </Fit>
+          <Fit size={24}>{o.name}</Fit>
         </div>
         {ranked && o.points !== undefined && <div class="opp-rank">{rankText(o.points)}</div>}
         <div class="count-bar">
@@ -318,7 +308,7 @@ function found(h: number) {
         </div>
         <div class="row-between" style={{ marginTop: '8px', fontSize: '13px' }}>
           <span class="dim" style={{ minWidth: 0 }}>
-            <Fit size={13} min={10}>
+            <Fit size={13} lines={2}>
               {T(status)}
             </Fit>
           </span>
@@ -348,9 +338,7 @@ function hosting(h: number) {
         {T('等待好友加入')}
       </h1>
       <div class="sub" style={{ height: '26px' }}>
-        <Fit size={14} min={10}>
-          {summary({ type: u.fType, size: u.fType ? u.fSize : 15, renju, moveTime: u.fTime })}
-        </Fit>
+        <Fit size={14}>{summary({ type: u.fType, size: u.fType ? u.fSize : 15, renju, moveTime: u.fTime })}</Fit>
       </div>
       <div class="sub" style={{ height: '20px', fontSize: '13px' }}>
         {T(side)}
@@ -460,23 +448,17 @@ export function OnlineGamePanel({ h }: { h: number }) {
         <Button label={T('离开')} height={30} style={{ width: '72px', flex: 'none', marginTop: '12px' }} onClick={net.askLeave} />
       </div>
       <div class="sub" style={{ height: '36px' }}>
-        <Fit size={14} min={10}>
-          {summary(st)}
-        </Fit>
+        <Fit size={14}>{summary(st)}</Fit>
       </div>
       <PlayerRow color={BLACK} />
       <div style={{ height: '6px' }} />
       <PlayerRow color={WHITE} />
       <Hair style={{ margin: '12px 0 24px' }} />
       <div class="status" style={{ height: '34px', alignItems: 'flex-start' }}>
-        <Fit size={22} min={14}>
-          {T(status)}
-        </Fit>
+        <Fit size={22}>{T(status)}</Fit>
       </div>
       <div class="sub" style={{ height: '30px' }}>
-        <Fit size={14} min={10}>
-          {info}
-        </Fit>
+        <Fit size={14}>{info}</Fit>
       </div>
       {st.over && ranked && st.rated && (
         <div class="rated">
@@ -490,7 +472,7 @@ export function OnlineGamePanel({ h }: { h: number }) {
           {st.leaveAsk ? (
             <>
               <div style={{ fontSize: '14px' }}>
-                <Fit size={14} min={10}>
+                <Fit size={14} lines={2}>
                   {T(ranked ? '对局还没结束，现在离开会判负并扣段位分。' : '对局还没结束，现在离开会判负。')}
                 </Fit>
               </div>
@@ -509,7 +491,7 @@ export function OnlineGamePanel({ h }: { h: number }) {
           ) : st.askIn ? (
             <>
               <div style={{ fontSize: '15px' }}>
-                <Fit size={15} min={10}>
+                <Fit size={15} lines={2}>
                   {TF(ASK_IN[st.askIn], Math.max(0, Math.floor(20 - (t - st.askInAt))))}
                 </Fit>
               </div>
@@ -520,7 +502,7 @@ export function OnlineGamePanel({ h }: { h: number }) {
             </>
           ) : (
             <div class="dim" style={{ fontSize: '14px' }}>
-              <Fit size={14} min={10}>
+              <Fit size={14} lines={2}>
                 {T(ASK_OUT[st.askOut!])}
               </Fit>
             </div>
@@ -544,8 +526,8 @@ export function OnlineGamePanel({ h }: { h: number }) {
             <Button label={T('继续对局')} disabled={!free} onClick={net.resume} />
             <Button label={T(st.agreed[st.myColor] ? '已确认' : '确认结果')} primary disabled={!free || st.agreed[st.myColor]} onClick={net.agree} />
           </div>
-          <div class="faint" style={{ fontSize: '12px', marginTop: '10px', height: '22px' }}>
-            <Fit size={12} min={9}>
+          <div class="faint" style={{ fontSize: '12px', marginTop: '10px', minHeight: '22px' }}>
+            <Fit size={12} lines={2}>
               {T(st.agreed[3 - st.myColor] ? '对方已确认结果' : '点击棋块可以标记或取消死子，双方都确认后结束')}
             </Fit>
           </div>

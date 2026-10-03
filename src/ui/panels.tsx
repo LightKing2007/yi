@@ -25,7 +25,7 @@ export function UpdateNote({ style }: { style?: Record<string, string> }) {
   };
   return (
     <div class={'update-note' + (u.url ? ' link' : '')} style={style} onClick={go}>
-      <Fit size={13} min={10}>
+      <Fit size={13} lines={2}>
         {TF(u.url ? '有新版本 %s，点这里下载' : '有新版本 %s', u.version)}
       </Fit>
     </div>
@@ -104,16 +104,12 @@ export function GamePanel({ h }: { h: number }) {
     <div style={{ height: h + 'px', position: 'relative', paddingTop: '4px' }}>
       <div class="row-between" style={{ height: '56px' }}>
         <h1 class="title" style={{ flex: '1 1 auto', minWidth: 0 }}>
-          <Fit size={44} min={26}>
-            {g.type === GameType.Gomoku ? T('五子棋') : T('围棋')}
-          </Fit>
+          <Fit size={44}>{g.type === GameType.Gomoku ? T('五子棋') : T('围棋')}</Fit>
         </h1>
         <Button label={T('菜单')} height={30} style={{ width: '64px', flex: 'none' }} onClick={() => goScreen(Screen.Menu)} />
       </div>
       <div class="sub" style={{ marginTop: '4px', height: '38px' }}>
-        <Fit size={14} min={11}>
-          {subtitle}
-        </Fit>
+        <Fit size={14}>{subtitle}</Fit>
       </div>
       <Seg items={[T('五子棋'), T('围棋')]} sel={g.type} onChange={m => requestNewGame(m, m === GameType.Gomoku ? 15 : g.goSize)} />
       <div style={{ height: '10px' }} />
@@ -137,14 +133,10 @@ export function GamePanel({ h }: { h: number }) {
       <Hair style={{ margin: `${vsComputer ? 28 : 32}px 0 30px` }} />
       <div class="status">
         {icon ? <StoneIcon color={icon} /> : null}
-        <Fit size={22} min={14}>
-          {status}
-        </Fit>
+        <Fit size={22}>{status}</Fit>
       </div>
       <div class="sub" style={{ marginTop: '14px', height: '34px' }}>
-        <Fit size={14} min={11}>
-          {info}
-        </Fit>
+        <Fit size={14}>{info}</Fit>
       </div>
       {g.type === GameType.Go && (
         <div class="caps" style={{ marginBottom: '6px' }}>
@@ -221,9 +213,7 @@ export function Row({ label, children }: { label: string; children: preact.Compo
   return (
     <div class="srow">
       <div class="label">
-        <Fit size={14} min={10}>
-          {label}
-        </Fit>
+        <Fit size={14}>{label}</Fit>
       </div>
       <div class="ctl">{children}</div>
     </div>
@@ -279,9 +269,10 @@ export function SettingsPanel({ h }: { h: number }) {
             <Seg height={34} items={[T('关闭'), T('简洁'), T('完整')]} sel={s.fx} onChange={v => setSettings({ fx: v })} />
           </Row>
           <OnOff label={T('屏幕震动')} on={s.shake} set={v => setSettings({ shake: v })} />
-          <Row label={T('界面大小')}>
-            <Seg height={34} items={[T('小'), T('标准'), T('大'), T('特大')]} sel={scaleIdx} onChange={v => setSettings({ uiScale: SCALES[v] })} />
-          </Row>
+          <div class="swide">
+            <div class="label">{T('界面大小')}</div>
+            <Seg items={[T('小'), T('标准'), T('大'), T('特大')]} sel={scaleIdx} onChange={v => setSettings({ uiScale: SCALES[v] })} />
+          </div>
           <div class="swide">
             <div class="label">{T('光影')}</div>
             <Seg items={[T('无'), T('黄昏'), T('晨曦'), T('月夜'), T('竹影')]} sel={s.light} onChange={v => setSettings({ light: v })} />

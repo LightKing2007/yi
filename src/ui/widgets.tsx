@@ -1,23 +1,41 @@
 /** 界面控件：按钮、分段选择（带回弹的滑块）、滑条、输入框、棋子小图标、自动缩放的文字 */
 import type { ComponentChildren } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
+import { logWarn } from '../app/native';
 import { sfx } from '../audio';
 
-/** 放进容器宽度：先把字号缩到 min 为止，还放不下就截短补“…”（各语言同一按钮的文字长短差很多） */
-export function Fit({ children, size, min = 11, class: cls = '' }: { children: ComponentChildren; size: number; min?: number; class?: string }) {
+/** 开发模式下已报告过的文字：同一处只报告一次 */
+const reported = new Set<string>();
+/** 等字体加载完、入场动画结束后再量，免得把后备字体或动画中的宽度当成放不下 */
+const SETTLE_MS = 500;
+/** 宽高按整数像素取值，留出半个像素的舍入误差 */
+const ROUNDING_PX = 0.5;
+
+/** 开发模式：文字放不下时报告（开发时日志接口打印到控制台）。单行看宽度；两行看高度（超出两行时被截断） */
+function reportOverflow(el: HTMLElement, lines: number) {
+  const text = el.textContent ?? '';
+  const over = lines === 1 ? el.scrollWidth > el.clientWidth + ROUNDING_PX : el.scrollHeight > el.clientHeight + ROUNDING_PX;
+  if (!over || reported.has(text)) return;
+  reported.add(text);
+  logWarn('fit', `放不下：${text}`);
+}
+
+/**
+ * 按设计字号排版的文字（I18N-022）：严禁缩小字号。lines 为 1 时只占一行（按钮、选项、标题、标签），为 2 时至多两行（说明性文字）。
+ * 放不下时截断补“…”只是兜底；开发模式下经日志接口报告“[fit] 放不下”，画面检查据此发现需要改写译文或调整布局的地方（I18N-020）
+ */
+export function Fit({ children, size, lines = 1, class: cls = '' }: { children: ComponentChildren; size: number; lines?: 1 | 2; class?: string }) {
   const ref = useRef<HTMLSpanElement>(null);
+  const checked = useRef<string | null>(null);
   useLayoutEffect(() => {
     const el = ref.current;
-    if (!el) return;
-    let s = size;
-    el.style.fontSize = s + 'px';
-    while (s > min && el.scrollWidth > el.clientWidth + 0.5) {
-      s -= 0.5;
-      el.style.fontSize = s + 'px';
-    }
+    if (!import.meta.env.DEV || !el || checked.current === el.textContent) return;
+    checked.current = el.textContent; // 面板每帧都会重绘，文字变了才重新检查
+    // 只是开发时的报告，失败了也不影响界面，所以不等待
+    void document.fonts.ready.then(() => setTimeout(() => reportOverflow(el, lines), SETTLE_MS));
   });
   return (
-    <span ref={ref} class={'fit ' + cls} style={{ fontSize: size + 'px' }}>
+    <span ref={ref} class={'fit ' + (lines === 2 ? 'two ' : '') + cls} style={{ fontSize: size + 'px' }}>
       {children}
     </span>
   );
@@ -115,9 +133,7 @@ export function Seg({
               }
             }}
           >
-            <Fit size={fontSize} min={10}>
-              {it}
-            </Fit>
+            <Fit size={fontSize}>{it}</Fit>
           </div>
         );
       })}

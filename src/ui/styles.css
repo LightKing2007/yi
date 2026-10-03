@@ -131,7 +131,7 @@ canvas {
   left: 0;
   top: 0;
   zoom: var(--u);
-  width: 300px;
+  width: 320px; /* 与 src/render/layout.ts 的 PANEL_W 一致 */
   pointer-events: auto;
 }
 .panel.entering {
@@ -304,6 +304,14 @@ canvas {
   text-overflow: ellipsis;
   max-width: 100%;
 }
+/* 说明性文字至多两行（I18N-020） */
+.fit.two {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  white-space: normal;
+}
 
 .seg {
   position: relative;
@@ -325,7 +333,7 @@ canvas {
   font-size: 14px;
   color: var(--dim);
   cursor: pointer;
-  padding: 0 5px;
+  padding: 0 3px;
 }
 .seg .opt:hover:not(.on) {
   background: var(--hover);
@@ -423,12 +431,12 @@ canvas {
   height: 34px;
 }
 .swide {
-  margin: 8px 0 12px;
+  margin: 4px 0 10px;
 }
 .swide .label {
   font-size: 14px;
   color: var(--dim);
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 .swide .seg {
   height: 34px;
