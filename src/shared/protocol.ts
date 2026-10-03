@@ -23,6 +23,16 @@ export const CONFIRM_SECS = 15; // 匹配成功后双方确认的时限
 export const HELLO_SECS = 10;
 /** 客户端发起连接后多久还没连上就放弃这次连接（API-051） */
 export const CONNECT_SECS = 8;
+/** 重连退避的基数（API-050）：第 n 次重连前等待 random(0, min(上限, RETRY_BASE_SECS × 2^n)) 秒 */
+export const RETRY_BASE_SECS = 1;
+/** 对局保留期内重连退避的上限：GRACE_SECS 内至少能尝试 GRACE_SECS / RETRY_GRACE_MAX_SECS = 12 次（API-050） */
+export const RETRY_GRACE_MAX_SECS = 5;
+/** 连接保持这么久以后，重连次数归零（API-050） */
+export const RETRY_RESET_SECS = 60;
+/** 因累计违规被断开（CLOSE_CODE.policy）后，等这么久再重连（04-api.md 第 4.2 条） */
+export const POLICY_RETRY_SECS = 30;
+/** 因服务端过载被断开（CLOSE_CODE.overload）后，首次重连至少等这么久（04-api.md 第 4.2 条） */
+export const OVERLOAD_RETRY_MIN_SECS = 5;
 /** 每局记录的对局动作（重连时以 sync 回放）最多几条；服务端超出后不再记录，客户端收到更长的 sync 按非法消息丢弃 */
 export const ACTS_MAX = 4096;
 /** over.winner 与对局胜方取这个值时表示和棋（1 黑胜，2 白胜） */

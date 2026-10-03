@@ -6,19 +6,22 @@
  */
 import { signal } from '@preact/signals';
 import { now } from '../core/clock';
-import { GameType } from '../core/types';
+import { GameType, other } from '../core/types';
 import { T, TF } from '../i18n';
 import { sfx } from '../audio';
 import { setSettings, settings } from '../app/settings';
 import { game, screen, Screen, VERSION, boardView, session, uiTick } from '../app/state';
 import { ONLINE_SERVER } from './config';
-import { logWarn, native } from '../app/native';
+import { logError, logWarn, native } from '../app/native';
 import { isInvalid, parseS2C } from '../shared/parse';
+import { isFaultClose, retryWaitSecs } from './retry';
 import {
+  CLOSE_CODE,
   CONNECT_SECS,
   GRACE_SECS,
   PING_SECS,
   PROTO_VERSION,
+  RETRY_RESET_SECS,
   SILENT_SECS,
   UID_PATTERN,
   cleanName,
@@ -247,18 +250,18 @@ export function connect() {
     if (ws !== sock) return;
     opened = true;
     clearTimeout(timer);
-    st.lastRecv = now();
+    st.lastRecv = openedAt = now();
     sock.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, name: nick(), uid: uid(), token: st.reconnecting ? st.token : undefined } satisfies C2S));
     st.pingAt = now() + PING_SECS;
   };
   sock.onmessage = ev => {
     if (ws === sock) receive(ev.data);
   };
-  sock.onclose = () => {
+  sock.onclose = ev => {
     if (ws !== sock) return;
     clearTimeout(timer);
     ws = null;
-    lost();
+    lost(ev.code);
   };
   changed();
 }
@@ -285,15 +288,48 @@ function receive(data: unknown) {
   changed();
 }
 
-/** 连接断了：对局中自动重连；匹配、等待中的回到大厅并提示 */
-function lost() {
-  if (st.phase === Phase.Playing && !st.over && st.token) {
+/** 本次连接建立的时刻（没有建立时为 0），以及对局中连续重连的次数（API-050） */
+let openedAt = 0,
+  attempts = 0;
+/** 重连间隔用的随机数；测试时换成固定的值，使重连时刻确定（TST-020） */
+let random: () => number = Math.random;
+export function setRetryRandom(fn: () => number) {
+  random = fn;
+}
+
+/** 不再重连（离开联机、放弃这一局）：下一次断线从第 1 次重连算起 */
+function resetRetry() {
+  openedAt = attempts = 0;
+}
+
+/** 记一次重连，返回这是第几次；刚断开的连接保持了 RETRY_RESET_SECS 以上时从头算起 */
+function nextAttempt() {
+  if (openedAt && now() - openedAt >= RETRY_RESET_SECS) attempts = 0;
+  openedAt = 0;
+  return ++attempts;
+}
+
+/** 不再重连时给玩家看的原因 */
+function lostText(code?: number): Msg {
+  if (code === CLOSE_CODE.version) return ['客户端版本与服务器不一致，请更新游戏'];
+  if (code === CLOSE_CODE.policy) return ['操作过于频繁，请稍后再试'];
+  return ['网络连接失败，请检查网络后重试'];
+}
+
+/**
+ * 连接断了。code 为关闭码，连接建不起来或超时时没有。对局中按关闭码决定是否重连、多久后重连（retry.ts）；
+ * 其余情况，以及不应重连的关闭码，回到大厅并提示
+ */
+function lost(code?: number) {
+  if (isFaultClose(code)) logError('联机', `连接被服务端以关闭码 ${code} 关闭，不再重连`);
+  const wait = st.phase === Phase.Playing && !st.over && st.token ? retryWaitSecs(code, nextAttempt(), random) : null;
+  if (wait !== null) {
     if (!st.reconnecting) {
       st.reconnecting = true;
       st.lostAt = now();
       note(['连接中断，正在重连…']);
     }
-    st.retryAt = now() + 2;
+    st.retryAt = now() + wait;
     changed();
     return;
   }
@@ -303,7 +339,8 @@ function lost() {
   st.busy = false;
   st.opp = null;
   pending = [];
-  st.error = ['网络连接失败，请检查网络后重试'];
+  resetRetry();
+  st.error = lostText(code);
   if (wasBusy) note(st.error);
   changed();
 }
@@ -311,6 +348,7 @@ function lost() {
 export function disconnect() {
   netClose();
   pending = [];
+  resetRetry();
   st.phase = Phase.Off;
   st.reconnecting = false;
   st.resumeBy = 0;
@@ -580,51 +618,76 @@ function handle(m: S2C) {
 let wasInGame = false,
   lastHalf = 0;
 
-export function update(t: number) {
-  if (st.reconnecting && !ws) {
-    if (t - st.lostAt > GRACE_SECS) {
-      // 等太久了，放弃这一局
-      st.reconnecting = false;
-      st.phase = Phase.Off;
-      st.error = ['网络连接失败，请检查网络后重试'];
-      if (!st.over) applyOver(3 - st.myColor, 'disconnect');
-    } else if (t >= st.retryAt) {
-      st.retryAt = t + 2;
-      connect();
-    }
+/** 每帧调用：重连、心跳、静默断开检测、各种限时，以及多人游戏界面的定时重绘 */
+export function update(time: number) {
+  retryTick(time);
+  heartbeatTick(time);
+  if (st.resumeBy && time > st.resumeBy) resumeFailed();
+  foundTick(time);
+  leftGameTick(time);
+  redrawTick(time);
+}
+
+/** 对局中断线：到点就重连；超过对局保留期就放弃这一局 */
+function retryTick(time: number) {
+  if (!st.reconnecting || ws) return;
+  if (time - st.lostAt <= GRACE_SECS) {
+    if (time >= st.retryAt) connect();
+    return;
   }
-  if (ws && ws.readyState === WebSocket.OPEN && t >= st.pingAt) {
+  st.reconnecting = false;
+  st.phase = Phase.Off;
+  st.error = ['网络连接失败，请检查网络后重试'];
+  resetRetry();
+  if (!st.over) applyOver(other(st.myColor), 'disconnect');
+}
+
+/** 按时发心跳；很久没收到服务端的任何消息（连心跳回应都没有）时，连接多半已经静默断开，主动关掉，对局中会自动重连 */
+function heartbeatTick(time: number) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  if (time >= st.pingAt) {
     send({ t: 'ping' });
-    st.pingAt = t + PING_SECS;
+    st.pingAt = time + PING_SECS;
   }
-  // 很久没收到服务端的任何消息（连心跳回应都没有）：连接多半已经静默断开，主动关掉，对局中会自动重连
-  if (ws && ws.readyState === WebSocket.OPEN && st.lastRecv && t - st.lastRecv > SILENT_SECS) {
+  if (st.lastRecv && time - st.lastRecv > SILENT_SECS) {
     netClose();
     lost();
   }
-  if (st.resumeBy && t > st.resumeBy) resumeFailed();
-  // 确认超时（服务端也会判，这里只是保证界面不会停在“找到对手”）
-  if (st.phase === Phase.Found && t - st.foundAt > st.foundSecs + 3) {
+}
+
+/** 配对确认的时限过后多等几秒仍停在“找到对手”，就回到大厅（服务端也会判，这里只是保证界面不会停住） */
+const FOUND_SLACK_SECS = 3;
+function foundTick(time: number) {
+  if (st.phase === Phase.Found && time - st.foundAt > st.foundSecs + FOUND_SLACK_SECS) {
     st.phase = Phase.Lobby;
     st.opp = null;
     changed();
   }
-  // 联机对局中连接彻底断了：回到多人游戏页
+}
+
+/** 最近一条提示在这么多秒内仍算新的：离开对局时不用断线提示覆盖它 */
+const NOTICE_FRESH_SECS = 4;
+/** 联机对局中连接彻底断了：回到多人游戏页 */
+function leftGameTick(time: number) {
   if (wasInGame && !inGame() && screen.value === Screen.Game) {
-    if (!st.notice.length || t - st.noticeAt > 4) note(st.error ?? ['连接已断开']);
+    if (!st.notice.length || time - st.noticeAt > NOTICE_FRESH_SECS) note(st.error ?? ['连接已断开']);
     goScreen(Screen.Online);
   }
   wasInGame = inGame();
-  // 倒计时、提示淡出：多人游戏的界面每半秒重绘一次
-  const half = Math.floor(t * 2);
+}
+
+/** 倒计时、提示淡出：多人游戏的界面每半秒重绘一次 */
+function redrawTick(time: number) {
+  const half = Math.floor(time * 2);
   if (half !== lastHalf && (screen.value === Screen.Online || inGame())) {
     lastHalf = half;
     changed();
   }
 }
 
-// 页面在后台时 requestAnimationFrame 会停下：心跳、重连另用定时器驱动
-setInterval(() => update(now()), 250);
+/** 页面在后台时 requestAnimationFrame 会停下：心跳、重连另用这个间隔（毫秒）的定时器驱动 */
+const TICK_MS = 250;
+setInterval(() => update(now()), TICK_MS);
 
 // ---------------- 匹配、排位、好友房间 ----------------
 
