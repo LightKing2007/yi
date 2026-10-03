@@ -19,12 +19,35 @@
   font-weight: 700 900;
   font-display: block;
 }
+/* 拉丁字母、数字与中点在三个平台上统一使用上面的附带字体，汉字仍优先使用系统字体：同一段文字在各平台宽度一致，
+   界面文字才能按设计字号放下（I18N-022）。只列子集中有的字符，同一字体文件不会重复下载 */
+@font-face {
+  font-family: 'Yi Latin';
+  src: url('./assets/fonts/yi-sans-400.woff2') format('woff2');
+  font-weight: 100 800;
+  font-display: block;
+  unicode-range: U+0020-007E, U+00B7;
+}
+@font-face {
+  font-family: 'Yi Latin Serif';
+  src: url('./assets/fonts/yi-serif-400.woff2') format('woff2');
+  font-weight: 100 600;
+  font-display: block;
+  unicode-range: U+0020-007E, U+00B7;
+}
+@font-face {
+  font-family: 'Yi Latin Serif';
+  src: url('./assets/fonts/yi-serif-900.woff2') format('woff2');
+  font-weight: 700 900;
+  font-display: block;
+  unicode-range: U+0020-007E, U+00B7;
+}
 
 :root {
   --u: 1;
-  --sans: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Yi Sans', 'Noto Sans CJK SC', 'Source Han Sans SC', system-ui, sans-serif;
+  --sans: 'Yi Latin', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Yi Sans', 'Noto Sans CJK SC', 'Source Han Sans SC', system-ui, sans-serif;
   --serif:
-    'Songti SC', 'STSong', 'Yi Serif', 'SimSun', 'Noto Serif CJK SC', 'Source Han Serif SC', serif; /* Windows 上用附带的思源宋体，不用系统强行加粗的宋体 */
+    'Yi Latin Serif', 'Songti SC', 'STSong', 'Yi Serif', 'SimSun', 'Noto Serif CJK SC', 'Source Han Serif SC', serif; /* Windows 上用附带的思源宋体，不用系统强行加粗的宋体 */
   --text: rgb(38 36 33);
   --dim: rgb(125 119 111);
   --faint: rgb(172 166 158);
