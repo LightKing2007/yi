@@ -1,4 +1,4 @@
-/** 游戏里的说明文字（规则、帮助、更新日志、关于）：都有文言和英文译文，标点合乎 GB/T 15834，更新日志的版本号与 package.json 对得上（实现 I18N-060、I18N-061、I18N-064、I18N-070、I18N-082 及 I18N-010 的一部分，见 docs/standards/09-text-and-i18n.md） */
+/** 游戏里的说明文字（规则、帮助、更新日志、关于）：标点合乎 GB/T 15834，更新日志的版本号与 package.json 对得上（实现 I18N-060、I18N-061、I18N-064、I18N-070、I18N-082，见 docs/standards/09-text-and-i18n.md；译文是否齐全由 i18n.test.ts 检查） */
 import fs from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { TABLE } from '../src/i18n/table';
@@ -7,7 +7,6 @@ import { INFO_PAGES, releasedLog, type InfoLine } from '../src/ui/info';
 import { changelog } from '../scripts/changelog.mjs';
 
 const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
-const keys = new Set(TABLE.map(r => r[0]));
 const han = (s: string) => /[一-鿿]/.test(s);
 const cmp = (a: string, b: string) => {
   const x = a.split('.').map(Number),
@@ -17,15 +16,6 @@ const cmp = (a: string, b: string) => {
 };
 
 describe('说明文字', () => {
-  it('每一条都有文言和英文译文', () => {
-    const missing: string[] = [];
-    for (const page of INFO_PAGES)
-      for (const l of page.lines) {
-        for (const s of l.slice(1) as string[]) if (han(s) && !keys.has(s)) missing.push(s);
-      }
-    expect(missing).toEqual([]);
-  });
-
   it('中文标点合乎 GB/T 15834：不混用半角标点，引号与括号成对，段落以句号结尾', () => {
     const bad: string[] = [];
     for (const page of INFO_PAGES)
