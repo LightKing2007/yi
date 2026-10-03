@@ -21,6 +21,7 @@ import {
   GRACE_SECS,
   PING_SECS,
   PROTO_VERSION,
+  RESUME_WAIT_SECS,
   RETRY_RESET_SECS,
   SILENT_SECS,
   UID_PATTERN,
@@ -475,142 +476,161 @@ function alertFound() {
   native()?.attention();
 }
 
-function handle(m: S2C) {
-  const t = now(),
-    g = game;
-  switch (m.t) {
-    case 'welcome': {
-      st.token = m.token;
-      st.ratings = m.ratings;
-      saveUpdate(m.latest, m.url);
-      if (st.reconnecting) {
-        // 随后应收到 start 与 sync；老版本服务端找不回对局时什么也不说，所以限时等
-        st.reconnecting = false;
-        st.resumeBy = t + 3;
-        note(['已重新连上']);
-      } else if (st.phase === Phase.Connecting) st.phase = Phase.Lobby;
-      const out = pending;
-      pending = [];
-      for (const q of out) send(q);
-      break;
-    }
-    case 'queued':
-      st.phase = Phase.Queue;
-      st.qMode = m.mode;
-      st.qType = m.type;
-      st.qSize = m.size;
-      break;
-    case 'found':
-      st.phase = Phase.Found;
-      st.opp = m.opp;
-      st.foundAt = t;
-      st.foundSecs = m.secs;
-      st.accepted = false;
-      st.oppAccepted = false;
-      alertFound();
-      break;
-    case 'accepted':
-      st.oppAccepted = true;
-      break;
-    case 'unmatched':
-      st.opp = null;
-      if (m.requeued) {
-        st.phase = Phase.Queue;
-        note([m.reason], ['继续为你寻找']);
-      } else {
-        if (st.phase === Phase.Found && !st.accepted) note(['没有及时确认，已退出匹配']);
-        st.phase = Phase.Lobby;
-      }
-      break;
-    case 'created':
-      st.code = m.code;
-      st.phase = Phase.Hosting;
-      st.busy = false;
-      break;
-    case 'joinNo':
-      st.busy = false;
-      note([m.reason]);
-      break;
-    case 'start':
-      st.resumeBy = 0;
-      onStart(m);
-      break;
-    case 'resumeFailed':
-      resumeFailed();
-      break;
-    case 'sync':
-      replay(m.acts);
-      bump();
-      break;
-    case 'moved':
-      g.play(m.x, m.y);
-      boardView.msg = null;
-      bump();
-      break;
-    case 'passed':
-      g.pass();
-      st.agreed = [false, false, false];
-      bump();
-      break;
-    case 'turn':
-      st.toMove = m.color;
-      st.turnEnds = m.secs >= 0 ? t + m.secs : 0;
-      break;
-    case 'ask':
-      st.askIn = m.kind;
-      st.askInAt = t;
-      st.turnEnds = 0;
-      break; // 等回应时服务端暂停计时，回应后会重新发 turn
-    case 'answer':
-      st.askOut = null;
-      note([ANSWER[m.kind]?.[m.ok ? 0 : 1] ?? '']);
-      break;
-    case 'undone':
-      for (let i = 0; i < m.n; i++) g.undo();
-      st.askIn = null;
-      bump();
-      break;
-    case 'marked':
-      g.toggleDead(m.x, m.y);
-      st.agreed = [false, false, false];
-      bump();
-      break;
-    case 'agreed':
-      if (m.color === 1 || m.color === 2) st.agreed[m.color] = true;
-      break;
-    case 'resumed':
-      g.resume();
-      st.agreed = [false, false, false];
-      bump();
-      break;
-    case 'over':
-      applyOver(m.winner, m.reason);
-      break;
-    case 'rated':
-      st.rated = { delta: m.delta, rating: m.rating };
-      if (m.type) st.ratings.go = m.rating;
-      else st.ratings.gomoku = m.rating;
-      break;
-    case 'peer':
-      st.peerOnline = m.online;
-      st.peerBackBy = m.wait ? t + m.wait : 0;
-      note([m.online ? '对方回来了' : '对方掉线了，正在等待重连']);
-      break;
-    case 'left':
-      st.oppLeft = true;
-      st.askIn = st.askOut = null;
-      note(['对方已离开房间']);
-      break;
-    case 'info':
-      note([m.text]);
-      st.askOut = null;
-      break; // info 只在请求被拒时出现：申请没发出去
-    case 'error':
-      note([m.text]);
-      st.busy = false;
-      if (st.phase >= Phase.Queue && st.phase < Phase.Playing) st.phase = Phase.Lobby;
-      break;
+/** 服务端的一类消息 */
+type ServerMsg<K extends S2C['t']> = Extract<S2C, { t: K }>;
+/** 一类消息的处理函数；time 为收到时的本地时钟 */
+type Handler<K extends S2C['t']> = (m: ServerMsg<K>, time: number) => void;
+
+/** 连上（或重连上）服务器：记下令牌与段位，发出连上之前存着的消息 */
+function onWelcome(m: ServerMsg<'welcome'>, time: number) {
+  st.token = m.token;
+  st.ratings = m.ratings;
+  saveUpdate(m.latest, m.url);
+  if (st.reconnecting) {
+    // 随后应收到 start 与 sync；老版本服务端找不回对局时什么也不说，所以限时等
+    st.reconnecting = false;
+    st.resumeBy = time + RESUME_WAIT_SECS;
+    note(['已重新连上']);
+  } else if (st.phase === Phase.Connecting) st.phase = Phase.Lobby;
+  const out = pending;
+  pending = [];
+  for (const msg of out) send(msg);
+}
+
+/** 找到对手，等双方确认 */
+function onFound(m: ServerMsg<'found'>, time: number) {
+  st.phase = Phase.Found;
+  st.opp = m.opp;
+  st.foundAt = time;
+  st.foundSecs = m.secs;
+  st.accepted = false;
+  st.oppAccepted = false;
+  alertFound();
+}
+
+/** 这次配对作罢：已自动继续匹配时回到队列，否则回到大厅 */
+function onUnmatched(m: ServerMsg<'unmatched'>) {
+  st.opp = null;
+  if (m.requeued) {
+    st.phase = Phase.Queue;
+    note([m.reason], ['继续为你寻找']);
+    return;
   }
+  if (st.phase === Phase.Found && !st.accepted) note(['没有及时确认，已退出匹配']);
+  st.phase = Phase.Lobby;
+}
+
+/** 对局状态变了（落子、停着、点目……）：点目时双方的确认作废，界面重绘 */
+function scoringChanged() {
+  st.agreed = [false, false, false];
+  bump();
+}
+
+/** 各类服务端消息的处理（消息已经 parseS2C 校验，API-016）。每类一项：协议新增消息而这里漏写时，类型检查不通过 */
+const HANDLERS: { [K in S2C['t']]: Handler<K> } = {
+  welcome: onWelcome,
+  resumeFailed,
+  pong: () => {},
+  queued: m => {
+    st.phase = Phase.Queue;
+    st.qMode = m.mode;
+    st.qType = m.type;
+    st.qSize = m.size;
+  },
+  found: onFound,
+  accepted: () => {
+    st.oppAccepted = true;
+  },
+  unmatched: onUnmatched,
+  created: m => {
+    st.code = m.code;
+    st.phase = Phase.Hosting;
+    st.busy = false;
+  },
+  joinNo: m => {
+    st.busy = false;
+    note([m.reason]);
+  },
+  start: m => {
+    st.resumeBy = 0;
+    onStart(m);
+  },
+  sync: m => {
+    replay(m.acts);
+    bump();
+  },
+  moved: m => {
+    game.play(m.x, m.y);
+    boardView.msg = null;
+    bump();
+  },
+  passed: () => {
+    game.pass();
+    scoringChanged();
+  },
+  turn: (m, time) => {
+    st.toMove = m.color;
+    st.turnEnds = m.secs >= 0 ? time + m.secs : 0;
+  },
+  // 等回应时服务端暂停计时，回应后会重新发 turn
+  ask: (m, time) => {
+    st.askIn = m.kind;
+    st.askInAt = time;
+    st.turnEnds = 0;
+  },
+  answer: m => {
+    st.askOut = null;
+    note([ANSWER[m.kind][m.ok ? 0 : 1]]);
+  },
+  undone: m => {
+    for (let i = 0; i < m.n; i++) game.undo();
+    st.askIn = null;
+    bump();
+  },
+  marked: m => {
+    game.toggleDead(m.x, m.y);
+    scoringChanged();
+  },
+  agreed: m => {
+    st.agreed[m.color] = true;
+  },
+  resumed: () => {
+    game.resume();
+    scoringChanged();
+  },
+  over: m => applyOver(m.winner, m.reason),
+  rated: m => {
+    st.rated = { delta: m.delta, rating: m.rating };
+    if (m.type) st.ratings.go = m.rating;
+    else st.ratings.gomoku = m.rating;
+  },
+  peer: (m, time) => {
+    st.peerOnline = m.online;
+    st.peerBackBy = m.wait ? time + m.wait : 0;
+    note([m.online ? '对方回来了' : '对方掉线了，正在等待重连']);
+  },
+  left: () => {
+    st.oppLeft = true;
+    st.askIn = st.askOut = null;
+    note(['对方已离开房间']);
+  },
+  // info 只在请求被拒时出现：申请没发出去
+  info: m => {
+    note([m.text]);
+    st.askOut = null;
+  },
+  error: m => {
+    note([m.text]);
+    st.busy = false;
+    if (st.phase >= Phase.Queue && st.phase < Phase.Playing) st.phase = Phase.Lobby;
+  },
+};
+
+/** 按消息类型交给对应的处理函数 */
+function handle(m: S2C) {
+  // 表中 m.t 一项的处理函数接收的正是 t 为 m.t 的消息；TypeScript 无法把这种对应关系表达为类型，故在此统一放宽
+  const fn = HANDLERS[m.t] as (msg: S2C, time: number) => void;
+  fn(m, now());
 }
 
 // ---------------- 每帧 ----------------

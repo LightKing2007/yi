@@ -63,8 +63,7 @@ export default defineConfig({
         'src/shared/**': { lines: 90, branches: 85 },
         'server/**': { lines: 85, branches: 75 },
         'src/session/**': { lines: 85, branches: 75 },
-        // TST-010 要求行 75%、分支 65%；现状不足，暂以现状为下限，整改项 P1-06 补齐测试后提到要求值
-        'src/online/**': { lines: 56, branches: 41 },
+        'src/online/**': { lines: 75, branches: 65 },
       },
     },
   },

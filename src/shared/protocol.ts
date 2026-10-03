@@ -23,6 +23,8 @@ export const CONFIRM_SECS = 15; // 匹配成功后双方确认的时限
 export const HELLO_SECS = 10;
 /** 客户端发起连接后多久还没连上就放弃这次连接（API-051） */
 export const CONNECT_SECS = 8;
+/** 重连上以后多久内应收到原来的对局（start 与 sync）：老版本服务端找不回对局时什么也不说，过时即视为对局已不在 */
+export const RESUME_WAIT_SECS = 3;
 /** 重连退避的基数（API-050）：第 n 次重连前等待 random(0, min(上限, RETRY_BASE_SECS × 2^n)) 秒 */
 export const RETRY_BASE_SECS = 1;
 /** 对局保留期内重连退避的上限：GRACE_SECS 内至少能尝试 GRACE_SECS / RETRY_GRACE_MAX_SECS = 12 次（API-050） */
