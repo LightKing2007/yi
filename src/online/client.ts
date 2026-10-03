@@ -4,13 +4,12 @@
  * 对局本身仍是本地的 game：服务端每确认一手（moved、undone……），这里就调用同一套规则照做，
  * 所以落子、提子、悔棋、点目的动画与单机完全一样。协议见 shared/protocol.ts。
  */
-import { signal } from '@preact/signals';
 import { now } from '../core/clock';
 import { GameType, other } from '../core/types';
 import { T, TF } from '../i18n';
 import { sfx } from '../audio';
 import { setSettings, settings } from '../app/settings';
-import { game, screen, Screen, VERSION, boardView, session, uiTick } from '../app/state';
+import { game, netTick, screen, Screen, VERSION, boardView, session, uiTick } from '../app/state';
 import { ONLINE_SERVER } from './config';
 import { logError, logWarn, native } from '../app/native';
 import { loadStored, saveStored, type StoreSpec } from '../app/storage';
@@ -57,8 +56,8 @@ export enum Phase {
 export type Msg = [string, ...(string | number)[]];
 export const tr = (m: Msg) => TF(m[0], ...m.slice(1));
 
-/** 界面与联机状态有关的部分需要重绘时递增 */
-export const netTick = signal(0);
+/** 界面与联机状态有关的部分需要重绘时递增（信号定义在 app/state，界面仍从这里取用） */
+export { netTick };
 const changed = () => {
   netTick.value++;
 };
