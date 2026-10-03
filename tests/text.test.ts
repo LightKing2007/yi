@@ -1,6 +1,6 @@
 /**
- * 面向玩家的文字：标点合乎 GB/T 15834，更新日志的版本号与 package.json 对得上（实现 I18N-060、I18N-061、I18N-064、I18N-070、I18N-082，
- * 见 docs/standards/09-text-and-i18n.md；译文是否齐全由 i18n.test.ts 检查）。
+ * 面向玩家的文字：标点合乎 GB/T 15834，更新日志的版本号与 package.json 对得上（实现 I18N-060、I18N-061、I18N-064、I18N-070，
+ * 见 docs/standards/09-text-and-i18n.md；译文是否齐全与英文的写法由 i18n.test.ts 检查）。
  * 标点的检查范围按 I18N-011：“更多”页面、译文表中的全部中文原文与文言译文（含禁着提示与服务端下发的提示）、安装程序文字、下载页面文字。
  * 错误码表随整改项 P2-03 建立，届时其原文同样是译文表的键，由译文表的检查覆盖。
  */
@@ -53,11 +53,6 @@ describe('说明文字', () => {
         return texts.flatMap(text => (line[0] === 'P' ? paragraphIssues(text) : punctuationIssues(text)));
       }),
     );
-    expect(bad).toEqual([]);
-  });
-
-  it('英文译文里没有长破折号', () => {
-    const bad = TABLE.filter(r => /[—–]/.test(r[2])).map(r => r[2]);
     expect(bad).toEqual([]);
   });
 });
