@@ -45,6 +45,8 @@ export const view = {
 
 /** 界面需要重绘时递增（对局状态、提示、电脑思考等变化） */
 export const uiTick = signal(0);
+/** 界面中与联机状态有关的部分需要重绘时递增（由联机模块写；联机模块不直接使用界面库，ARC-012） */
+export const netTick = signal(0);
 
 /** 该界面下两只棋罐是否摆在棋盘上（对局时移开） */
 export const bowlsShown = (s: Screen) => s !== Screen.Game;

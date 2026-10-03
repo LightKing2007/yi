@@ -332,7 +332,7 @@ electron/             桌面版主进程（窗口、单实例、匹配成功时�
 tests/                vitest：rules（规则与人机）、record（规则层与棋谱）、session（会话与座位）、protocol（消息校验与昵称清洗）、server（联机服务端）、ratelimit（限流）、
                       store（段位存档）、client（联机客户端：断线、重连、服务器重启、非法消息）、lobby（联机大厅：匹配、排位、好友房间）、
                       onlineGame（联机对局中的请求、点目与回放）、reconnect 与 retry（断线重连的退避与关闭码）、storage（本地存储与设置）、updateNote（新版本提示的本地记录）、
-                      fakeNet（联机客户端测试用的假网络与浏览器环境）、layers（依赖方向）、text（说明文字的译文、标点与更新日志）、
+                      fakeNet（联机客户端测试用的假网络与浏览器环境）、layers 与 importGraph（分层与第三方包检查，以语法树找出四种引用形式）、text（说明文字的译文、标点与更新日志）、
                       ratchet（违规棘轮）、coverage（改动行覆盖率）、deps（许可证、依赖漏洞门禁、工作流的 Action 固定）
 scripts/              build-node（打包主进程与服务端）、make-fonts（生成内置字体子集）、page-assets（下载页面的图片与字体）、changelog（读取更新日志、生成发布说明）、
                       release（发版）、deploy.sh（上线）、shots.cjs 与 compare-shots.mjs（场景截图与逐像素对比）、smoke-app（安装后的冒烟检查）、
