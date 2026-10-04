@@ -234,6 +234,7 @@ node dist-server/server.cjs --version
 | `/var/lib/yi/deploy.log` | 上线、回滚及配置修改的记录，每次操作追加一行（OPS-048） |
 | `/opt/yi/backup.sh`、`/etc/systemd/system/yi-backup.{service,timer}` | 每日本地备份，每天北京时间 04:30 前后运行（DAT-060、DAT-061），源文件为仓库中的 `scripts/server/`，由 `npm run deploy -- install-backup` 安装 |
 | `/var/lib/yi/backup/` | 段位存档的备份 `yi-ratings-UTC时间.json` 及其 `.sha256` 校验和，保留最近 7 份（DAT-064） |
+| `/etc/systemd/journald.conf.d/yi.conf` | journald 的保留策略：日志总量至多 1 GB，保留 90 日（OPS-065），源文件为仓库中的 `scripts/server/journald-yi.conf`，由 `npm run deploy -- install-journald` 安装 |
 
 `yi.service` 的内容如下，其中 `YI_LATEST` 由 `npm run deploy` 维护：
 
