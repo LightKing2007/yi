@@ -1,5 +1,6 @@
 /** 界面文字的译文表：[中文原文（也是查表的键）, 文言, English]。新增界面文字时在这里补一行 */
 export const TABLE: [string, string, string][] = [
+  ["改进联机服务器的维护方式：服务器维护前不再开始新的对局，正在进行的对局可以下完，并向在线玩家发出通知。", "枢纽修治之法更善：将修之前不开新局，已开之局可终，并告在线诸君。", "Improved server maintenance: no new games start before maintenance, games in progress can finish, and online players are notified."],
   ["优化界面文字的显示：文字不再自动缩小，较长的提示折为两行。", "界面之文更善：字不复自缩，较长之示析为两行。", "Improved text display: text is no longer shrunk, and long messages wrap."],
   ["调整字母与数字的字体：各操作系统统一使用游戏附带的字体。", "易字母与数字之体：诸系统统用戏中所附之字体。", "Changed letters and digits to use the bundled typeface on all operating systems."],
   ["调整英文界面的提示文字：统一采用完整的书面形式，不再使用缩写。", "改英文界面之提示：统以完整之书面语书之，不复用缩写。", "Changed English interface messages to use full forms instead of contractions."],
@@ -300,6 +301,7 @@ export const TABLE: [string, string, string][] = [
   ["你已经在一个房间里了", "君已在席", "You are already in a room"],
   ["服务器房间已满，请稍后再试", "枢纽席满，少顷再试", "The server is full, try again later"],
   ["服务器繁忙，请稍后再试", "枢纽繁忙，少顷再试", "The server is busy, please try again later"],
+  ["服务器即将维护，暂不开始新的对局", "枢纽将修，暂不开新局", "Server maintenance is coming, no new games for now"],
   ["操作过于频繁，请稍后再试", "所为过频，少顷再试", "Too many requests, please try again later"],
   ["请先等对方回应", "且待彼应", "Wait for the opponent to answer first"],
   ["对方已离开，无法再来一局", "彼已去，不能再弈", "The opponent left, no rematch"],
