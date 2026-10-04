@@ -83,6 +83,8 @@ const TOKEN_BYTES = 16;
 const UID_HASH_CHARS = 32;
 /** 超出频率限制时的提示（v3 以文本下发；协议 v4 起为错误码 rate.limited，E3） */
 const LIMITED_TEXT = '操作过于频繁，请稍后再试';
+/** 维护模式中拒绝开始新的对局时的提示，也是进入维护模式时下发给在线玩家的通知（OPS-045，错误码 server.maintenance） */
+const MAINTENANCE_TEXT = '服务器即将维护，暂不开始新的对局';
 
 /** 房间的对局设置：棋类、路数、禁手、每步限时（与 queueRules 的结果同形） */
 type RoomRules = ReturnType<typeof queueRules>;
@@ -173,6 +175,13 @@ export interface RoomServerOptions {
   download?: string; // 新版本的下载地址
 }
 
+/** 健康检查（/healthz，API-061）中由 RoomServer 提供的部分 */
+export interface Health {
+  players: number; // 已握手的在线玩家数
+  games: number; // 已开局且未终局的对局数（含点目阶段）
+  maintenance: boolean; // 是否处于维护模式（OPS-045）
+}
+
 /** 连接对象：由传输层持有，收到消息时交回 RoomServer */
 export type Session = Player;
 
@@ -204,6 +213,8 @@ export class RoomServer {
   private log: Log;
   private store: RatingStore;
   private latest: { latest?: string; url?: string };
+  /** 维护模式（OPS-045）：只能以重启结束 */
+  private maintenance = false;
 
   constructor(opt: RoomServerOptions = {}) {
     this.now = opt.now ?? (() => performance.now() / 1000);
@@ -349,8 +360,30 @@ export class RoomServer {
     return this.queue.filter(e => e.mode === mode && e.type === type).length;
   }
 
+  /** 健康检查的数据（API-061） */
+  health(): Health {
+    let games = 0;
+    for (const r of this.rooms.values()) if (r.state === RoomState.Play) games++;
+    return { players: this.online(), games, maintenance: this.maintenance };
+  }
+
+  /**
+   * 进入维护模式（OPS-045）：取消排队、待确认的配对与等待对手的好友房间，撤回待回应的再来一局申请；此后拒绝开始新的对局，
+   * 已开始的对局照常进行。受影响的玩家收到 error（客户端回到大厅），其余在线玩家收到 info。已在维护模式时什么也不做，返回 false
+   */
+  maintain(): boolean {
+    if (this.maintenance) return false;
+    this.maintenance = true;
+    const cancelled = this.cancelPending();
+    for (const p of this.players) if (p.id) this.send(p, { t: cancelled.has(p) ? 'error' : 'info', text: MAINTENANCE_TEXT });
+    const { games, players } = this.health();
+    this.log('info', 'server.maintenance', { msg: '进入维护模式', games, players });
+    return true;
+  }
+
+  /** 关闭全部连接（服务端退出前）：已连上的以 1001 关闭，客户端随后重连（OPS-052、API-050） */
   shutdown() {
-    for (const p of this.players) p.conn?.close();
+    for (const p of this.players) p.conn?.close(CLOSE_CODE.restart);
     this.players.clear();
     this.byToken.clear();
     this.rooms.clear();
@@ -359,6 +392,29 @@ export class RoomServer {
   }
 
   // ---------------- 内部 ----------------
+
+  /** 取消尚未开局的一切（进入维护模式时）：排队、待确认的配对、等待对手的好友房间、待回应的再来一局申请；返回受影响的玩家 */
+  private cancelPending() {
+    const cancelled = new Set<Player>();
+    for (const m of this.matches) for (const side of m.side) cancelled.add(side.p);
+    for (const entry of this.queue) cancelled.add(entry.p);
+    for (const p of cancelled) {
+      this.unqueue(p);
+      p.match = null;
+    }
+    this.matches.clear();
+    for (const r of [...this.rooms.values()]) {
+      if (r.state === RoomState.Over && r.ask === 'rematch') r.ask = null;
+      if (r.state !== RoomState.Wait) continue;
+      const host = this.byId(r.host);
+      if (host) {
+        host.room = 0;
+        cancelled.add(host);
+      }
+      this.freeRoom(r);
+    }
+    return cancelled;
+  }
 
   private send(p: Player | null | undefined, msg: S2C) {
     if (p?.conn) p.conn.send(msg);
@@ -783,6 +839,7 @@ export class RoomServer {
     p.ratings = { gomoku: { ...newRating(), ...saved?.gomoku }, go: { ...newRating(), ...saved?.go } };
     this.send(p, { t: 'welcome', id: p.id, token, ratings: p.ratings, ...this.latest });
     if (m.token !== undefined) this.send(p, { t: 'resumeFailed' }); // 原来的对局已经不在了（服务器重启过，或掉线太久）
+    if (this.maintenance) this.send(p, { t: 'info', text: MAINTENANCE_TEXT });
     this.log('info', 'player.online', { msg: `${p.name} 上线`, playerId: p.id });
     return p;
   }
@@ -912,6 +969,10 @@ export class RoomServer {
   }
 
   private queueFor(p: Player, mode: QueueMode, type: number, size: number) {
+    if (this.maintenance) {
+      this.send(p, { t: 'error', text: MAINTENANCE_TEXT });
+      return;
+    }
     if (this.busy(p)) {
       this.send(p, { t: 'error', text: '你已经在一个房间里了' });
       return;
@@ -925,6 +986,10 @@ export class RoomServer {
   }
 
   private createRoom(p: Player, m: Extract<C2S, { t: 'create' }>) {
+    if (this.maintenance) {
+      this.send(p, { t: 'error', text: MAINTENANCE_TEXT });
+      return;
+    }
     if (this.busy(p)) {
       this.send(p, { t: 'error', text: '你已经在一个房间里了' });
       return;
@@ -953,6 +1018,10 @@ export class RoomServer {
   }
 
   private joinRoom(p: Player, code: string) {
+    if (this.maintenance) {
+      this.send(p, { t: 'joinNo', reason: MAINTENANCE_TEXT });
+      return;
+    }
     const now = this.now();
     p.joinFails = p.joinFails.filter(t0 => now - t0 < JOIN_WINDOW_SECS);
     if (p.joinFails.length >= JOIN_FAILS) {
@@ -960,7 +1029,7 @@ export class RoomServer {
       this.violate(p);
       return;
     } // E3
-    const r = [...this.rooms.values()].find(o => o.state === RoomState.Wait && o.code === code);
+    const r = [...this.rooms.values()].find(room => room.state === RoomState.Wait && room.code === code);
     if (this.busy(p)) {
       this.send(p, { t: 'joinNo', reason: '你已经在一个房间里了' });
       return;
@@ -1000,6 +1069,10 @@ export class RoomServer {
       return;
     }
     if (m.t !== 'rematch') return;
+    if (this.maintenance) {
+      this.send(p, { t: 'info', text: MAINTENANCE_TEXT });
+      return;
+    }
     const opp = this.seat(r, other(me));
     if (r.kind === 'ranked') this.send(p, { t: 'info', text: '排位赛不能再来一局' });
     else if (!r.ask && opp?.conn) this.ask(r, me, 'rematch');

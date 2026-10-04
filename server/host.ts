@@ -1,6 +1,6 @@
 /**
  * 把 RoomServer 接到 WebSocket 上：可以同时监听几个端口（换端口的过渡期新旧端口都开），共用同一个 RoomServer。
- * 同一个端口上的普通网页请求交给安装包下载（设了 files 目录时），没设就一律 404。
+ * 同一个端口上的普通网页请求：本机来的 /healthz 回应健康检查（API-061），其余交给安装包下载（设了 files 目录时），没设就一律 404。
  * 连接层的限制：单条消息大小（API-002）、同一 IP 的连接数与新建频率（API-040、API-041）、HTTP 超时（API-047）。
  */
 import { randomUUID } from 'node:crypto';
@@ -9,6 +9,7 @@ import type { AddressInfo } from 'node:net';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { CLOSE_CODE } from '../src/shared/protocol';
 import { fileServer } from './files';
+import { withHealth, type Build, type Web } from './health';
 import { IpGate, NEW_CONN_BLOCK_SECS, NEW_CONN_MAX, NEW_CONN_WINDOW_SECS } from './ratelimit';
 import { RoomServer, type Conn, type RoomServerOptions } from './rooms';
 
@@ -44,7 +45,6 @@ export interface Host {
   close(): Promise<void>;
 }
 
-type Web = (req: http.IncomingMessage, res: http.ServerResponse) => void;
 const notFound: Web = (_req, res) => {
   res.writeHead(404).end();
 };
@@ -155,7 +155,7 @@ function accept(ws: WebSocket, ip: string, server: RoomServer, limits: IpLimits)
   });
 }
 
-/** 断开全部连接（含正在下载的）并关闭各端口 */
+/** 切断全部连接（含正在下载的；WebSocket 连接已由 RoomServer.shutdown 以 1001 发出关闭帧）并关闭各端口 */
 function closeAll(listening: Listening[]) {
   return Promise.all(
     listening.map(
@@ -170,11 +170,16 @@ function closeAll(listening: Listening[]) {
   ).then(() => {});
 }
 
-/** 在 ports 上开服（第一个是主端口）；有端口被占用时抛出。files：安装包所在的目录 */
-export async function startHost(ports: number | number[], opt: RoomServerOptions & { host?: string; files?: string } = {}): Promise<Host> {
-  const listening = await listenAll(Array.isArray(ports) ? ports : [ports], opt.host, opt.files ? fileServer(opt.files) : notFound);
-  const servers = listening.map(item => item.wss);
+/** startHost 的选项：files 为安装包所在的目录；build 为健康检查中的版本号与提交号，不设时提交号为空串 */
+export type HostOptions = RoomServerOptions & { host?: string; files?: string; build?: Build };
+
+/** 在 ports 上开服（第一个是主端口）；有端口被占用时抛出 */
+export async function startHost(ports: number | number[], opt: HostOptions = {}): Promise<Host> {
   const server = new RoomServer(opt);
+  const build = opt.build ?? { version: __APP_VERSION__, commit: '' };
+  const web = withHealth(build, () => server.health(), opt.files ? fileServer(opt.files) : notFound);
+  const listening = await listenAll(Array.isArray(ports) ? ports : [ports], opt.host, web);
+  const servers = listening.map(item => item.wss);
   const limits = new IpLimits(opt.now ?? (() => performance.now() / MS_PER_SEC));
   // 服务器对象本身出错（不是某条连接出错）：未预期，按 internal.error 记录（07-operations.md 第 8 节）
   const onError = (err: Error) => opt.log?.('error', 'internal.error', { msg: '服务端错误', errorId: randomUUID(), err });

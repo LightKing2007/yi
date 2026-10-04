@@ -11,6 +11,7 @@
  *   YI_LOG_LEVEL  日志级别：error、warn、info（默认）、debug（OPS-062）
  *
  * 日志按 07-operations.md 第 5 节输出 JSON Lines 到标准输出（server/log.ts）。
+ * 信号：SIGTERM、SIGINT 以 1001 断开全部连接、落盘后退出（OPS-052）；SIGUSR2 进入维护模式（OPS-045），只能以重启结束。
  */
 import path from 'node:path';
 import { PROTO_PORT, PROTO_VERSION } from '../src/shared/protocol';
@@ -60,7 +61,7 @@ try {
 const flusher = setInterval(() => logger.flush(), LOG_FLUSH_MS);
 flusher.unref();
 
-startHost([port, ...extra], { log, store, host, latest, download, files })
+startHost([port, ...extra], { log, store, host, latest, download, files, build: { version: __APP_VERSION__, commit: __APP_COMMIT__ } })
   .then(started => {
     const msg = `弈 联机服务端已启动${host ? `，地址 ${host}` : ''}${latest ? `，最新客户端 ${latest}` : ''}${files ? `，安装包目录 ${files}` : ''}`;
     log('info', 'server.start', { msg, ports: started.ports, protoRange: [PROTO_VERSION, PROTO_VERSION], dataFile });
@@ -74,6 +75,7 @@ startHost([port, ...extra], { log, store, host, latest, download, files })
     };
     process.on('SIGINT', stop);
     process.on('SIGTERM', stop);
+    process.on('SIGUSR2', () => started.server.maintain());
   })
   .catch((err: Error) => {
     log('error', 'server.listen-failed', { msg: `无法在端口 ${[port, ...extra].join('、')} 启动`, ports: [port, ...extra], err });
