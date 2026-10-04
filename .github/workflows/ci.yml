@@ -5,7 +5,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'hotfix/**'] # 紧急修复分支推送后也运行：发版脚本以 CI 结论为准（OPS-025、OPS-028）
   pull_request:
 
 concurrency:
@@ -96,7 +96,7 @@ jobs:
           exit 1
 
   main-source:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
