@@ -138,7 +138,7 @@ export type LimitedOp = 'name' | 'queue';
 /** 一条连接的各项限额（API-043 至 API-045）：消息令牌桶、按操作的频率、违规累计 */
 export class ConnLimits {
   private bucket: TokenBucket;
-  private violations = new WindowCounter(VIOLATION_WINDOW_SECS, VIOLATION_MAX);
+  private violationWindow = new WindowCounter(VIOLATION_WINDOW_SECS, VIOLATION_MAX);
   private ops: Record<LimitedOp, WindowCounter> = {
     name: new WindowCounter(NAME_WINDOW_SECS, NAME_CHANGES_MAX),
     queue: new WindowCounter(QUEUE_WINDOW_SECS, QUEUE_OPS_MAX),
@@ -165,7 +165,12 @@ export class ConnLimits {
 
   /** 记一次违规；返回 true 表示累计已达上限，连接应断开 */
   violate(now: number): boolean {
-    return this.violations.hit(now) >= VIOLATION_MAX;
+    return this.violationWindow.hit(now) >= VIOLATION_MAX;
+  }
+
+  /** 时间窗内累计的违规次数（用于日志） */
+  violations(now: number): number {
+    return this.violationWindow.count(now);
   }
 
   /** 这次超限是否应回复提示：1 秒内只回复一次，免得回复本身成了洪泛 */

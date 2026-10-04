@@ -2,8 +2,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Rating, Ratings } from '../src/shared/protocol';
+import type { Log } from './log';
 import type { RatingStore } from './rooms';
 
+/** 每秒的毫秒数 */
+const MS_PER_SEC = 1000;
 /** 段位变化后延迟多久写盘，把同一时段的多次变化合并为一次写入 */
 const FLUSH_DELAY_MS = 2000;
 /** 写盘失败后第一次重试的间隔；之后每次加倍（DAT-052） */
@@ -29,13 +32,10 @@ export type StoreFs = Pick<
   'readFileSync' | 'writeFileSync' | 'openSync' | 'writeSync' | 'fsyncSync' | 'closeSync' | 'renameSync' | 'copyFileSync' | 'unlinkSync'
 >;
 
-/** 存档日志：level 对应 RFC 5424 的级别；结构化日志与事件码由整改项 P1-08 统一建立 */
-export type StoreLog = (level: 'info' | 'warn' | 'error', text: string) => void;
-
 /** 存档的可选依赖 */
 export interface StoreOptions {
-  /** 日志输出，默认不输出 */
-  log?: StoreLog;
+  /** 日志输出（事件码 `store.*`，07-operations.md 第 8 节），默认不输出 */
+  log?: Log;
   /** 文件系统，默认为 `node:fs` */
   fs?: StoreFs;
   /** 当前时刻（Unix 毫秒），用于应急转储的文件名，默认为 `Date.now` */
@@ -88,7 +88,7 @@ export class FileStore implements RatingStore {
   private dirty = false;
   private fails = 0;
   private readonly fs: StoreFs;
-  private readonly log: StoreLog;
+  private readonly log: Log;
   private readonly now: () => number;
 
   /** 读取存档。文件不存在时视为首次运行；存在但无法读取或解析时抛出 `StoreLoadError` */
@@ -120,12 +120,12 @@ export class FileStore implements RatingStore {
     if (!this.dirty) return true;
     try {
       this.write();
-    } catch (e) {
-      this.onWriteFailed(e);
+    } catch (err) {
+      this.onWriteFailed(err);
       return false;
     }
     this.dirty = false;
-    if (this.fails > 0) this.log('info', `段位存档在失败 ${this.fails} 次后写入成功`);
+    if (this.fails > 0) this.log('info', 'store.write-recovered', { msg: `段位存档在失败 ${this.fails} 次后写入成功`, file: this.file, attempts: this.fails });
     this.fails = 0;
     return true;
   }
@@ -142,10 +142,10 @@ export class FileStore implements RatingStore {
     const dump = path.join(path.dirname(this.file), `emergency-${stamp(this.now())}.json`);
     try {
       this.fs.writeFileSync(dump, JSON.stringify(this.data));
-      this.log('error', `退出前写盘失败，段位数据已转储到 ${dump}`);
+      this.log('error', 'store.dumped', { msg: '退出前写盘失败，段位数据已转储', file: this.file, dump });
       return true;
-    } catch (e) {
-      this.log('error', `退出前写盘失败，转储到 ${dump} 也失败：${errText(e)}；本次运行后的段位变化已丢失`);
+    } catch (err) {
+      this.log('error', 'store.dump-failed', { msg: '退出前写盘与转储都失败，本次运行后的段位变化已丢失', file: this.file, dump, err });
       return false;
     }
   }
@@ -180,10 +180,10 @@ export class FileStore implements RatingStore {
     const copy = this.file + '.corrupt';
     try {
       this.fs.copyFileSync(this.file, copy);
-    } catch (e) {
-      throw new StoreLoadError(this.file, EXIT_IO_ERROR, `有 ${keys.length} 条记录损坏，且无法另存为 ${copy}（${errText(e)}）`);
+    } catch (err) {
+      throw new StoreLoadError(this.file, EXIT_IO_ERROR, `有 ${keys.length} 条记录损坏，且无法另存为 ${copy}（${errText(err)}）`);
     }
-    this.log('warn', `段位存档中有 ${keys.length} 条记录损坏，已按新玩家处理；原文件另存为 ${copy}；首条：${keys[0]}`);
+    this.log('warn', 'store.records-invalid', { msg: `段位存档中有记录损坏，已按新玩家处理；首条：${keys[0]}`, file: this.file, count: keys.length, copy });
   }
 
   /** 写临时文件 → fsync → 上一版另存为 .prev → 原子改名 → fsync 目录（DAT-051、DAT-054） */
@@ -229,11 +229,13 @@ export class FileStore implements RatingStore {
     }
   }
 
-  private onWriteFailed(e: unknown) {
+  private onWriteFailed(err: unknown) {
     this.fails++;
     const wait = Math.min(RETRY_BASE_MS * 2 ** (this.fails - 1), RETRY_MAX_MS);
-    const text = `段位存档写入失败（第 ${this.fails} 次）：${errText(e)}；数据保留在内存中，${wait / 1000} 秒后重试`;
-    this.log(this.fails >= FAILS_BEFORE_ERROR ? 'error' : 'warn', text);
+    const msg = `段位存档写入失败（第 ${this.fails} 次）：${errText(err)}；数据保留在内存中，${wait / MS_PER_SEC} 秒后重试`;
+    const entry = { msg, file: this.file, attempts: this.fails, retryMs: wait };
+    if (this.fails >= FAILS_BEFORE_ERROR) this.log('error', 'store.write-failed', { ...entry, err });
+    else this.log('warn', 'store.write-failed', entry);
     this.timer = setTimeout(() => this.flush(), wait);
   }
 }

@@ -1,6 +1,6 @@
 /** 服务端结构化日志：JSON Lines 的字段、级别筛选、单行截断、同一事件码的汇总、journald 级别前缀（OPS-060 至 OPS-063） */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { EVENT_MAX_PER_SEC, LINE_MAX_BYTES, Logger, MSG_MAX_CHARS, parseLogLevel, type LoggerOptions } from '../server/log';
+import { EVENT_MAX_PER_SEC, LINE_MAX_BYTES, Logger, MSG_MAX_CHARS, parseLogLevel, processLogger, type LoggerOptions } from '../server/log';
 
 /** 一秒的毫秒数：汇总按秒计 */
 const SEC_MS = 1000;
@@ -154,5 +154,21 @@ describe('同一事件码的汇总（OPS-063）', () => {
     for (let i = 0; i < EVENT_MAX_PER_SEC + 5; i++) log.log('info', 'a.b');
     log.flush(true);
     expect(parsed().at(-1)).toEqual(expect.objectContaining({ event: 'a.b', suppressed: 5 }));
+  });
+});
+
+describe('服务端进程的日志', () => {
+  const base = { ver: 'v', write: (line: string) => lines.push(line), now: () => clock };
+
+  it('级别取自 YI_LOG_LEVEL，在 systemd 之下（有 JOURNAL_STREAM）加级别前缀', () => {
+    processLogger({ YI_LOG_LEVEL: 'debug' }, base)?.log('debug', 'a.b');
+    processLogger({ JOURNAL_STREAM: '8:1' }, base)?.log('debug', 'a.c');
+    processLogger({ JOURNAL_STREAM: '8:1' }, base)?.log('warn', 'a.d');
+    expect(lines.map(line => line.slice(0, line.indexOf('{')) + String(JSON.parse(line.slice(line.indexOf('{'))).event))).toEqual(['a.b', '<4>a.d']);
+  });
+
+  it('YI_LOG_LEVEL 不合法时记下 server.config-invalid 并返回 null', () => {
+    expect(processLogger({ YI_LOG_LEVEL: 'verbose' }, base)).toBeNull();
+    expect(parsed()).toEqual([expect.objectContaining({ level: 'error', event: 'server.config-invalid', variable: 'YI_LOG_LEVEL' })]);
   });
 });

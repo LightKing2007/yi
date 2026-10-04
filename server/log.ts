@@ -178,3 +178,15 @@ export class Logger {
     this.opt.write(this.opt.syslogPrefix ? `<${SYSLOG[level]}>${line}` : line);
   }
 }
+
+/**
+ * 服务端进程的日志：级别取自 `YI_LOG_LEVEL`（OPS-062），在 systemd 之下（有 `JOURNAL_STREAM`）加级别前缀（OPS-060）。
+ * `YI_LOG_LEVEL` 不合法时记下 `server.config-invalid` 并返回 null，调用方必须拒绝启动
+ */
+export function processLogger(env: Record<string, string | undefined>, base: Pick<LoggerOptions, 'ver' | 'write' | 'now'>): Logger | null {
+  const level = parseLogLevel(env.YI_LOG_LEVEL);
+  const logger = new Logger({ ...base, level: level ?? 'info', syslogPrefix: Boolean(env.JOURNAL_STREAM) });
+  if (level) return logger;
+  logger.log('error', 'server.config-invalid', { msg: 'YI_LOG_LEVEL 不合法，拒绝启动', variable: 'YI_LOG_LEVEL', expected: 'error、warn、info、debug 之一' });
+  return null;
+}

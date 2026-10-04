@@ -3,6 +3,7 @@
  * 同一个端口上的普通网页请求交给安装包下载（设了 files 目录时），没设就一律 404。
  * 连接层的限制：单条消息大小（API-002）、同一 IP 的连接数与新建频率（API-040、API-041）、HTTP 超时（API-047）。
  */
+import { randomUUID } from 'node:crypto';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { WebSocketServer, type WebSocket } from 'ws';
@@ -13,6 +14,8 @@ import { RoomServer, type Conn, type RoomServerOptions } from './rooms';
 
 const MAX_MSG_BYTES = 4096; // 单条消息的字节上限：远大于任何合法消息（API-002）
 const MAX_PER_IP = 8; // 同一个 IP 同时最多几条连接（API-040）
+/** 每秒的毫秒数 */
+const MS_PER_SEC = 1000;
 /** 检查各种超时的间隔 */
 const TICK_MS = 250;
 /** WebSocket 层心跳的间隔；同时清理按 IP 的连接记录 */
@@ -46,11 +49,17 @@ const notFound: Web = (_req, res) => {
   res.writeHead(404).end();
 };
 
+/** 一个监听中的端口 */
+interface Listening {
+  http: http.Server;
+  wss: WebSocketServer;
+}
+
 function listen(port: number, host: string | undefined, web: Web) {
   const httpServer = http.createServer(web);
   hardenHttp(httpServer);
   const wss = new WebSocketServer({ server: httpServer, maxPayload: MAX_MSG_BYTES, perMessageDeflate: false });
-  return new Promise<{ http: http.Server; wss: WebSocketServer }>((resolve, reject) => {
+  return new Promise<Listening>((resolve, reject) => {
     // ws 把 HTTP 服务器的 error 事件转发给 WebSocketServer：监听期间两处都要接住，否则端口被占用时成了未处理的异常，进程直接崩溃
     httpServer.once('error', reject);
     wss.once('error', reject);
@@ -62,81 +71,125 @@ function listen(port: number, host: string | undefined, web: Web) {
   });
 }
 
+/** 依次监听 ports；有端口被占用时关掉已开的端口后抛出 */
+async function listenAll(ports: number[], host: string | undefined, web: Web) {
+  const listening: Listening[] = [];
+  try {
+    for (const port of ports) listening.push(await listen(port, host, web));
+  } catch (err) {
+    for (const item of listening) {
+      item.wss.close();
+      item.http.close();
+    }
+    throw err;
+  }
+  return listening;
+}
+
+/** 同一 IP 的连接数与新建频率（API-040、API-041），各端口共用 */
+class IpLimits {
+  private perIp = new Map<string, number>();
+  private gate = new IpGate({ max: NEW_CONN_MAX, windowSecs: NEW_CONN_WINDOW_SECS, blockSecs: NEW_CONN_BLOCK_SECS });
+
+  constructor(private readonly now: () => number) {}
+
+  /** 新连接：允许时记上一条并返回 true */
+  admit(ip: string): boolean {
+    const n = this.perIp.get(ip) ?? 0;
+    if (!this.gate.admit(ip, this.now()) || n >= MAX_PER_IP) return false;
+    this.perIp.set(ip, n + 1);
+    return true;
+  }
+
+  /** 连接关闭 */
+  release(ip: string) {
+    const left = (this.perIp.get(ip) ?? 1) - 1;
+    if (left > 0) this.perIp.set(ip, left);
+    else this.perIp.delete(ip);
+  }
+
+  /** 清理过期的新建记录 */
+  prune() {
+    this.gate.prune(this.now());
+  }
+}
+
+/** 把一条 WebSocket 连接接到 RoomServer 上 */
+function accept(ws: WebSocket, ip: string, server: RoomServer, limits: IpLimits) {
+  if (!limits.admit(ip)) {
+    ws.close(CLOSE_CODE.overload, 'too many');
+    return;
+  }
+  const conn: Conn = {
+    send: msg => {
+      if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
+    },
+    close: code => {
+      if (code) ws.close(code);
+      else ws.terminate();
+    },
+  };
+  let sess = server.connect(conn);
+  ws.on('close', code => {
+    limits.release(ip);
+    if (sess) server.disconnect(sess, conn, code);
+    sess = null;
+  });
+  ws.on('error', () => {});
+  if (!sess) {
+    ws.close(CLOSE_CODE.overload, 'full');
+    return;
+  }
+  ws.on('message', (data, isBinary) => {
+    if (isBinary || !sess) return;
+    let msg: unknown;
+    try {
+      msg = JSON.parse(String(data));
+    } catch {
+      msg = undefined; /* 不是 JSON：交给 parseC2S 按非法消息处理 */
+    }
+    sess = server.message(sess, msg, conn);
+  });
+  ws.on('pong', () => {
+    if (sess) server.touch(sess, conn);
+  });
+}
+
+/** 断开全部连接（含正在下载的）并关闭各端口 */
+function closeAll(listening: Listening[]) {
+  return Promise.all(
+    listening.map(
+      item =>
+        new Promise<void>(res => {
+          for (const client of item.wss.clients) client.terminate();
+          item.wss.close();
+          item.http.close(() => res());
+          item.http.closeAllConnections();
+        }),
+    ),
+  ).then(() => {});
+}
+
 /** 在 ports 上开服（第一个是主端口）；有端口被占用时抛出。files：安装包所在的目录 */
 export async function startHost(ports: number | number[], opt: RoomServerOptions & { host?: string; files?: string } = {}): Promise<Host> {
-  const list = Array.isArray(ports) ? ports : [ports];
-  const web = opt.files ? fileServer(opt.files) : notFound;
-  const listening: { http: http.Server; wss: WebSocketServer }[] = [];
-  try {
-    for (const p of list) listening.push(await listen(p, opt.host, web));
-  } catch (e) {
-    for (const l of listening) {
-      l.wss.close();
-      l.http.close();
-    }
-    throw e;
-  }
-  const servers = listening.map(l => l.wss);
+  const listening = await listenAll(Array.isArray(ports) ? ports : [ports], opt.host, opt.files ? fileServer(opt.files) : notFound);
+  const servers = listening.map(item => item.wss);
   const server = new RoomServer(opt);
-  const now = opt.now ?? (() => performance.now() / 1000);
-  const perIp = new Map<string, number>();
-  const gate = new IpGate({ max: NEW_CONN_MAX, windowSecs: NEW_CONN_WINDOW_SECS, blockSecs: NEW_CONN_BLOCK_SECS });
-
-  for (const l of listening) l.http.on('error', e => opt.log?.(`服务端错误：${e.message}`));
+  const limits = new IpLimits(opt.now ?? (() => performance.now() / MS_PER_SEC));
+  // 服务器对象本身出错（不是某条连接出错）：未预期，按 internal.error 记录（07-operations.md 第 8 节）
+  const onError = (err: Error) => opt.log?.('error', 'internal.error', { msg: '服务端错误', errorId: randomUUID(), err });
+  for (const item of listening) item.http.on('error', onError);
   for (const wss of servers) {
-    wss.on('error', e => opt.log?.(`服务端错误：${e.message}`));
-    wss.on('connection', (ws: WebSocket, req) => {
-      const ip = req.socket.remoteAddress ?? '';
-      const n = perIp.get(ip) ?? 0;
-      if (!gate.admit(ip, now()) || n >= MAX_PER_IP) {
-        ws.close(CLOSE_CODE.overload, 'too many');
-        return;
-      }
-      perIp.set(ip, n + 1);
-      const conn: Conn = {
-        send: msg => {
-          if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
-        },
-        close: code => {
-          if (code) ws.close(code);
-          else ws.terminate();
-        },
-      };
-      let sess = server.connect(conn);
-      ws.on('close', () => {
-        const left = (perIp.get(ip) ?? 1) - 1;
-        if (left > 0) perIp.set(ip, left);
-        else perIp.delete(ip);
-        if (sess) server.disconnect(sess, conn);
-        sess = null;
-      });
-      ws.on('error', () => {});
-      if (!sess) {
-        ws.close(CLOSE_CODE.overload, 'full');
-        return;
-      }
-      ws.on('message', (data, isBinary) => {
-        if (isBinary || !sess) return;
-        let msg: unknown;
-        try {
-          msg = JSON.parse(String(data));
-        } catch {
-          msg = undefined; /* 不是 JSON：交给 parseC2S 按非法消息处理 */
-        }
-        sess = server.message(sess, msg, conn);
-      });
-      ws.on('pong', () => {
-        if (sess) server.touch(sess, conn);
-      });
-    });
+    wss.on('error', onError);
+    wss.on('connection', (ws: WebSocket, req) => accept(ws, req.socket.remoteAddress ?? '', server, limits));
   }
 
   const timer = setInterval(() => server.tick(), TICK_MS);
   const beat = setInterval(() => {
-    for (const w of servers) for (const c of w.clients) if (c.readyState === c.OPEN) c.ping();
-    gate.prune(now());
+    for (const wss of servers) for (const client of wss.clients) if (client.readyState === client.OPEN) client.ping();
+    limits.prune();
   }, BEAT_MS);
-  const actual = listening.map(l => (l.http.address() as AddressInfo).port);
+  const actual = listening.map(item => (item.http.address() as AddressInfo).port);
   return {
     server,
     port: actual[0],
@@ -145,17 +198,7 @@ export async function startHost(ports: number | number[], opt: RoomServerOptions
       clearInterval(timer);
       clearInterval(beat);
       server.shutdown();
-      return Promise.all(
-        listening.map(
-          l =>
-            new Promise<void>(res => {
-              for (const c of l.wss.clients) c.terminate();
-              l.wss.close();
-              l.http.close(() => res());
-              l.http.closeAllConnections(); // 正在下载的连接也断掉
-            }),
-        ),
-      ).then(() => {});
+      return closeAll(listening);
     },
   };
 }
