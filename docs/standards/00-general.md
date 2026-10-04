@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 文件编号 | YI-STD-001 |
-| 文件版本 | 1.1.6 |
+| 文件版本 | 1.1.7 |
 | 发布日期 | 2026-10-02 |
 | 状态 | 现行；整改项按 [plan/remediation.md](../plan/remediation.md) 的期限实施 |
 | 编制 | LightKing、Claude |
@@ -268,3 +268,4 @@ GB/T 11457—2006 界定的以及下列术语和定义适用于本规范。
 | 1.1.4 | 2026-10-03 | 修订 [02-architecture.md](02-architecture.md) 第 1.1 条：main 层允许使用 `preact`，只用于把界面挂到页面上。整改项 P1-16 实施第三方包检查时发现入口 `src/main.tsx` 以 `preact` 的 `render` 挂载界面；把这一调用移入 ui 层后，入口的改动行无法被单元测试覆盖（TST-011），故修订规定而不改代码；规则编号不变 |
 | 1.1.5 | 2026-10-04 | 修订 [09-text-and-i18n.md](09-text-and-i18n.md) 的 I18N-020、I18N-022：按项目所有者的要求，界面文字一律按设计字号显示，严禁自动缩小；单行文字须一行放下，说明性文字至多两行；拉丁字母与数字统一使用随游戏附带的字体，使三个平台上的宽度一致；长度检查由按字符数改为实际排版。同步 4.2 节“交互能力”的度量。文件头的版本号由 1.1 改为 1.1.5，与本表一致（1.1.1 至 1.1.4 修订时未同步）。更正 I18N-011 中下载页面文字所在的文件（`server/page.ts`），更新第 10.1 节与 I18N-010 至 I18N-013、I18N-080、I18N-081 的现状；规则编号不变 |
 | 1.1.6 | 2026-10-04 | 修订 [01-coding.md](01-coding.md) 的 COD-003：按项目所有者的决定，按行解析的文字数据（`src/i18n/table.ts`、`src/ui/info.ts`）不受单行长度的限制。这两个文件每条必须占一行，三种语言的更新日志合在一行时常超过 160 字符，折行即无法被 `scripts/changelog.mjs` 读取；其范围与 COD-006 列入 `.prettierignore` 的文字数据一致；规则编号不变 |
+| 1.1.7 | 2026-10-04 | 随整改项 P1-08 修订 [07-operations.md](07-operations.md) 的日志规定：第 5.1 条写明附加字段与基本字段同层，增加 `truncated`、`suppressed` 两个字段；OPS-060 写明在 systemd 之下以 `<级别号>` 前缀交由 journald 记录优先级，使 OPS-075 的按级别筛选可用；OPS-063 写明汇总行的格式；第 8 节补充服务端现有日志对应的事件码 `server.listen-failed`、`store.write-recovered`、`store.records-invalid`、`store.dumped`、`store.dump-failed`，`store.write-failed` 改为前两次 warn、第 3 次起 error（与 DAT-052 一致），`rate.limited` 写明频率与 `count` 的含义；规则编号不变 |
