@@ -9,6 +9,7 @@ import {
   declaredException,
   hasModuleComment,
   importCount,
+  limitsLineLength,
   longLines,
   reasonLongEnough,
   shortCatchReasons,
@@ -50,6 +51,12 @@ describe('ESLint 无法表达的规则', () => {
 
   it('COD-003：按字符而不是字节计算行长，超过 160 个才算', () => {
     expect(longLines('汉'.repeat(160) + '\n' + 'x'.repeat(161))).toBe(1);
+  });
+
+  it('按行解析的文字数据（译文表、说明文字与更新日志）不计超长行，其他源文件照常统计（COD-003）', () => {
+    expect(limitsLineLength('src/i18n/table.ts')).toBe(false);
+    expect(limitsLineLength('src/ui/info.ts')).toBe(false);
+    for (const file of ['src/ui/panels.tsx', 'src/i18n/index.ts', 'scripts/ratchet.mjs']) expect(limitsLineLength(file), file).toBe(true);
   });
 
   it('COD-030：第一行是注释（可在 #! 行之后）才算有模块说明', () => {

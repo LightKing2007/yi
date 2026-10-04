@@ -22,6 +22,8 @@ const CODE_EXT = /\.(ts|tsx|js|mjs|cjs)$/;
 const PRODUCT_DIRS = ['src/', 'server/', 'electron/'];
 /** COD-032 不计的数据文件 */
 const DATA_FILES = ['src/i18n/table.ts', 'src/render/shaders.ts'];
+/** COD-003 不计的文字数据：每条必须占一行，由 scripts/changelog.mjs 逐行读取（与 .prettierignore 一致） */
+const LINE_DATA_FILES = ['src/i18n/table.ts', 'src/ui/info.ts'];
 /** 不检查文本格式（COD-001）的二进制文件 */
 const BINARY_EXT = /\.(png|bmp|ico|icns|jpg|jpeg|gif|webp|woff2?|otf|ttf|dmg|exe)$/i;
 
@@ -142,6 +144,9 @@ export function countExceptions(files) {
 export function badTextFormat(text) {
   return text.startsWith(BOM) || text.includes('\r') || (text.length > 0 && (!text.endsWith('\n') || text.endsWith('\n\n')));
 }
+
+/** COD-003 是否统计这个文件：按行解析的文字数据除外 */
+export const limitsLineLength = file => !LINE_DATA_FILES.includes(file);
 
 /** COD-003：超过 160 个字符的行数（按 Unicode 码点计） */
 export const longLines = text => text.split('\n').filter(line => [...line].length > LINE_MAX).length;
@@ -272,7 +277,10 @@ export async function measure() {
   const sum = (files, count) => files.reduce((total, [file, text]) => total + count(text, file), 0);
   const metrics = {
     'COD-001 文本格式不合规的文件': textFiles.filter(file => badTextFormat(read(file))).length,
-    'COD-003 超过 160 字符的行': sum(code, longLines),
+    'COD-003 超过 160 字符的行': sum(
+      code.filter(([file]) => limitsLineLength(file)),
+      longLines,
+    ),
     'COD-030 缺少模块说明注释的源文件': product.filter(([, text]) => !hasModuleComment(text)).length,
     'COD-031 缺少文档注释的导出声明': sum(product, (text, file) => undocumentedExports(file, text)),
     'COD-032 注释率低于 10% 的目录': lowCommentDirs(code).length,
