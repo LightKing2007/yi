@@ -31,6 +31,7 @@ jobs:
     timeout-minutes: 30
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false' # 没有正式证书：macOS 用 package.json 里的临时签名
+      CSC_FOR_PULL_REQUEST: 'true' # PR 中运行时 electron-builder 默认跳过签名；照发版时一样签名，检查的才是玩家拿到的安装程序
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -91,7 +92,8 @@ jobs:
           ditto "$mnt"/*.app "$app_dir/$(basename "$mnt"/*.app)" # 与在访达中拖到“应用程序”相同：保留符号链接与扩展属性
           hdiutil detach "$mnt"
           app=$(ls -d "$app_dir"/*.app)
-          node scripts/smoke-app.mjs "$app/Contents/MacOS/$(defaults read "$app/Contents/Info" CFBundleExecutable)" smoke
+          # plutil 原样输出可执行文件名（defaults read 会把“弈”转义为 \u5f08）
+          node scripts/smoke-app.mjs "$app/Contents/MacOS/$(plutil -extract CFBundleExecutable raw "$app/Contents/Info.plist")" smoke
       - name: 签名校验未通过
         if: runner.os == 'macOS' && steps.codesign.outcome == 'failure'
         run: exit 1
