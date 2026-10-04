@@ -111,7 +111,7 @@ Electron 本体（约 130 MB）不随 `npm install` 下载，而在首次运行 
 
 ### 3.2.1 安装后的冒烟检查
 
-`node scripts/smoke-app.mjs <可执行文件>` 启动打包好的游戏（用户数据放在临时目录），经开发者协议检查 Electron 版本、预加载接口、渲染进程沙箱、WebGL2、开局落子与人机对弈、页面报错及日志，截图存于 `smoke/`。Linux 上由工作流“Linux 冒烟检查”在 GitHub 的 Ubuntu 机器上运行（手动触发），发版前对待发布的提交运行一次。
+`node scripts/smoke-app.mjs <可执行文件>` 启动打包好的游戏两次（用户数据放在临时目录），经开发者协议检查 Electron 版本、预加载接口、渲染进程沙箱、WebGL2、附带字体、开局落子与人机对弈、页面报错及日志，以及退出后再次打开时设置保留、最小窗口中的布局，截图存于 `smoke/`。工作流“平台冒烟检查”在 GitHub 的 Ubuntu、macOS（Apple 芯片）、Windows 机器上打出安装程序，按玩家的方式安装后运行该检查，Windows 另检查静默卸载（手动触发），发版前对待发布的提交运行一次。macOS 公证提示与 Windows SmartScreen 的首次打开提示、声音、与真人联机对局、Intel 芯片的 Mac 仍须在实机上确认。
 
 ### 3.2.2 界面文字排版检查
 
