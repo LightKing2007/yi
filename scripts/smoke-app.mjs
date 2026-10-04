@@ -168,6 +168,8 @@ async function switchToChinese(game) {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     document.querySelectorAll('button')[2].click(); // 开始菜单的第三个按钮为“设置”
     await wait(1500);
+    document.querySelector('.seg').querySelectorAll('.opt')[1].click(); // 设置页的分页：声音、画面、对局；语言在“画面”中
+    await wait(500);
     [...document.querySelectorAll('.seg .opt')].find(opt => opt.textContent.trim() === '中文')?.click();
     await wait(500);
     return JSON.parse(localStorage.getItem('yi.settings') ?? '{}').lang;

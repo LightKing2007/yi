@@ -67,19 +67,34 @@ jobs:
       # ---------------- macOS：DMG（运行机器为 Apple 芯片，只打 arm64） ----------------
       - if: runner.os == 'macOS'
         run: npx electron-builder --mac --arm64 --publish never
+      - name: 校验 DMG 中应用的签名
+        if: runner.os == 'macOS'
+        id: codesign
+        continue-on-error: true
+        run: |
+          mnt=$(mktemp -d)
+          hdiutil attach "$(ls release/*-arm64.dmg)" -nobrowse -readonly -mountpoint "$mnt"
+          app=$(ls -d "$mnt"/*.app)
+          codesign --display --verbose=4 "$app" 2>&1 || true
+          ls -la "$app/Contents/_CodeSignature" || true
+          status=0
+          codesign --verify --deep --strict --verbose=2 "$app" || status=$?
+          hdiutil detach "$mnt"
+          exit $status
       - name: 从 DMG 安装并检查
         if: runner.os == 'macOS'
         run: |
-          dmg=$(ls release/*-arm64.dmg)
           mnt=$(mktemp -d)
-          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mnt"
+          hdiutil attach "$(ls release/*-arm64.dmg)" -nobrowse -readonly -mountpoint "$mnt"
           app_dir="$RUNNER_TEMP/Applications"
           mkdir -p "$app_dir"
-          cp -R "$mnt"/*.app "$app_dir/"
+          ditto "$mnt"/*.app "$app_dir/$(basename "$mnt"/*.app)" # 与在访达中拖到“应用程序”相同：保留符号链接与扩展属性
           hdiutil detach "$mnt"
           app=$(ls -d "$app_dir"/*.app)
-          codesign --verify --deep --strict --verbose=2 "$app" # 临时签名完整、未被改动
           node scripts/smoke-app.mjs "$app/Contents/MacOS/$(defaults read "$app/Contents/Info" CFBundleExecutable)" smoke
+      - name: 签名校验未通过
+        if: runner.os == 'macOS' && steps.codesign.outcome == 'failure'
+        run: exit 1
 
       # ---------------- Windows：NSIS 安装程序（静默安装、检查、静默卸载） ----------------
       - if: runner.os == 'Windows'
