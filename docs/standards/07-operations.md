@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.3 |
+| 文件版本 | 1.1.4 |
 | 修订日期 | 2026-10-05 |
 | 规则前缀 | `OPS` |
 
@@ -54,10 +54,10 @@
 | OPS-040 | A | 上线统一由 `npm run deploy -- 版本号` 执行，只接受已发布（非草稿）的 Release；严禁手工替换服务器上的文件 | 满足 |
 | OPS-041 | A | 上线脚本必须在服务器上以 `flock /run/yi-deploy.lock` 加锁，同一时间只允许一个上线过程 | 未满足 |
 | OPS-042 | A | 上线版本低于线上版本时，必须以 `--allow-downgrade` 显式确认，否则中止 | 未满足 |
-| OPS-043 | A | 上线前必须把以下内容作为一个整体备份为 `/opt/yi/releases/版本号/`：服务端文件、安装程序、`YI_LATEST` 的值；线上目录统一以符号链接 `/opt/yi/current` 指向当前版本 | 未满足（只保留 `server.cjs.prev`） |
-| OPS-044 | A | 回滚必须恢复上一版本的服务端文件、安装程序、`YI_LATEST` 三者；回滚本身必须在 10 分钟内完成 | 未满足 |
-| OPS-045 | A | 重启前必须读取 `/healthz` 中的活跃对局数：为 0 时立即重启；不为 0 时进入维护模式（不再接受新的配对与开房，向在线玩家下发维护通知），等待活跃对局数归零后重启，最长等待 30 分钟，超时后强制重启，并向剩余对局下发 `1001` 关闭码 | 未满足（F-13） |
-| OPS-046 | A | 重启后 30 秒内，`/healthz` 必须返回 200，且其中的版本号与提交号等于目标版本；否则自动回滚，并写 `error` 日志 | 未满足 |
+| OPS-043 | A | 上线前必须把以下内容作为一个整体备份为 `/opt/yi/releases/版本号/`：服务端文件、安装程序、`YI_LATEST` 的值；线上目录统一以符号链接 `/opt/yi/current` 指向当前版本。`YI_LATEST` 的值存于版本目录中的 `env` 文件，`yi.service` 以 `EnvironmentFile` 读取；服务器上只保留当前与上一版本的目录，更早的随上线删除 | 未满足（只保留 `server.cjs.prev`） |
+| OPS-044 | A | 回滚必须恢复上一版本的服务端文件、安装程序、`YI_LATEST` 三者；回滚本身必须在 10 分钟内完成。回滚统一由 `npm run deploy -- rollback` 执行：`/opt/yi/current` 指回上一版本目录后立即重启，不等待对局结束，重启后按 OPS-046 检查 | 未满足 |
+| OPS-045 | A | 重启前必须读取 `/healthz` 中的活跃对局数：为 0 时立即重启；不为 0 时进入维护模式（不再接受新的配对与开房，向在线玩家下发维护通知），等待活跃对局数归零后重启，最长等待 30 分钟，超时后强制重启，并向剩余对局下发 `1001` 关闭码。维护模式统一由 `systemctl kill -s SIGUSR2 yi` 开启，只能以重启结束；开启时取消排队与待确认的配对，此后拒绝排队、开房、加入房间与再来一局（`server.maintenance`），已开始的对局照常进行；维护通知同时下发给此后上线的玩家 | 未满足（F-13） |
+| OPS-046 | A | 重启后 30 秒内，`/healthz` 必须返回 200，且其中的版本号与提交号等于目标版本；否则自动回滚到上一版本，写 `deploy.rolled-back` 日志，并在 `deploy.log` 中记结果为 `rolled-back` | 未满足 |
 | OPS-047 | A | 以下任一情况发生时，必须在 10 分钟内回滚：服务进程 5 分钟内重启 ≥ 3 次；E5 错误占全部消息的比例 5 分钟内 ≥ 1%；健康检查失败；同一新版本收到 ≥ 3 名玩家报告的同一严重问题 | 未满足 |
 | OPS-048 | A | 服务器上的每次上线、回滚、配置修改，必须追加一行记录到 `/var/lib/yi/deploy.log`：时间（RFC 3339）、操作者、操作、版本、结果 | 未满足 |
 | OPS-050 | C | 除紧急修复外，上线时间统一为北京时间 10:00 至 22:00 | 满足（未成文） |
@@ -127,6 +127,7 @@
 | `server.stop` | info | 服务停止 | `reason` |
 | `server.listen-failed` | error | 端口无法监听，服务未启动 | `ports`、`err` |
 | `server.config-invalid` | error | 配置校验失败，拒绝启动 | `variable`、`expected` |
+| `server.maintenance` | info | 进入维护模式（OPS-045） | `games`、`players` |
 | `store.load-failed` | error | 存档无法读取或解析，拒绝启动 | `file`、`err` |
 | `store.write-failed` | warn、error | 写盘失败，数据保留在内存中并退避重试：连续第 1、2 次为 warn，第 3 次起为 error（DAT-052） | `file`、`attempts`、`retryMs`；error 级别另含 `err` |
 | `store.write-recovered` | info | 写盘在失败后恢复成功 | `file`、`attempts` |
@@ -146,6 +147,7 @@
 | `conn.kicked` | warn | 累计违规断开 | `playerId`、`code` |
 | `http.download` | info | 下载开始 | `file`、`range` |
 | `deploy.done` | info | 上线完成（写入 `deploy.log`） | `version`、`commit` |
+| `deploy.rolled-back` | error | 上线后健康检查不通过，已自动回滚（OPS-046）；由上线脚本以 `systemd-cat -t yi-deploy` 写入 journald，可被 `journalctl -p warning` 筛出 | `version`、`target`、`reason` |
 | `metrics.snapshot` | info | 每 60 秒的指标快照 | 本文件第 9 节的全部指标 |
 | `internal.error` | error | 未预期的异常 | `errorId`、`err` |
 
