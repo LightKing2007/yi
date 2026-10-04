@@ -1,5 +1,5 @@
 # 发版：推送 v* 标签时（由 npm run release 推送），先核对标签与版本号、更新日志，跑一遍检查，
-# 再在 macOS、Windows、Linux 上分别打安装包，连同服务端（yi-server-版本.cjs）一起建一个草稿 Release，
+# 再在 macOS、Windows、Linux 上分别打安装包，连同服务端（yi-server-版本.cjs）、校验和（SHA256SUMS）与软件物料清单（yi-sbom-版本.cdx.json）一起建一个草稿 Release，
 # 说明取自游戏里这一版的更新日志。确认后在网页上点发布，再 npm run deploy 上线。流程见 docs/procedures/release.md，规则见 OPS-020 至 OPS-033。
 # 也可以在 Actions 页面手动运行（只打包、作为附件下载，不建 Release）。
 # 注意：私有仓库里 macOS 机器按 10 倍计分钟数，所以只在打标签或手动时运行。
@@ -83,10 +83,20 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: dist
           merge-multiple: true
+      - name: 软件物料清单与校验和
+        run: |
+          v=${GITHUB_REF_NAME#v}
+          # 软件物料清单（OPS-032）：按锁定文件列出全部依赖，CycloneDX 格式
+          npm sbom --sbom-format cyclonedx --package-lock-only > "dist/yi-sbom-$v.cdx.json"
+          # 校验和（OPS-030、SEC-070）：全部附件的 SHA-256，格式与下载页面的 /SHA256SUMS 相同，上线脚本据此核对（OPS-031）
+          (cd dist && sha256sum Yi-* yi-server-*.cjs yi-sbom-*.cdx.json > SHA256SUMS && cat SHA256SUMS)
       - name: 建草稿 Release
         env:
           GH_TOKEN: ${{ github.token }}

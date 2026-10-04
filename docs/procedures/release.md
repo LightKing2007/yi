@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 性质 | 规程，强制执行；依据 [07-operations.md](../standards/07-operations.md)、[08-versioning.md](../standards/08-versioning.md)、[09-text-and-i18n.md](../standards/09-text-and-i18n.md) |
-| 文件版本 | 1.1.3 |
+| 文件版本 | 1.1.4 |
 | 修订日期 | 2026-10-05 |
 | 适用范围 | 从修改代码到玩家获得新版本的全部步骤：分支、提交、PR、更新日志、发版、上线、回滚、紧急修复 |
 
@@ -101,7 +101,7 @@ npm run release -- 2.0.3
 
 1. 核对标签与版本号、更新日志，并运行测试（OPS-022）；
 2. 在 macOS、Windows、Linux 上分别构建安装程序；
-3. 创建草稿 Release，附件为四个安装程序与服务端 `yi-server-2.0.3.cjs`，说明由更新日志生成。
+3. 创建草稿 Release，附件为四个安装程序、服务端 `yi-server-2.0.3.cjs`、软件物料清单 `yi-sbom-2.0.3.cdx.json`（OPS-032）与列出以上全部附件 SHA-256 的 `SHA256SUMS`（OPS-030），说明由更新日志生成。
 
 5.6 人工核对草稿 Release 的附件与说明（OPS-023），确认无误后发布：
 
