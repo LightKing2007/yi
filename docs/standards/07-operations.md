@@ -3,8 +3,8 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.1 |
-| 修订日期 | 2026-10-02 |
+| 文件版本 | 1.1.2 |
+| 修订日期 | 2026-10-04 |
 | 规则前缀 | `OPS` |
 
 参考：ISO/IEC/IEEE 12207:2017 第 6.4.10 节至第 6.4.13 节；ISO/IEC 20000-1:2018；ISO/IEC 27035-1:2023；GB/T 20986—2023；RFC 3339；RFC 5424；SLSA v1.0。
@@ -65,7 +65,7 @@
 
 ## 5 日志
 
-5.1 服务端日志统一为 JSON Lines，每行一个对象，字段如下：
+5.1 服务端日志统一为 JSON Lines，每行一个对象。下表以外的字段为事件的附加字段（本文件第 8 节），与下表的字段处于同一层级。字段如下：
 
 | 字段 | 类型 | 必需 | 说明 |
 |---|---|---|---|
@@ -78,13 +78,15 @@
 | `errorId` | 字符串 | 否 | E5 错误的 UUID v4 |
 | `err` | 对象 | 否 | `{ name, message, stack }`，仅 `error` 级别 |
 | `durMs` | 数值 | 否 | 耗时（毫秒） |
+| `truncated` | 布尔 | 否 | 该行超过 8 KB 而被截断时为 `true`（OPS-063） |
+| `suppressed` | 整数 | 否 | 汇总行中被合并的行数（OPS-063） |
 
 | 编号 | 等级 | 规定 | 现状 |
 |---|---|---|---|
-| OPS-060 | A | 服务端日志统一按第 5.1 条的格式输出到标准输出，由 journald 收集；严禁写入其他文件 | 未满足（纯文本） |
+| OPS-060 | A | 服务端日志统一按第 5.1 条的格式输出到标准输出，由 journald 收集；严禁写入其他文件。在 systemd 之下运行（存在环境变量 `JOURNAL_STREAM`）时，每行前加 sd-daemon 约定的 `<级别号>` 前缀（error 为 3，warn 为 4，info 为 6，debug 为 7），由 journald 去除并记为该行的优先级，使 `journalctl -p` 按级别筛选可用（OPS-075）；journald 中保存的仍是第 5.1 条格式的 JSON | 未满足（纯文本） |
 | OPS-061 | A | 机器生成的时间戳统一为 UTC；面向人的日期（发布日期、审计报告）统一为北京时间（UTC+08:00），格式为 `YYYY-MM-DD` | 部分满足（日志为服务器本地时间且无时区标记） |
 | OPS-062 | A | 生产环境的日志级别统一为 `info`；需要 `debug` 时以环境变量 `YI_LOG_LEVEL=debug` 临时开启，排查结束后 24 小时内必须关闭 | 未满足 |
-| OPS-063 | A | 单行日志 ≤ 8 KB，超出部分截断并加 `"truncated": true`；同一事件码每秒 ≤ 100 行，超出部分合并为一条带计数的汇总 | 未满足 |
+| OPS-063 | A | 单行日志 ≤ 8 KB，超出部分截断并加 `"truncated": true`；同一事件码每秒 ≤ 100 行，超出部分合并为一条带计数的汇总：汇总行沿用该事件码与级别，以 `suppressed` 记被合并的行数，在该秒结束后输出 | 未满足 |
 | OPS-064 | A | 日志严禁包含 L4 数据；L3 数据必须脱敏（DAT-073）；昵称（L1）允许记录 | 满足 |
 | OPS-065 | A | journald 必须配置 `SystemMaxUse=1G`、`MaxRetentionSec=90day` | 未满足（使用默认值） |
 | OPS-066 | A | 桌面端错误日志保留现有规则：写入 `userData/logs/yi.log`，超过 1 MB 时轮转为 `yi.old.log`，只保留这两个文件；格式改为与第 5.1 条相同的 JSON Lines | 部分满足 |
@@ -123,9 +125,14 @@
 |---|---|---|---|
 | `server.start` | info | 服务启动 | `ports`、`protoRange`、`dataFile` |
 | `server.stop` | info | 服务停止 | `reason` |
-| `server.config-invalid` | error | 配置校验失败 | `variable`、`expected` |
-| `store.load-failed` | error | 存档解析失败，拒绝启动 | `file`、`err` |
-| `store.write-failed` | error | 写盘失败（连续 3 次） | `file`、`attempts`、`err` |
+| `server.listen-failed` | error | 端口无法监听，服务未启动 | `ports`、`err` |
+| `server.config-invalid` | error | 配置校验失败，拒绝启动 | `variable`、`expected` |
+| `store.load-failed` | error | 存档无法读取或解析，拒绝启动 | `file`、`err` |
+| `store.write-failed` | warn、error | 写盘失败，数据保留在内存中并退避重试：连续第 1、2 次为 warn，第 3 次起为 error（DAT-052） | `file`、`attempts`、`retryMs`；error 级别另含 `err` |
+| `store.write-recovered` | info | 写盘在失败后恢复成功 | `file`、`attempts` |
+| `store.records-invalid` | warn | 存档中有记录损坏，已按新玩家处理，原文件另存 | `file`、`count`、`copy` |
+| `store.dumped` | error | 退出前写盘失败，段位数据已转储到另一文件 | `file`、`dump` |
+| `store.dump-failed` | error | 退出前写盘与转储都失败，本次运行后的段位变化丢失 | `file`、`dump`、`err` |
 | `player.online` | info | 玩家上线 | `playerId` |
 | `player.offline` | info | 玩家断开 | `playerId`、`code` |
 | `player.resumed` | info | 玩家重连成功 | `playerId`、`roomId` |
@@ -135,7 +142,7 @@
 | `game.over` | info | 终局 | `roomId`、`gameId`、`winner`、`reason`、`moves` |
 | `rating.changed` | info | 段位变化 | `playerId`、`before`、`after` |
 | `proto.invalid` | warn | 非法消息 | `playerId`、`reason` |
-| `rate.limited` | warn | 触发限流 | `playerId`、`count` |
+| `rate.limited` | warn | 触发限流；同一连接每秒至多一行 | `playerId`、`count`（60 秒内累计的违规次数，API-045） |
 | `conn.kicked` | warn | 累计违规断开 | `playerId`、`code` |
 | `http.download` | info | 下载开始 | `file`、`range` |
 | `deploy.done` | info | 上线完成（写入 `deploy.log`） | `version`、`commit` |
