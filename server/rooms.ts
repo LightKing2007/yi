@@ -9,6 +9,7 @@ import { Game } from '../src/core/game';
 import { rejectText } from '../src/shared/reject';
 import { BLACK, GameType, WHITE, other } from '../src/core/types';
 import { isInvalid, parseC2S, type Invalid } from '../src/shared/parse';
+import type { Log } from './log';
 import { BAN_SECS, ConnLimits, type LimitedOp } from './ratelimit';
 import {
   ACTS_MAX,
@@ -61,6 +62,13 @@ export class MemoryStore implements RatingStore {
 const MAX_PLAYERS = 2048;
 const MAX_ROOMS = 1024;
 const ELO_K = 32;
+/** Elo 期望得分公式 1 / (1 + 10^(分差 / 400)) 中的底数与分差尺度 */
+const ELO_BASE = 10,
+  ELO_SCALE = 400;
+/** 和棋的得分（胜 1、负 0） */
+const DRAW_SCORE = 0.5;
+/** 匹配与排位开局时，先配上的一方执黑的概率 */
+const FIRST_BLACK_CHANCE = 0.5;
 const JOIN_FAILS = 5; // 一条连接一分钟内最多几次加入失败，超过就暂时不让再试（防止遍历房号）
 /** 统计加入失败次数的时间窗 */
 const JOIN_WINDOW_SECS = 60;
@@ -75,6 +83,15 @@ const TOKEN_BYTES = 16;
 const UID_HASH_CHARS = 32;
 /** 超出频率限制时的提示（v3 以文本下发；协议 v4 起为错误码 rate.limited，E3） */
 const LIMITED_TEXT = '操作过于频繁，请稍后再试';
+
+/** 房间的对局设置：棋类、路数、禁手、每步限时（与 queueRules 的结果同形） */
+type RoomRules = ReturnType<typeof queueRules>;
+
+/** 房间的座次：hostColor 为房主执子的颜色（2 表示不指定），host 为房主的玩家号（匹配与排位为 0） */
+interface RoomSeat {
+  hostColor: number;
+  host: number;
+}
 
 interface QEntry {
   p: Player;
@@ -130,6 +147,7 @@ interface Room {
   renju: boolean;
   moveTime: number;
   host: number; // 好友房间的房主
+  gameId: number; // 当前这一局的编号：再来一局时换新的，用于日志（07-operations.md 第 5.1 条）
   pid: [number, number, number]; // pid[BLACK] / pid[WHITE] 对局双方的玩家号
   who: [Player | null, Player | null, Player | null]; // 开局时的双方（排位结算用，掉线清理后也还在）
   g: Game;
@@ -149,7 +167,7 @@ interface Room {
 export interface RoomServerOptions {
   now?: () => number; // 秒
   random?: () => number;
-  log?: (text: string) => void;
+  log?: Log;
   store?: RatingStore;
   latest?: string; // 最新的客户端版本号，随 welcome 发给客户端
   download?: string; // 新版本的下载地址
@@ -180,9 +198,10 @@ export class RoomServer {
   private banned = new Map<string, number>();
   private nextPlayer = 1;
   private nextRoom = 1;
+  private nextGame = 1;
   private now: () => number;
   private random: () => number;
-  private log: (text: string) => void;
+  private log: Log;
   private store: RatingStore;
   private latest: { latest?: string; url?: string };
 
@@ -251,8 +270,11 @@ export class RoomServer {
     if (this.players.has(p) && p.conn && (!conn || p.conn === conn)) p.lastSeen = this.now();
   }
 
-  /** 连接断开：对局中保留席位等待重连，其余情况直接离开。conn：断开的是哪条连接（已被新连接接管的旧连接断开时什么也不做） */
-  disconnect(p: Session, conn?: Conn) {
+  /**
+   * 连接断开：对局中保留席位等待重连，其余情况直接离开。conn：断开的是哪条连接（已被新连接接管的旧连接断开时什么也不做）；
+   * code：关闭码，只用于日志
+   */
+  disconnect(p: Session, conn?: Conn, code?: number) {
     if (!this.players.has(p) || !p.conn || (conn && p.conn !== conn)) return;
     p.conn = null;
     p.offAt = this.now();
@@ -260,7 +282,7 @@ export class RoomServer {
       this.forget(p);
       return;
     }
-    this.log(`${p.name} 断开`);
+    this.log('info', 'player.offline', { msg: `${p.name} 断开`, playerId: p.id, code });
     this.unqueue(p);
     if (p.match) this.dropMatch(p.match, [p], '对方已离开');
     const r = this.rooms.get(p.room);
@@ -378,15 +400,20 @@ export class RoomServer {
 
   /** 服务端主动断开一条连接：先按断线处理（对局中保留席位），再关闭；code 为关闭码，不带时直接切断 */
   private drop(p: Player, code?: number) {
-    const c = p.conn;
-    if (!c) return;
-    this.disconnect(p);
-    c.close(code);
+    const conn = p.conn;
+    if (!conn) return;
+    this.disconnect(p, conn, code);
+    conn.close(code);
   }
 
   /** 超出频率限制（E3）：丢弃这次请求，1 秒内只提示一次，并累计一次违规 */
   private limited(p: Player) {
-    if (p.limits.notice(this.now())) this.send(p, { t: 'error', text: LIMITED_TEXT });
+    const now = this.now();
+    if (p.limits.notice(now)) {
+      this.send(p, { t: 'error', text: LIMITED_TEXT });
+      // 随提示每秒至多记一行；count 含本次即将累计的这一次违规
+      this.log('warn', 'rate.limited', { playerId: p.id || undefined, count: p.limits.violations(now) + 1 });
+    }
     this.violate(p);
   }
 
@@ -397,7 +424,7 @@ export class RoomServer {
   private violate(p: Player) {
     if (!p.conn || !p.limits.violate(this.now())) return;
     if (p.key) this.banned.set(p.key, this.now() + BAN_SECS);
-    this.log(`${p.id ? `玩家 ${p.id}（${p.name}）` : '未握手的连接'} 累计违规过多，已断开`);
+    this.log('warn', 'conn.kicked', { msg: `${p.id ? p.name : '未握手的连接'} 累计违规过多，已断开`, playerId: p.id || undefined, code: CLOSE_CODE.policy });
     this.drop(p, CLOSE_CODE.policy);
   }
 
@@ -410,23 +437,31 @@ export class RoomServer {
 
   // ---------------- 匹配与排位 ----------------
 
-  private enqueue(p: Player, mode: QueueMode, type: number, size: number, since = this.now()) {
-    const rules = queueRules(mode, type, size);
-    const e: QEntry = { p, mode, type: rules.type, size: rules.size, since };
+  /** 进入匹配队列：want 为想要的模式、棋类与路数，since 为排队的起始时刻（配对作罢后按原来的时刻继续排） */
+  private enqueue(p: Player, want: Pick<QEntry, 'mode' | 'type' | 'size'>, since = this.now()) {
+    const { mode } = want;
+    const rules = queueRules(mode, want.type, want.size);
+    const entry: QEntry = { p, mode, type: rules.type, size: rules.size, since };
     // 队列按进入的先后排好；与同一队列里等得最久的人配对
     const other = this.queue.find(
-      o => o.p !== p && o.mode === e.mode && o.type === e.type && o.size === e.size && o.p.conn && !(mode === 'ranked' && o.p.key === p.key),
+      cand =>
+        cand.p !== p &&
+        cand.mode === mode &&
+        cand.type === entry.type &&
+        cand.size === entry.size &&
+        cand.p.conn &&
+        !(mode === 'ranked' && cand.p.key === p.key),
     ); // 排位不和自己（同一台设备）配对
     if (!other) {
-      let i = this.queue.findIndex(o => o.since > since);
+      let i = this.queue.findIndex(cand => cand.since > since);
       if (i < 0) i = this.queue.length;
-      this.queue.splice(i, 0, e);
-      p.queued = e;
-      this.send(p, { t: 'queued', mode: e.mode, type: e.type, size: e.size });
+      this.queue.splice(i, 0, entry);
+      p.queued = entry;
+      this.send(p, { t: 'queued', mode, type: entry.type, size: entry.size });
       return;
     }
     this.unqueue(other.p);
-    const m: Match = { mode: e.mode, type: e.type, size: e.size, side: [other, e], ok: [false, false], deadline: this.now() + CONFIRM_SECS };
+    const m: Match = { mode, type: entry.type, size: entry.size, side: [other, entry], ok: [false, false], deadline: this.now() + CONFIRM_SECS };
     this.matches.add(m);
     for (let i = 0; i < 2; i++) {
       const me = m.side[i].p,
@@ -434,7 +469,12 @@ export class RoomServer {
       me.match = m;
       this.send(me, { t: 'found', opp: this.oppInfo(opp, m.mode, m.type), secs: CONFIRM_SECS });
     }
-    this.log(`配对（${mode === 'ranked' ? '排位' : '匹配'}）：${other.p.name} 与 ${p.name}`);
+    this.log('info', 'match.paired', {
+      msg: `配对（${mode === 'ranked' ? '排位' : '匹配'}）：${other.p.name} 与 ${p.name}`,
+      mode,
+      playerId: p.id,
+      opponentId: other.p.id,
+    });
   }
 
   private unqueue(p: Player) {
@@ -451,14 +491,14 @@ export class RoomServer {
   /** 配对作罢：culprits（拒绝、超时、掉线的）退出匹配，另一方按原来的排队时刻继续匹配 */
   private dropMatch(m: Match, culprits: Player[], reason: string) {
     if (!this.matches.delete(m)) return;
-    for (const e of m.side) e.p.match = null;
-    for (const e of m.side) {
-      if (culprits.includes(e.p)) {
-        this.send(e.p, { t: 'unmatched', requeued: false, reason: '' });
+    for (const side of m.side) side.p.match = null;
+    for (const side of m.side) {
+      if (culprits.includes(side.p)) {
+        this.send(side.p, { t: 'unmatched', requeued: false, reason: '' });
         continue;
       }
-      this.send(e.p, { t: 'unmatched', requeued: true, reason });
-      if (e.p.conn) this.enqueue(e.p, e.mode, e.type, e.size, e.since);
+      this.send(side.p, { t: 'unmatched', requeued: true, reason });
+      if (side.p.conn) this.enqueue(side.p, side, side.since);
     }
   }
 
@@ -477,26 +517,26 @@ export class RoomServer {
       return;
     }
     this.matches.delete(m);
-    for (const e of m.side) e.p.match = null;
-    const rules = queueRules(m.mode, m.type, m.size);
-    const r = this.newRoom(m.mode, rules.type, rules.size, rules.renju, rules.moveTime, 2, 0);
-    this.seatPlayers(r, m.side[0].p, m.side[1].p, this.random() < 0.5 ? BLACK : WHITE);
+    for (const side of m.side) side.p.match = null;
+    const r = this.newRoom(m.mode, queueRules(m.mode, m.type, m.size), { hostColor: 2, host: 0 });
+    this.seatPlayers(r, m.side[0].p, m.side[1].p, this.random() < FIRST_BLACK_CHANCE ? BLACK : WHITE);
   }
 
   // ---------------- 房间 ----------------
 
-  private newRoom(kind: GameKind, type: number, size: number, renju: boolean, moveTime: number, hostColor: number, host: number): Room {
+  private newRoom(kind: GameKind, rules: RoomRules, seat: RoomSeat): Room {
     const r: Room = {
       id: this.nextRoom++,
       kind,
       code: '',
       state: RoomState.Wait,
-      type,
-      size,
-      hostColor,
-      renju,
-      moveTime,
-      host,
+      type: rules.type,
+      size: rules.size,
+      hostColor: seat.hostColor,
+      renju: rules.renju,
+      moveTime: rules.moveTime,
+      host: seat.host,
+      gameId: 0,
       pid: [0, 0, 0],
       who: [null, null, null],
       g: new Game(),
@@ -516,17 +556,23 @@ export class RoomServer {
     return r;
   }
 
-  /** 入座开局：a 执 aColor */
-  private seatPlayers(r: Room, a: Player, b: Player, aColor: number) {
-    r.pid[aColor] = a.id;
-    r.pid[3 - aColor] = b.id;
-    r.who[aColor] = a;
-    r.who[3 - aColor] = b;
-    a.room = b.room = r.id;
+  /** 入座开局：first 执 firstColor */
+  private seatPlayers(r: Room, first: Player, second: Player, firstColor: number) {
+    const secondColor = other(firstColor);
+    r.pid[firstColor] = first.id;
+    r.pid[secondColor] = second.id;
+    r.who[firstColor] = first;
+    r.who[secondColor] = second;
+    first.room = second.room = r.id;
     this.newRoomGame(r);
     this.sendStart(r);
     this.startTurn(r);
-    this.log(`房间 ${r.id}（${r.kind}）开局：${r.who[BLACK]?.name} 对 ${r.who[WHITE]?.name}`);
+    this.log('info', 'game.start', {
+      msg: `房间 ${r.id}（${r.kind}）开局：${r.who[BLACK]?.name} 对 ${r.who[WHITE]?.name}`,
+      roomId: r.id,
+      gameId: r.gameId,
+      kind: r.kind,
+    });
   }
 
   /**
@@ -564,34 +610,36 @@ export class RoomServer {
     r.paused = 0;
     r.result = { winner, reason };
     this.broadcast(r, { t: 'over', winner, reason });
-    this.log(`房间 ${r.id} 结束：胜方 ${winner}（${reason}）`);
+    this.log('info', 'game.over', { msg: `房间 ${r.id} 结束`, roomId: r.id, gameId: r.gameId, winner, reason, moves: r.g.moves.length });
     if (r.kind === 'ranked') this.rate(r, winner);
   }
 
   /** 排位结算（Elo）：胜方至少加 1 分 */
   private rate(r: Room, winner: number) {
-    const b = r.who[BLACK],
-      w = r.who[WHITE];
-    if (!b || !w) return;
+    const black = r.who[BLACK],
+      white = r.who[WHITE];
+    if (!black || !white) return;
     const k = typeKey(r.type),
-      rb = b.ratings[k],
-      rw = w.ratings[k];
-    const eb = 1 / (1 + 10 ** ((rw.points - rb.points) / 400));
-    const sb = winner === BLACK ? 1 : winner === WHITE ? 0 : 0.5;
-    let d = Math.round(ELO_K * (sb - eb));
-    if (sb === 1) d = Math.max(1, d);
-    if (sb === 0) d = Math.min(-1, d);
-    const apply = (p: Player, rt: Rating, delta: number, s: number) => {
+      blackRating = black.ratings[k],
+      whiteRating = white.ratings[k];
+    const blackExpected = 1 / (1 + ELO_BASE ** ((whiteRating.points - blackRating.points) / ELO_SCALE));
+    const blackScore = winner === BLACK ? 1 : winner === WHITE ? 0 : DRAW_SCORE;
+    let gain = Math.round(ELO_K * (blackScore - blackExpected));
+    if (blackScore === 1) gain = Math.max(1, gain);
+    if (blackScore === 0) gain = Math.min(-1, gain);
+    const apply = (p: Player, rt: Rating, delta: number, score: number) => {
+      const before = rt.points;
       rt.points = Math.max(0, rt.points + delta);
-      if (s === 1) rt.win++;
-      else if (s === 0) rt.loss++;
+      if (score === 1) rt.win++;
+      else if (score === 0) rt.loss++;
       else rt.draw++;
       if (p.key) this.store.set(p.key, p.ratings, p.name);
-      r.rated[p === b ? BLACK : WHITE] = { type: r.type, rating: { ...rt }, delta };
+      r.rated[p === black ? BLACK : WHITE] = { type: r.type, rating: { ...rt }, delta };
       this.send(p, { t: 'rated', type: r.type, rating: { ...rt }, delta });
+      this.log('info', 'rating.changed', { playerId: p.id, roomId: r.id, gameId: r.gameId, before, after: rt.points });
     };
-    apply(b, rb, d, sb);
-    apply(w, rw, -d, 1 - sb);
+    apply(black, blackRating, gain, blackScore);
+    apply(white, whiteRating, -gain, 1 - blackScore);
   }
 
   private sendStart(r: Room, only?: Player) {
@@ -617,6 +665,7 @@ export class RoomServer {
   }
 
   private newRoomGame(r: Room) {
+    r.gameId = this.nextGame++;
     r.g = new Game();
     r.g.newGame(r.type === 0 ? GameType.Gomoku : GameType.Go, r.size, { renju: r.type === 0 && r.renju });
     r.acts = [];
@@ -701,7 +750,7 @@ export class RoomServer {
     if (m.invalid === 'version') this.send(p, { t: 'error', text: '客户端版本与服务器不一致，请更新游戏' });
     else {
       this.send(p, { t: 'error', text: '消息格式错误' });
-      if (p.invalid++ === 0) this.log(`非法消息（${p.id ? `玩家 ${p.id}` : '未握手的连接'}）：${m.why}`);
+      if (p.invalid++ === 0) this.log('warn', 'proto.invalid', { msg: '非法消息', playerId: p.id || undefined, reason: m.why });
     }
     this.violate(p);
   }
@@ -734,7 +783,7 @@ export class RoomServer {
     p.ratings = { gomoku: { ...newRating(), ...saved?.gomoku }, go: { ...newRating(), ...saved?.go } };
     this.send(p, { t: 'welcome', id: p.id, token, ratings: p.ratings, ...this.latest });
     if (m.token !== undefined) this.send(p, { t: 'resumeFailed' }); // 原来的对局已经不在了（服务器重启过，或掉线太久）
-    this.log(`${p.name} 上线（玩家 ${p.id}）`);
+    this.log('info', 'player.online', { msg: `${p.name} 上线`, playerId: p.id });
     return p;
   }
 
@@ -756,7 +805,7 @@ export class RoomServer {
     this.send(back, { t: 'welcome', id: back.id, token: this.issueToken(back, usedHash), ratings: back.ratings, ...this.latest });
     const r = this.rooms.get(back.room);
     if (r && r.state !== RoomState.Wait) this.resumeRoom(r, back);
-    this.log(`${back.name} 重新连上`);
+    this.log('info', 'player.resumed', { msg: `${back.name} 重新连上`, playerId: back.id, roomId: back.room || undefined });
     return back;
   }
 
@@ -872,7 +921,7 @@ export class RoomServer {
       return;
     }
     this.unqueue(p);
-    this.enqueue(p, mode, type, size);
+    this.enqueue(p, { mode, type, size });
   }
 
   private createRoom(p: Player, m: Extract<C2S, { t: 'create' }>) {
@@ -885,12 +934,13 @@ export class RoomServer {
       return;
     }
     this.unqueue(p);
-    const size = m.type === 0 ? 15 : m.size === 9 || m.size === 13 ? m.size : 19; // 五子棋只有 15 路；围棋没有 15 路
-    const r = this.newRoom('friend', m.type, size, m.type === 0 && m.renju, m.moveTime, m.hostColor, p.id);
+    // 路数与匹配相同：五子棋只有 15 路，围棋没有 15 路；禁手与每步限时由房主选
+    const { size } = queueRules('match', m.type, m.size);
+    const r = this.newRoom('friend', { type: m.type, size, renju: m.type === 0 && m.renju, moveTime: m.moveTime }, { hostColor: m.hostColor, host: p.id });
     r.code = this.roomCode();
     p.room = r.id;
     this.send(p, { t: 'created', code: r.code });
-    this.log(`${p.name} 开房间 ${r.code}`);
+    this.log('info', 'room.created', { msg: `${p.name} 开房间 ${r.code}`, roomId: r.id, playerId: p.id });
   }
 
   /** 房主关闭尚未开始的房间 */

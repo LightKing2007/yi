@@ -24,6 +24,7 @@ const SKIPPED_FILES: Record<string, string> = {
   'src/shared/parse.ts': '消息校验失败的原因，只写入日志',
   'server/store.ts': '段位存档的诊断信息，只写入服务端日志',
   'server/log.ts': '日志模块本身，文字只写入服务端日志',
+  'server/main.ts': '服务端入口，文字只写入服务端日志',
   'server/page.ts': '下载页面只有中文，标点由 I18N-011 检查',
   'server/pageStyle.ts': '下载页面的样式',
   'server/files.ts': '下载页面的 HTTP 应答，只有中文',

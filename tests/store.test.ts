@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { EXIT_DATA_ERROR, EXIT_IO_ERROR, FileStore, StoreLoadError, type StoreFs, type StoreLog } from '../server/store';
+import type { Log, LogEntry, LogLevel } from '../server/log';
+import { EXIT_DATA_ERROR, EXIT_IO_ERROR, FileStore, StoreLoadError, type StoreFs } from '../server/store';
 import type { Ratings } from '../src/shared/protocol';
 
 const ratings = (points: number): Ratings => ({
@@ -13,9 +14,9 @@ const ratings = (points: number): Ratings => ({
 
 let dir = '';
 let file = '';
-let logs: { level: string; text: string }[] = [];
-const log: StoreLog = (level, text) => {
-  logs.push({ level, text });
+let logs: { level: LogLevel; event: string; entry: LogEntry }[] = [];
+const log: Log = (level, event, entry = {}) => {
+  logs.push({ level, event, entry });
 };
 
 beforeEach(() => {
@@ -34,12 +35,17 @@ const readJson = (f: string) => JSON.parse(fs.readFileSync(f, 'utf8'));
 
 /** 真实文件系统，但可以随时让写入以 ENOSPC 失败，模拟磁盘写满 */
 function fullableFs() {
-  const disk = { full: false };
+  const disk = { full: false, dumpFails: false };
+  const noSpace = () => Object.assign(new Error('ENOSPC: no space left on device, write'), { code: 'ENOSPC' });
   const writeSync = ((fd: number, data: string) => {
-    if (disk.full) throw Object.assign(new Error('ENOSPC: no space left on device, write'), { code: 'ENOSPC' });
+    if (disk.full) throw noSpace();
     return fs.writeSync(fd, data);
   }) as StoreFs['writeSync'];
-  return { disk, fs: { ...fs, writeSync } satisfies StoreFs };
+  const writeFileSync: StoreFs['writeFileSync'] = (target, data) => {
+    if (disk.dumpFails) throw noSpace();
+    fs.writeFileSync(target, data);
+  };
+  return { disk, fs: { ...fs, writeSync, writeFileSync } satisfies StoreFs };
 }
 
 function expectLoadError(exitCode: number) {
@@ -84,7 +90,7 @@ describe('读取存档', () => {
     expect(store.get('good')?.gomoku.points).toBe(1300);
     expect(store.get('bad')).toBeUndefined();
     expect(fs.readFileSync(file + '.corrupt', 'utf8')).toBe(original);
-    expect(logs).toContainEqual(expect.objectContaining({ level: 'warn' }));
+    expect(logs).toEqual([{ level: 'warn', event: 'store.records-invalid', entry: expect.objectContaining({ file, count: 1, copy: file + '.corrupt' }) }]);
   });
 });
 
@@ -129,22 +135,25 @@ describe('写盘失败', () => {
     store.set('a', ratings(1250), '甲');
 
     vi.advanceTimersByTime(2000);
-    expect(logs.map(l => l.level)).toEqual(['warn']);
+    expect(logs.map(entry => entry.level)).toEqual(['warn']);
     expect(store.get('a')?.gomoku.points).toBe(1250);
     expect(readJson(file).a.ratings.gomoku.points).toBe(1200);
     expect(fs.existsSync(file + '.tmp')).toBe(false);
 
     vi.advanceTimersByTime(1000);
-    expect(logs.map(l => l.level)).toEqual(['warn', 'warn']);
+    expect(logs.map(entry => entry.level)).toEqual(['warn', 'warn']);
     vi.advanceTimersByTime(1999);
     expect(logs).toHaveLength(2);
     vi.advanceTimersByTime(1);
-    expect(logs.map(l => l.level)).toEqual(['warn', 'warn', 'error']);
+    expect(logs.map(entry => entry.level)).toEqual(['warn', 'warn', 'error']);
+    expect(logs.map(entry => entry.event)).toEqual(Array(3).fill('store.write-failed'));
+    expect(logs.map(entry => entry.entry.attempts)).toEqual([1, 2, 3]);
+    expect(logs.map(entry => entry.entry.err)).toEqual([undefined, undefined, expect.any(Error)]);
 
     disk.full = false;
     vi.advanceTimersByTime(4000);
     expect(readJson(file).a.ratings.gomoku.points).toBe(1250);
-    expect(logs.at(-1)?.level).toBe('info');
+    expect(logs.at(-1)).toEqual({ level: 'info', event: 'store.write-recovered', entry: expect.objectContaining({ file, attempts: 3 }) });
   });
 
   it('退避重试期间的段位变化不会提前触发写盘', () => {
@@ -169,17 +178,32 @@ describe('写盘失败', () => {
     disk.full = true;
     store.set('a', ratings(1210), '甲');
     for (let i = 0; i < 8; i++) store.flush();
-    expect(logs.at(-1)?.text).toContain('60 秒后重试');
+    expect(logs.at(-1)?.entry).toEqual(expect.objectContaining({ retryMs: 60_000, msg: expect.stringContaining('60 秒后重试') }));
   });
+});
 
+describe('退出前的应急转储', () => {
   it('退出前写盘失败时把数据转储到 emergency 文件，且不再留下重试定时器', () => {
     const { disk, fs: faulty } = fullableFs();
     const store = new FileStore(file, { log, fs: faulty, now: () => Date.UTC(2026, 9, 2, 1, 42, 17) });
     disk.full = true;
     store.set('a', ratings(1210), '甲');
     expect(store.close()).toBe(true);
-    expect(readJson(path.join(dir, 'emergency-20261002T014217Z.json')).a.ratings.gomoku.points).toBe(1210);
+    const dump = path.join(dir, 'emergency-20261002T014217Z.json');
+    expect(readJson(dump).a.ratings.gomoku.points).toBe(1210);
+    expect(logs.at(-1)).toEqual({ level: 'error', event: 'store.dumped', entry: expect.objectContaining({ file, dump }) });
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('退出前写盘与转储都失败时返回 false，并以 error 记下数据丢失', () => {
+    const { disk, fs: faulty } = fullableFs();
+    const store = new FileStore(file, { log, fs: faulty, now: () => Date.UTC(2026, 9, 2, 1, 42, 17) });
+    disk.full = disk.dumpFails = true;
+    store.set('a', ratings(1210), '甲');
+    expect(store.close()).toBe(false);
+    const dump = path.join(dir, 'emergency-20261002T014217Z.json');
+    expect(logs.at(-1)).toEqual({ level: 'error', event: 'store.dump-failed', entry: expect.objectContaining({ file, dump, err: expect.any(Error) }) });
+    expect(fs.existsSync(dump)).toBe(false);
   });
 
   it('退出前写盘成功时不产生 emergency 文件', () => {

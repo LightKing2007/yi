@@ -9,6 +9,7 @@ import WebSocket from 'ws';
 import { MemoryStore, RoomServer, type Conn, type RoomServerOptions, type Session } from '../server/rooms';
 import { HTTP_LIMITS, hardenHttp, startHost } from '../server/host';
 import { fileServer } from '../server/files';
+import type { Log, LogEntry, LogLevel } from '../server/log';
 import { CLOSE_CODE, GRACE_SECS, HELLO_SECS, PROTO_VERSION, type C2S, type S2C } from '../src/shared/protocol';
 import { parseS2C } from '../src/shared/parse';
 
@@ -340,13 +341,13 @@ describe('入站消息校验', () => {
   });
 
   it('握手前的非法消息同样被拒；同一连接只记第一条日志', () => {
-    const logs: string[] = [];
-    const { srv } = world(new MemoryStore(), { log: s => logs.push(s) });
+    const logs: { event: string; entry?: LogEntry }[] = [];
+    const { srv } = world(new MemoryStore(), { log: (_level, event, entry) => logs.push({ event, entry }) });
     const inbox: S2C[] = [];
     const s = srv.connect({ send: m => inbox.push(expectClientAccepts(m)), close: () => {} })!;
     for (const m of [undefined, null, [], { t: 'hello', v: PROTO_VERSION, name: '甲', uid: 'bad uid' }]) srv.message(s, m);
     expect(inbox).toEqual(Array(4).fill({ t: 'error', text: '消息格式错误' }));
-    expect(logs.filter(l => l.includes('非法消息'))).toHaveLength(1);
+    expect(logs.filter(l => l.event === 'proto.invalid')).toEqual([{ event: 'proto.invalid', entry: expect.objectContaining({ reason: '消息不是对象' }) }]);
   });
 });
 
@@ -1104,6 +1105,99 @@ describe('连接层的限制（API-041、API-042、API-047）', () => {
       srv.closeAllConnections();
       await new Promise(r => srv.close(r));
       fs.rmSync(dir, { recursive: true });
+    }
+  });
+});
+
+describe('服务端日志的事件（07-operations.md 第 8 节）', () => {
+  /** 带日志的服务端：logs 依次记下每一行的级别、事件码与内容 */
+  const logged = () => {
+    const logs: { level: LogLevel; event: string; entry: LogEntry }[] = [];
+    const w = world(new MemoryStore(), { log: (level, event, entry = {}) => logs.push({ level, event, entry }) });
+    const events = (...names: string[]) => logs.filter(row => names.includes(row.event));
+    return { ...w, logs, events };
+  };
+
+  it('排位一局：上线、配对、开局、终局、两人的段位变化依次记下，带玩家、房间与对局编号', () => {
+    const { srv, events } = logged();
+    const a = new Client(srv, '甲'),
+      b = new Client(srv, '乙');
+    const { sa } = matchUp(a, b, 'ranked');
+    const [blk, wht] = sa.color === 1 ? [a, b] : [b, a];
+    blk.send({ t: 'move', x: 7, y: 7 });
+    wht.send({ t: 'resign' });
+    expect(events('player.online').map(row => row.entry.playerId)).toEqual([a.id, b.id]);
+    expect(events('match.paired', 'game.start', 'game.over', 'rating.changed').map(row => [row.event, row.entry])).toEqual([
+      ['match.paired', expect.objectContaining({ mode: 'ranked', playerId: b.id, opponentId: a.id })],
+      ['game.start', expect.objectContaining({ roomId: 1, gameId: 1, kind: 'ranked' })],
+      ['game.over', expect.objectContaining({ roomId: 1, gameId: 1, winner: 1, reason: 'resign', moves: 1 })],
+      ['rating.changed', expect.objectContaining({ playerId: blk.id, roomId: 1, gameId: 1, before: 1200, after: 1216 })],
+      ['rating.changed', expect.objectContaining({ playerId: wht.id, roomId: 1, gameId: 1, before: 1200, after: 1184 })],
+    ]);
+  });
+
+  it('好友房间：开房间记下房间号；再来一局换新的对局编号，房间号不变', () => {
+    const { srv, events } = logged();
+    const a = new Client(srv, '甲'),
+      b = new Client(srv, '乙');
+    startGame(a, b);
+    a.send({ t: 'resign' });
+    a.send({ t: 'rematch' });
+    b.send({ t: 'reply', kind: 'rematch', ok: true });
+    expect(events('room.created')).toEqual([{ level: 'info', event: 'room.created', entry: expect.objectContaining({ roomId: 1, playerId: a.id }) }]);
+    expect(events('game.start').map(row => [row.entry.roomId, row.entry.gameId])).toEqual([
+      [1, 1],
+      [1, 2],
+    ]);
+  });
+
+  it('好友房间的路数与匹配相同：围棋选 15 路时按 19 路开局，五子棋固定 15 路', () => {
+    const { srv } = logged();
+    const go = startGame(new Client(srv, '甲'), new Client(srv, '乙'), { type: 1, size: 15, renju: true });
+    const gomoku = startGame(new Client(srv, '丙'), new Client(srv, '丁'), { type: 0, size: 19 });
+    expect([go.sa.size, go.sa.renju, gomoku.sa.size, gomoku.sa.renju]).toEqual([19, false, 15, true]);
+  });
+
+  it('断开与重连：断开时记下关闭码，重连时记下回到的房间', () => {
+    const { srv, events } = logged();
+    const a = new Client(srv, '甲'),
+      c = new Client(srv, '丙');
+    startGame(a, c);
+    srv.disconnect(c.sess, c.conn, 1006);
+    new Client(srv, '丙', c.token);
+    expect(events('player.offline', 'player.resumed').map(row => [row.event, row.entry])).toEqual([
+      ['player.offline', expect.objectContaining({ playerId: c.id, code: 1006 })],
+      ['player.resumed', expect.objectContaining({ playerId: c.id, roomId: 1 })],
+    ]);
+  });
+
+  it('消息洪泛：限流每秒只记一行并带累计违规次数，断开时记下 1008', () => {
+    const { srv, events } = logged();
+    const a = new Client(srv, '甲');
+    for (let i = 0; i < 50; i++) a.send({ t: 'ping' });
+    expect(events('rate.limited', 'conn.kicked', 'player.offline').map(row => [row.level, row.event, row.entry])).toEqual([
+      ['warn', 'rate.limited', { playerId: a.id, count: 1 }],
+      ['warn', 'conn.kicked', expect.objectContaining({ playerId: a.id, code: CLOSE_CODE.policy })],
+      ['info', 'player.offline', expect.objectContaining({ playerId: a.id, code: CLOSE_CODE.policy })],
+    ]);
+  });
+
+  it('真实连接关闭时，日志中的关闭码取自对方发来的关闭帧', async () => {
+    let offline: (code: unknown) => void = () => {};
+    const offlineCode = new Promise(res => (offline = res));
+    const log: Log = (_level, event, entry) => {
+      if (event === 'player.offline') offline(entry?.code);
+    };
+    const host = await startHost(0, { host: '127.0.0.1', log });
+    try {
+      const ws = new WebSocket(`ws://127.0.0.1:${host.port}`);
+      await new Promise(res => ws.on('open', res));
+      ws.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, name: '甲', uid: newUid() }));
+      await new Promise(res => ws.once('message', res));
+      ws.close(4100);
+      expect(await offlineCode).toBe(4100);
+    } finally {
+      await host.close();
     }
   });
 });
