@@ -26,6 +26,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "shots": "electron scripts/shots.cjs",
+    "fit-check": "electron scripts/fit-check.cjs",
     "server": "node dist-server/server.cjs",
     "app": "npm run build && electron .",
     "app:dev": "npm run build:node && YI_DEV_URL=http://localhost:5173 electron .",
