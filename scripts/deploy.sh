@@ -26,7 +26,7 @@ verify_sums() {
     want=$(awk -v name="$name" '$2 == name { print $1 }' "$1/SHA256SUMS")
     [ -n "$want" ] || { echo "✗ SHA256SUMS 中没有 $name" >&2; return 1; }
     got=$(sha256 "$f")
-    [ "$got" = "$want" ] || { echo "✗ $name 的 SHA-256 不符：应为 $want，实为 $got" >&2; return 1; }
+    [ "$got" = "$want" ] || { echo "✗ ${name} 的 SHA-256 不符：应为 ${want}，实为 ${got}" >&2; return 1; }
   done
 }
 
@@ -85,7 +85,7 @@ if [ "${1:-}" = install-journald ]; then
     echo \"服务端：\$(systemctl is-active yi)\"
     echo \"\$(date -u +%Y-%m-%dT%H:%M:%SZ) $WHO config P1-08 install-journald \$r\" >> /var/lib/yi/deploy.log
     test \$r = ok"
-  echo "✓ journald 的保留策略已安装：$CONF（总量至多 1 GB，保留 90 日）"
+  echo "✓ journald 的保留策略已安装：${CONF}（总量至多 1 GB，保留 90 日）"
   exit 0
 fi
 
@@ -119,7 +119,7 @@ ssh "$SERVER" "set -e
   mv server.cjs server.cjs.prev && mv server.cjs.new server.cjs
   sed -i 's/^Environment=YI_LATEST=.*/Environment=YI_LATEST=$V/' /etc/systemd/system/yi.service
   systemctl daemon-reload"
-echo "✓ 下载页已换成 $V，服务端已换好，重启后生效（上一版留作 server.cjs.prev）"
+echo "✓ 下载页已换成 ${V}，服务端已换好，重启后生效（上一版留作 server.cjs.prev）"
 
 n=$(ssh "$SERVER" "ss -Htn state established '( sport = :8443 )' | wc -l")
 echo "服务器上现在有 $n 条连接（正在下棋或下载的人）"

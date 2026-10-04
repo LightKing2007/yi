@@ -48,4 +48,4 @@ fi
 
 size=$(wc -c < "$DIR/$name" | tr -d ' ')
 sum=$(cut -c1-16 "$DIR/$name.sha256")
-echo "<6>段位存档已备份到 $DIR/$name（$size 字节，SHA-256 $sum…），共保留 $(ls "$DIR" | grep -c '^yi-ratings-.*\.json$') 份"
+echo "<6>段位存档已备份到 $DIR/${name}（${size} 字节，SHA-256 ${sum}…），共保留 $(ls "$DIR" | grep -c '^yi-ratings-.*\.json$') 份"
