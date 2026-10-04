@@ -621,6 +621,18 @@ describe('WebSocket 传输', () => {
   });
 });
 
+describe('端口', () => {
+  it('端口被占用时 startHost 以 EADDRINUSE 拒绝，不抛出未处理的异常；同时监听几个端口时也一样', async () => {
+    const busy = await startHost(0, { host: '127.0.0.1' });
+    try {
+      await expect(startHost(busy.port, { host: '127.0.0.1' })).rejects.toMatchObject({ code: 'EADDRINUSE' });
+      await expect(startHost([0, busy.port], { host: '127.0.0.1' })).rejects.toMatchObject({ code: 'EADDRINUSE' });
+    } finally {
+      await busy.close();
+    }
+  });
+});
+
 describe('安装包下载', () => {
   it('同一个端口上：下载页只列出每个平台最新的安装包，可以断点续传，其他文件拿不到', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-files-'));

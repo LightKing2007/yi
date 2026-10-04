@@ -51,9 +51,12 @@ function listen(port: number, host: string | undefined, web: Web) {
   hardenHttp(httpServer);
   const wss = new WebSocketServer({ server: httpServer, maxPayload: MAX_MSG_BYTES, perMessageDeflate: false });
   return new Promise<{ http: http.Server; wss: WebSocketServer }>((resolve, reject) => {
+    // ws 把 HTTP 服务器的 error 事件转发给 WebSocketServer：监听期间两处都要接住，否则端口被占用时成了未处理的异常，进程直接崩溃
     httpServer.once('error', reject);
+    wss.once('error', reject);
     httpServer.listen(port, host, () => {
       httpServer.off('error', reject);
+      wss.off('error', reject);
       resolve({ http: httpServer, wss });
     });
   });
