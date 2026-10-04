@@ -219,24 +219,24 @@ node dist-server/server.cjs --version
 
 ### 5.3 线上部署
 
-线上服务器为 47.108.181.240（Ubuntu 24.04），部署结构如下：
+线上服务器为 47.108.181.240（Ubuntu 24.04），部署结构如下。服务端与安装程序按版本存放，为执行 `npm run deploy -- migrate-layout`（整改项 P1-09，只需一次）之后的结构：
 
 | 位置 | 内容 |
 |---|---|
 | `/opt/node/` | Node.js 24 官方二进制包（自 npmmirror 下载并校验后解压，不改动系统软件包） |
-| `/opt/yi/server.cjs` | 服务端（属主为 root，只读）；上一版本保留为 `server.cjs.prev` |
-| `/opt/yi/download/` | 下载页面上的安装程序（属主为 root，服务端只读），发版时由 `npm run deploy` 更新 |
+| `/opt/yi/releases/版本号/` | 一个版本的服务端 `server.cjs`、下载页面上的安装程序 `download/` 与最新版本号 `env`（`YI_LATEST=版本号`），属主为 root，服务端只读；只保留当前与上一版本（OPS-043） |
+| `/opt/yi/current`、`/opt/yi/previous` | 指向当前与上一版本目录的符号链接，由 `npm run deploy` 切换；回滚即互换两者（OPS-044） |
 | `/var/lib/yi/` | 段位数据，属主为系统用户 `yi`（`useradd --system --no-create-home --shell /usr/sbin/nologin yi`） |
 | `/etc/systemd/system/yi.service` | 常驻服务，开机自启，异常退出后 3 秒自动重启；因段位存档损坏退出（退出码 65、74）时不重启 |
 | `/etc/ssh/sshd_config.d/00-yi-hardening.conf` | SSH 仅允许 Ed25519 密钥登录，禁止口令登录（SEC-040）；原配置备份为 `/etc/ssh/sshd_config.bak-20261002` |
 | UFW | 主机防火墙，默认拒绝入站，仅放行 TCP 22、8443（SEC-041） |
 | `/etc/fail2ban/jail.local` | SSH 10 分钟内失败 5 次封禁 1 小时（SEC-042）。Ubuntu 24.04 的 SSH 单元名为 `ssh.service`，须以 `journalmatch = _SYSTEMD_UNIT=ssh.service + _COMM=sshd` 指明，否则 fail2ban 读不到任何日志 |
-| `/var/lib/yi/deploy.log` | 上线、回滚及配置修改的记录，每次操作追加一行（OPS-048） |
+| `/var/lib/yi/deploy.log` | 上线、回滚及配置修改的记录，每次操作追加一行（OPS-048）；最近一次上线的完整输出在 `deploy-last.log` |
 | `/opt/yi/backup.sh`、`/etc/systemd/system/yi-backup.{service,timer}` | 每日本地备份，每天北京时间 04:30 前后运行（DAT-060、DAT-061），源文件为仓库中的 `scripts/server/`，由 `npm run deploy -- install-backup` 安装 |
 | `/var/lib/yi/backup/` | 段位存档的备份 `yi-ratings-UTC时间.json` 及其 `.sha256` 校验和，保留最近 7 份（DAT-064） |
 | `/etc/systemd/journald.conf.d/yi.conf` | journald 的保留策略：日志总量至多 1 GB，保留 90 日（OPS-065），源文件为仓库中的 `scripts/server/journald-yi.conf`，由 `npm run deploy -- install-journald` 安装 |
 
-`yi.service` 的内容如下，其中 `YI_LATEST` 由 `npm run deploy` 维护：
+`yi.service` 的内容如下，服务端、安装程序与 `YI_LATEST` 均经 `/opt/yi/current` 读取：
 
 ```ini
 [Unit]
@@ -249,11 +249,11 @@ Type=simple
 User=yi
 Group=yi
 WorkingDirectory=/var/lib/yi
-ExecStart=/opt/node/bin/node /opt/yi/server.cjs 8443
+ExecStart=/opt/node/bin/node /opt/yi/current/server.cjs 8443
+EnvironmentFile=/opt/yi/current/env
 Environment=NODE_ENV=production
 Environment=YI_DATA=/var/lib/yi/yi-ratings.json
-Environment=YI_LATEST=2.0.2
-Environment=YI_FILES=/opt/yi/download
+Environment=YI_FILES=/opt/yi/current/download
 Environment=YI_DOWNLOAD=http://47.108.181.240:8443/
 Restart=always
 RestartSec=3
@@ -270,11 +270,12 @@ WantedBy=multi-user.target
 
 ### 5.4 更新与运维
 
-- **更新**：服务端随发版一同更新，由 `npm run deploy -- 版本号` 部署对应 Release 中的 `yi-server-版本.cjs`；`npm run deploy -- rollback` 可回退至上一版本。详见 [开发与发布规程](docs/procedures/release.md) 第 6 章。
+- **更新**：服务端随发版一同更新，由 `npm run deploy -- 版本号` 部署对应 Release 中的安装程序与 `yi-server-版本.cjs`：有对局时先进入维护模式，等对局结束后重启，重启后以健康检查核对版本，不通过即自动回滚；`npm run deploy -- rollback` 立即回退至上一版本。详见 [开发与发布规程](docs/procedures/release.md) 第 6 章。
+- **健康检查**：`npm run deploy -- status` 经服务器本机读取 `/healthz`，打出版本号、提交号、活跃对局数、是否处于维护模式与连接数；`/healthz` 只回应来自本机的请求（API-061）。
 - **查看日志**：`ssh root@47.108.181.240 journalctl -u yi -f`。日志为 JSON Lines，每行一个事件，`ver` 字段为服务端的版本号及提交号（格式与事件码见 [07-operations.md](docs/standards/07-operations.md) 第 5 节、第 8 节）；只看警告及以上：`journalctl -u yi -p warning`；临时输出 debug 级别：在 `yi.service` 中设 `Environment=YI_LOG_LEVEL=debug`（OPS-062）。
 - **修改服务配置**：修改 `yi.service` 后，执行 `systemctl daemon-reload && systemctl restart yi`。
 - **防火墙**：阿里云安全组与主机防火墙 UFW 均仅放行 TCP 22、8443 端口，两者须保持一致（SEC-041）。
-- **重启**：重启服务端将中断正在进行的对局，应在无人对局时进行。
+- **重启**：以 `npm run deploy -- restart` 进行：有对局时先进入维护模式，等对局结束后重启，并以健康检查核对；严禁直接执行 `systemctl restart yi`。
 - **备份**：备份在 `/var/lib/yi/backup/`。立即备份一次：`systemctl start yi-backup`；查看结果：`journalctl -u yi-backup -n 5`，失败记录为 error 级，可用 `journalctl -u yi-backup -p err` 筛出。异地备份见整改项 P1-13。
 - **从备份恢复**：恢复会丢失备份时刻之后的段位变化，并须重启服务端，应在无人对局时进行：
   1. `systemctl stop yi`；
