@@ -1,0 +1,113 @@
+# 平台冒烟检查（checklists.md 第 3 节中可以自动化的部分，见 scripts/smoke-app.mjs）：在 GitHub 的 Ubuntu、macOS、Windows 机器上
+# 从当前提交打出安装程序，按玩家的方式安装后启动并检查，Windows 另检查卸载；截图作为附件。手动运行，发版前对待发布的提交运行一次。
+# Linux 先在开启 Chromium 沙箱的情况下运行，这才是玩家的实际情况；不通过时再以 --no-sandbox 运行一次，用来区分是否为沙箱的问题。
+# 不能自动化、仍须在实机上确认的项：macOS 公证提示与 Windows SmartScreen 的首次打开提示、声音、与真人联机对局、Intel 芯片的 Mac。
+name: 平台冒烟检查
+
+on:
+  workflow_dispatch:
+  pull_request: # 改动检查本身时自动运行一次
+    paths:
+      - .github/workflows/smoke.yml
+      - scripts/smoke-app.mjs
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: Linux
+          - os: macos-latest
+            name: macOS
+          - os: windows-latest
+            name: Windows
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false' # 没有正式证书：macOS 用 package.json 里的临时签名
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+
+      # ---------------- Linux：AppImage ----------------
+      - if: runner.os == 'Linux'
+        run: npx electron-builder --linux --publish never
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update -q && sudo apt-get install -yq xvfb
+      - name: 启动 AppImage 并检查（开启沙箱）
+        if: runner.os == 'Linux'
+        id: sandboxed
+        continue-on-error: true
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1' # 运行机器上没有 FUSE 2：AppImage 解压后运行
+          # 运行机器没有 GPU。Chromium 已取消 WebGL 自动退回软件渲染，须显式允许 SwiftShader，否则游戏提示“当前环境不支持 WebGL2”
+          SMOKE_ARGS: --enable-unsafe-swiftshader
+        run: xvfb-run -a -s "-screen 0 1600x1000x24" node scripts/smoke-app.mjs "$(ls release/*.AppImage)" smoke
+      - name: 启动 AppImage 并检查（--no-sandbox，仅用于诊断）
+        if: runner.os == 'Linux' && steps.sandboxed.outcome == 'failure'
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+          SMOKE_ARGS: --enable-unsafe-swiftshader --no-sandbox
+        run: xvfb-run -a -s "-screen 0 1600x1000x24" node scripts/smoke-app.mjs "$(ls release/*.AppImage)" smoke-no-sandbox
+      - name: 开启沙箱时未通过
+        if: runner.os == 'Linux' && steps.sandboxed.outcome == 'failure'
+        run: exit 1
+
+      # ---------------- macOS：DMG（运行机器为 Apple 芯片，只打 arm64） ----------------
+      - if: runner.os == 'macOS'
+        run: npx electron-builder --mac --arm64 --publish never
+      - name: 从 DMG 安装并检查
+        if: runner.os == 'macOS'
+        run: |
+          dmg=$(ls release/*-arm64.dmg)
+          mnt=$(mktemp -d)
+          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mnt"
+          app_dir="$RUNNER_TEMP/Applications"
+          mkdir -p "$app_dir"
+          cp -R "$mnt"/*.app "$app_dir/"
+          hdiutil detach "$mnt"
+          app=$(ls -d "$app_dir"/*.app)
+          codesign --verify --deep --strict --verbose=2 "$app" # 临时签名完整、未被改动
+          node scripts/smoke-app.mjs "$app/Contents/MacOS/$(defaults read "$app/Contents/Info" CFBundleExecutable)" smoke
+
+      # ---------------- Windows：NSIS 安装程序（静默安装、检查、静默卸载） ----------------
+      - if: runner.os == 'Windows'
+        run: npx electron-builder --win --publish never
+      - name: 静默安装并检查，再静默卸载
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $setup = Get-ChildItem release\*-setup.exe | Select-Object -First 1
+          Start-Process -FilePath $setup.FullName -ArgumentList '/S' -Wait
+          # 当前用户安装（NSIS 的默认）：%LOCALAPPDATA%\Programs\<产品名>\
+          $exe = Get-ChildItem "$env:LOCALAPPDATA\Programs" -Recurse -Depth 1 -Filter *.exe | Where-Object { $_.Name -notlike 'Uninstall*' } | Select-Object -First 1
+          if (-not $exe) { throw '安装后没有找到游戏的可执行文件' }
+          Write-Host "已安装：$($exe.FullName)"
+          node scripts/smoke-app.mjs $exe.FullName smoke
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $dir = $exe.DirectoryName
+          $uninstaller = Get-ChildItem $dir -Filter 'Uninstall*.exe' | Select-Object -First 1
+          Start-Process -FilePath $uninstaller.FullName -ArgumentList '/S' -Wait
+          # 卸载程序把自己复制到临时目录后在后台删除文件：最多等 60 秒
+          for ($i = 0; $i -lt 60 -and (Test-Path $exe.FullName); $i++) { Start-Sleep -Seconds 1 }
+          if (Test-Path $exe.FullName) { throw "卸载后游戏仍在：$($exe.FullName)" }
+          Write-Host '✓ 静默卸载后游戏文件已删除'
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: smoke-${{ matrix.name }}
+          path: smoke*/*.png
+          retention-days: 7 # 截图只供当次核对
