@@ -1,13 +1,16 @@
 #!/bin/sh
 # 上线：把 GitHub 上已发布的某个版本放到服务器上（发版的最后一步，见 docs/procedures/release.md 第 6 章；规则见 OPS-040 至 OPS-052）
-#   npm run deploy -- 2.0.2             传安装包到下载页、换上这一版的服务端、改最新版本号，再问要不要重启
-#   npm run deploy -- 2.0.2 --restart   不问，直接重启
-#   npm run deploy -- rollback          服务端换回上一版并重启（再执行一次又换回来）
-#   npm run deploy -- install-backup    安装或更新每日备份（scripts/server/ 下的脚本与定时器），并立即备份一次；不重启服务端
-#   npm run deploy -- install-journald  安装或更新 journald 的保留策略（scripts/server/journald-yi.conf），重启 journald；不重启服务端
-# 安装包和服务端都取自同一个 Release 的附件，与标签上的代码一一对应。
-# 安装包先传到 .incoming/，传完再移过去，传到一半的文件不会出现在下载页上；旧版本的安装包随后删掉。
-# 下载后与传到服务器后各按 Release 的 SHA256SUMS 核对一次（OPS-031），不一致即中止，线上的文件保持不动。
+#   npm run deploy -- 2.0.5                    上线这一版，再问要不要立即重启
+#   npm run deploy -- 2.0.5 --restart          不问，直接重启
+#   npm run deploy -- 2.0.5 --allow-downgrade  版本低于线上时须加（OPS-042）
+#   npm run deploy -- restart                  重启以完成上线（上线时选了不重启）
+#   npm run deploy -- rollback                 立即换回上一版本并重启（再执行一次又换回来）
+#   npm run deploy -- migrate-layout           服务器由旧的目录结构改为版本目录（只做一次，不重启）
+#   npm run deploy -- status                   查看线上的版本、对局数、是否维护中与连接数（健康检查，API-061）
+#   npm run deploy -- install-backup           安装或更新每日备份（scripts/server/ 下的脚本与定时器），并立即备份一次；不重启服务端
+#   npm run deploy -- install-journald         安装或更新 journald 的保留策略（scripts/server/journald-yi.conf），重启 journald；不重启服务端
+# 安装程序和服务端都取自同一个 Release 的附件，与标签上的代码一一对应；下载后与传到服务器后各按 Release 的 SHA256SUMS 核对一次（OPS-031）。
+# 服务器上的步骤在 scripts/server/deploy-remote.sh：加锁、版本目录、维护模式、健康检查与自动回滚、部署日志（OPS-041 至 OPS-048）。
 set -eu
 SERVER=${YI_SERVER_SSH:-root@47.108.181.240}
 DIR=/opt/yi
@@ -33,18 +36,33 @@ verify_sums() {
 # 测试只载入上面的函数（tests/deploy.test.ts）
 if [ "${YI_DEPLOY_LIB:-}" = 1 ]; then return 0; fi
 
-if [ "${1:-}" = rollback ]; then
-  ssh "$SERVER" "set -e; cd $DIR
-    test -f server.cjs.prev || { echo '✗ 没有上一版可以换回' >&2; exit 1; }
-    mv server.cjs server.cjs.swap && mv server.cjs.prev server.cjs && mv server.cjs.swap server.cjs.prev
-    systemctl restart yi && sleep 1 && journalctl -u yi -n 1 --no-pager -o cat"
-  exit 0
-fi
+HERE=$(dirname "$0")/server
+# 部署日志中的操作者：只留字母、数字与 ._-
+WHO=$(printf %s "${YI_OPERATOR:-$(git config user.name || echo unknown)}" | tr -c 'A-Za-z0-9._-' _)
+
+# 把 deploy-remote.sh 连同其余文件（$2 起）传到服务器 .incoming/ 下的临时目录，再执行其中的命令 $1（含参数）；
+# 以 nohup 执行，ssh 断开后照常做完。脚本做完即删除该目录
+remote() {
+  cmd=$1
+  shift
+  in=$(ssh "$SERVER" "mkdir -p $DIR/.incoming && mktemp -d $DIR/.incoming/run.XXXXXX")
+  scp -q "$HERE/deploy-remote.sh" "$@" "$SERVER:$in/"
+  ssh "$SERVER" "YI_OPERATOR=$WHO nohup sh $in/deploy-remote.sh $cmd 2>&1"
+}
+
+case "${1:-}" in
+  rollback | restart | status)
+    remote "$1"
+    exit 0
+    ;;
+  migrate-layout)
+    remote migrate
+    exit 0
+    ;;
+esac
 
 if [ "${1:-}" = install-backup ]; then
   # 每日本地备份（DAT-060、DAT-061、DAT-064；整改项 P0-02）。重复执行即更新为仓库中的版本
-  HERE=$(dirname "$0")/server
-  WHO=${YI_OPERATOR:-$(git config user.name || echo unknown)}
   ssh "$SERVER" "mkdir -p $DIR/.incoming"
   scp -q "$HERE/backup.sh" "$HERE/yi-backup.service" "$HERE/yi-backup.timer" "$SERVER:$DIR/.incoming/"
   ssh "$SERVER" "set -e; cd $DIR/.incoming
@@ -66,8 +84,6 @@ if [ "${1:-}" = install-journald ]; then
   # journald 的保留策略（OPS-065；整改项 P1-08）。重复执行即更新为仓库中的版本。
   # 重启 journald 不会中断服务端：journald 以描述符存储（FileDescriptorStoreMax）保留各服务标准输出的连接。
   # 重启失败时恢复原来的配置（没有则删除）并再次重启，记为 fail
-  HERE=$(dirname "$0")/server
-  WHO=${YI_OPERATOR:-$(git config user.name || echo unknown)}
   CONF=/etc/systemd/journald.conf.d/yi.conf
   ssh "$SERVER" "mkdir -p $DIR/.incoming"
   scp -q "$HERE/journald-yi.conf" "$SERVER:$DIR/.incoming/"
@@ -90,7 +106,17 @@ if [ "${1:-}" = install-journald ]; then
 fi
 
 V=${1:-}
-echo "$V" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || fail '用法：npm run deploy -- 版本号 [--restart]，或 npm run deploy -- rollback、install-backup、install-journald'
+echo "$V" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || fail '用法：npm run deploy -- 版本号 [--restart] [--allow-downgrade]，或 npm run deploy -- restart、rollback、status、migrate-layout、install-backup、install-journald'
+shift
+ALLOW=
+RESTART=
+for a in "$@"; do
+  case "$a" in
+    --allow-downgrade) ALLOW=--allow-downgrade ;;
+    --restart) RESTART=y ;;
+    *) fail "不认识的参数：$a" ;;
+  esac
+done
 draft=$(gh release view "v$V" --json isDraft -q .isDraft 2>/dev/null) || fail "GitHub 上没有 v$V 这个 Release"
 [ "$draft" = false ] || fail "v$V 还是草稿，先在网页上确认并发布：gh release view v$V --web"
 
@@ -102,31 +128,12 @@ gh release download "v$V" -D "$TMP" -p 'Yi-*' -p 'yi-server-*.cjs' -p SHA256SUMS
 ls -l "$TMP"
 verify_sums "$TMP" || fail '下载的文件与 SHA256SUMS 不符，已中止，服务器未改动'
 echo "✓ 下载的文件与 SHA256SUMS 一致"
-SERVER_SUM=$(sha256 "$TMP/yi-server-$V.cjs")
 
-ssh "$SERVER" "mkdir -p $DIR/download/.incoming"
-scp -q "$TMP"/Yi-* "$TMP/SHA256SUMS" "$SERVER:$DIR/download/.incoming/"
-scp -q "$TMP/yi-server-$V.cjs" "$SERVER:$DIR/server.cjs.new"
-ssh "$SERVER" "set -e
-  # 传到服务器后再核对一次（OPS-031）：不一致即中止，此时线上的安装包与服务端都还没换
-  cd $DIR/download/.incoming && sha256sum --check --ignore-missing --quiet SHA256SUMS && rm SHA256SUMS
-  cd $DIR && echo '$SERVER_SUM  server.cjs.new' | sha256sum --check --quiet
-  echo '✓ 服务器上的文件与 SHA256SUMS 一致'
-  cd $DIR/download && mv .incoming/Yi-* . && rmdir .incoming
-  find . -maxdepth 1 -name 'Yi-*' ! -name 'Yi-$V-*' -print -delete
-  cd $DIR && chmod 644 server.cjs.new
-  echo \"新服务端：\$(/opt/node/bin/node server.cjs.new --version)\"
-  mv server.cjs server.cjs.prev && mv server.cjs.new server.cjs
-  sed -i 's/^Environment=YI_LATEST=.*/Environment=YI_LATEST=$V/' /etc/systemd/system/yi.service
-  systemctl daemon-reload"
-echo "✓ 下载页已换成 ${V}，服务端已换好，重启后生效（上一版留作 server.cjs.prev）"
-
-n=$(ssh "$SERVER" "ss -Htn state established '( sport = :8443 )' | wc -l")
-echo "服务器上现在有 $n 条连接（正在下棋或下载的人）"
-if [ "${2:-}" = --restart ]; then answer=y; else printf '现在重启服务端吗？会中断正在进行的对局 (y/N) '; read -r answer || answer=n; fi
-if [ "$answer" = y ] || [ "$answer" = Y ]; then
-  ssh "$SERVER" "systemctl restart yi && sleep 1 && journalctl -u yi -n 1 --no-pager -o cat"
-  echo "✓ 已重启，客户端会提示更新到 $V"
-else
-  echo "没有重启。挑没人下棋的时候执行：ssh $SERVER systemctl restart yi"
+# 上传前先检查：目录结构、版本（OPS-042）、磁盘空间，并看线上有没有人在下棋
+remote "preflight $V $(du -sk "$TMP" | cut -f1) $ALLOW"
+if [ -z "$RESTART" ]; then
+  printf '上线后立即重启吗？有对局时先进入维护模式，等对局结束（至多 30 分钟）再重启 (y/N) '
+  read -r answer || answer=n
+  case "$answer" in y | Y) RESTART=y ;; esac
 fi
+remote "install $V $ALLOW $([ "$RESTART" = y ] || echo --no-restart)" "$TMP"/Yi-* "$TMP/SHA256SUMS" "$TMP/yi-server-$V.cjs"
