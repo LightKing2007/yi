@@ -46,6 +46,23 @@ jobs:
       - run: node scripts/audit.mjs # 随游戏与服务端分发的依赖没有高危漏洞（SEC-061）
       - run: node scripts/licenses.mjs # 依赖没有 GPL 一类的许可证（COD-071）
 
+  text-fit:
+    # 界面文字排版检查（I18N-020、I18N-022）：三种语言下各界面的文字按设计字号放得下，见 scripts/fit-check.cjs。
+    # 需要 Electron 本体（首次运行时下载）与虚拟显示器；检查只载入本机开发服务器上的游戏页面，
+    # 而从 node_modules 直接运行的 Electron 在这台机器上无法启用 Chromium 沙箱，故以 --no-sandbox 运行
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build:node # 检查中联机对局所用的本机服务端
+      - run: sudo apt-get update -q && sudo apt-get install -yq xvfb
+      - run: xvfb-run -a -s "-screen 0 1600x1000x24" npx electron --no-sandbox scripts/fit-check.cjs
+
   secrets:
     runs-on: ubuntu-latest
     timeout-minutes: 5

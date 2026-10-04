@@ -113,6 +113,10 @@ Electron 本体（约 130 MB）不随 `npm install` 下载，而在首次运行 
 
 `node scripts/smoke-app.mjs <可执行文件>` 启动打包好的游戏（用户数据放在临时目录），经开发者协议检查 Electron 版本、预加载接口、渲染进程沙箱、WebGL2、开局落子与人机对弈、页面报错及日志，截图存于 `smoke/`。Linux 上由工作流“Linux 冒烟检查”在 GitHub 的 Ubuntu 机器上运行（手动触发），发版前对待发布的提交运行一次。
 
+### 3.2.2 界面文字排版检查
+
+`scripts/fit-check.cjs` 在不显示的 Electron 窗口（1320×900）中运行开发版，以文言、中文、英文走遍开始菜单、单机对局、设置、更多、联机大厅与联机对局（对手由 `scripts/fit-driver.ts` 另开一条连接扮演），再跑单机的终局与点目场景，并把译文表中“更多”页面以外的全部文字放进联机提示条；任何文字不能按设计字号放下（单行文字一行、说明性文字两行），即报告“[fit] 放不下”并失败（I18N-020、I18N-022）。该检查只在 CI 的 `text-fit` 任务中运行，本机运行须先下载 Electron 本体并执行 `npm run build:node`，在 Linux 上还须使用虚拟显示器（`xvfb-run -a npm run fit-check`）。
+
 开发期间亦可在浏览器中打开 `http://localhost:5173/?scenario=gomoku-win&hold=1`，直接查看指定场景。
 
 ### 3.3 桌面版调试
@@ -332,10 +336,11 @@ electron/             桌面版主进程（窗口、单实例、匹配成功时�
 tests/                vitest：rules（规则与人机）、record（规则层与棋谱）、session（会话与座位）、protocol（消息校验与昵称清洗）、server（联机服务端）、ratelimit（限流）、
                       store（段位存档）、client（联机客户端：断线、重连、服务器重启、非法消息）、lobby（联机大厅：匹配、排位、好友房间）、
                       onlineGame（联机对局中的请求、点目与回放）、reconnect 与 retry（断线重连的退避与关闭码）、storage（本地存储与设置）、updateNote（新版本提示的本地记录）、
-                      fakeNet（联机客户端测试用的假网络与浏览器环境）、layers 与 importGraph（分层与第三方包检查，以语法树找出四种引用形式）、text（说明文字的译文、标点与更新日志）、
+                      fakeNet（联机客户端测试用的假网络与浏览器环境）、layers 与 importGraph（分层与第三方包检查，以语法树找出四种引用形式）、text（标点与更新日志）、i18n 与 uiText（译文齐全、英文的写法、以语法树扫描界面文字）、
                       ratchet（违规棘轮）、coverage（改动行覆盖率）、deps（许可证、依赖漏洞门禁、工作流的 Action 固定）
 scripts/              build-node（打包主进程与服务端）、make-fonts（生成内置字体子集）、page-assets（下载页面的图片与字体）、changelog（读取更新日志、生成发布说明）、
                       release（发版）、deploy.sh（上线）、shots.cjs 与 compare-shots.mjs（场景截图与逐像素对比）、smoke-app（安装后的冒烟检查）、
+                      fit-check.cjs 与 fit-driver（界面文字排版检查，只在 CI 上运行）、
                       ratchet（违规棘轮）、diff-coverage（改动行覆盖率）、audit（依赖漏洞门禁）、licenses（许可证检查）
 docs/                 standards/（工程规范）、procedures/（操作规程）、plan/（改造与整改计划）、audits/（审计报告），索引见 docs/README.md
 ```
