@@ -7,10 +7,31 @@
 #   npm run deploy -- install-journald  安装或更新 journald 的保留策略（scripts/server/journald-yi.conf），重启 journald；不重启服务端
 # 安装包和服务端都取自同一个 Release 的附件，与标签上的代码一一对应。
 # 安装包先传到 .incoming/，传完再移过去，传到一半的文件不会出现在下载页上；旧版本的安装包随后删掉。
+# 下载后与传到服务器后各按 Release 的 SHA256SUMS 核对一次（OPS-031），不一致即中止，线上的文件保持不动。
 set -eu
 SERVER=${YI_SERVER_SSH:-root@47.108.181.240}
 DIR=/opt/yi
 fail() { echo "✗ $1" >&2; exit 1; }
+
+# 文件的 SHA-256（十六进制）
+sha256() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1; }
+
+# 核对目录 $1 中每个安装程序与服务端的 SHA-256 与同一目录下的 SHA256SUMS 一致（OPS-031）；
+# 任一文件不在 SHA256SUMS 中或不一致即返回非零，并打出是哪个文件
+verify_sums() {
+  [ -f "$1/SHA256SUMS" ] || { echo "✗ 没有 SHA256SUMS" >&2; return 1; }
+  for f in "$1"/Yi-* "$1"/yi-server-*.cjs; do
+    [ -f "$f" ] || continue
+    name=$(basename "$f")
+    want=$(awk -v name="$name" '$2 == name { print $1 }' "$1/SHA256SUMS")
+    [ -n "$want" ] || { echo "✗ SHA256SUMS 中没有 $name" >&2; return 1; }
+    got=$(sha256 "$f")
+    [ "$got" = "$want" ] || { echo "✗ $name 的 SHA-256 不符：应为 $want，实为 $got" >&2; return 1; }
+  done
+}
+
+# 测试只载入上面的函数（tests/deploy.test.ts）
+if [ "${YI_DEPLOY_LIB:-}" = 1 ]; then return 0; fi
 
 if [ "${1:-}" = rollback ]; then
   ssh "$SERVER" "set -e; cd $DIR
@@ -75,14 +96,22 @@ draft=$(gh release view "v$V" --json isDraft -q .isDraft 2>/dev/null) || fail "G
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
-gh release download "v$V" -D "$TMP" -p 'Yi-*' -p 'yi-server-*.cjs'
+gh release download "v$V" -D "$TMP" -p 'Yi-*' -p 'yi-server-*.cjs' -p SHA256SUMS
 [ -f "$TMP/yi-server-$V.cjs" ] || fail "Release 里没有 yi-server-$V.cjs"
+[ -f "$TMP/SHA256SUMS" ] || fail "v$V 的 Release 里没有 SHA256SUMS（2.0.5 起附带），无法核对下载的文件（OPS-031）"
 ls -l "$TMP"
+verify_sums "$TMP" || fail '下载的文件与 SHA256SUMS 不符，已中止，服务器未改动'
+echo "✓ 下载的文件与 SHA256SUMS 一致"
+SERVER_SUM=$(sha256 "$TMP/yi-server-$V.cjs")
 
 ssh "$SERVER" "mkdir -p $DIR/download/.incoming"
-scp -q "$TMP"/Yi-* "$SERVER:$DIR/download/.incoming/"
+scp -q "$TMP"/Yi-* "$TMP/SHA256SUMS" "$SERVER:$DIR/download/.incoming/"
 scp -q "$TMP/yi-server-$V.cjs" "$SERVER:$DIR/server.cjs.new"
 ssh "$SERVER" "set -e
+  # 传到服务器后再核对一次（OPS-031）：不一致即中止，此时线上的安装包与服务端都还没换
+  cd $DIR/download/.incoming && sha256sum --check --ignore-missing --quiet SHA256SUMS && rm SHA256SUMS
+  cd $DIR && echo '$SERVER_SUM  server.cjs.new' | sha256sum --check --quiet
+  echo '✓ 服务器上的文件与 SHA256SUMS 一致'
   cd $DIR/download && mv .incoming/Yi-* . && rmdir .incoming
   find . -maxdepth 1 -name 'Yi-*' ! -name 'Yi-$V-*' -print -delete
   cd $DIR && chmod 644 server.cjs.new
