@@ -35,6 +35,7 @@ case "$1" in
     echo 0 > "$SIM/maint" ;;
   kill) echo true > "$SIM/maint" ;;
   start) [ ! -f "$SIM/start-fails" ] ;;
+  show) cat "$SIM/nrestarts" 2>/dev/null || echo 0 ;;
   is-active) [ -s "$SIM/running" ] ;;
 esac`,
   // systemd-analyze：verify 在 sim/verify-fails 存在时失败；security 以 sim/score 为评分
@@ -50,7 +51,12 @@ if [ -f "$SIM/drain" ]; then n=$(cat "$SIM/games"); [ "$n" -gt 0 ] && echo $((n 
 shift 4; exec "$@"`,
   'systemd-cat': `echo "systemd-cat $*" >> "$SIM/calls"; cat >> "$SIM/journal"`,
   chown: `echo "chown $*" >> "$SIM/calls"`,
-  journalctl: `echo "journalctl $*" >> "$SIM/calls"`,
+  // journalctl -u yi：sim/yi-journal 中的日志（上线后的检查据此统计 internal.error）
+  journalctl: `echo "journalctl $*" >> "$SIM/calls"
+[ "$1 $2" = "-u yi" ] && cat "$SIM/yi-journal" 2>/dev/null; true`,
+  'systemd-run': `echo "systemd-run $*" >> "$SIM/calls"`,
+  // date +%s：sim/now 中的模拟时刻；其余用法交给系统的 date
+  date: `if [ "$1" = +%s ]; then cat "$SIM/now"; else exec /bin/date "$@"; fi`,
   ss: `printf 'a\\nb\\nc\\n'`,
   sha256sum: `exec shasum -a 256 "$@"`,
   // 本机脚本所用的 gh、ssh、scp：ssh 在本机执行命令，scp 复制到本机，两者都把 /opt/yi 换成模拟的目录
@@ -65,7 +71,10 @@ for last; do :; done
 dest=$(printf %s "\${last#*:}" | sed "s#/opt/yi#$ROOT#g")
 while [ $# -gt 1 ]; do cp "$1" "$dest/"; shift; done`,
   // 桩 Node.js：-e 为健康检查（运行中的版本标记为 broken 时连不上，标记为 nohealth 时没有 /healthz）；否则为 server.cjs --version
-  'fake-node': `if [ "$1" = -e ]; then
+  'fake-node': `if [ "$1" = -e ] && printf %s "$2" | grep -q /metrics; then
+  [ -f "$SIM/messages" ] || exit 0
+  cat "$SIM/messages"
+elif [ "$1" = -e ]; then
   [ -s "$SIM/running" ] || exit 1
   set -- $(cat "$SIM/running")
   [ -f "$SIM/broken-$1" ] || [ -f "$SIM/nohealth-$1" ] && exit 1
@@ -127,6 +136,8 @@ export function run(args: string[], script = SCRIPT, input = '', operator = 'tes
 }
 /** 桩程序依次记下的调用 */
 export const calls = () => read(at('sim/calls')).trim().split('\n').filter(Boolean);
+/** 对 yi 服务的 systemctl 调用（不含上线后检查 yi-watch 的启停） */
+export const serviceCalls = () => calls().filter(line => line.startsWith('systemctl') && !line.includes('yi-watch'));
 /** 模拟的 /opt/yi 下符号链接 name 的指向；不存在时为空串 */
 export const link = (name: string) => (fs.existsSync(at('opt', name)) ? fs.readlinkSync(at('opt', name)) : '');
 /** 部署日志的各行（去掉时间） */
@@ -147,6 +158,7 @@ export function setupServer() {
   for (const name of ['state', 'systemd']) fs.mkdirSync(at(name), { recursive: true });
   write(at('sim/games'), '0');
   write(at('sim/maint'), 'false');
+  write(at('sim/now'), '1000000');
 }
 
 /** 每项测试后：删除临时目录 */

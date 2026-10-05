@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 性质 | 规程，强制执行；依据 [07-operations.md](../standards/07-operations.md)、[03-data.md](../standards/03-data.md)、[05-security.md](../standards/05-security.md) |
-| 文件版本 | 1.1.2 |
+| 文件版本 | 1.1.3 |
 | 修订日期 | 2026-10-05 |
 | 适用范围 | 线上服务器 47.108.181.240 的日常检查、备份与恢复、回滚、应急处置 |
 | 相关文档 | [release.md](release.md)（发版与上线）、[README.md](../../README.md) 第 5.3、5.4 节（部署结构） |
@@ -90,7 +90,7 @@ npm run offsite -- decrypt 下载的文件.age 私钥文件 ~/Downloads/yi-ratin
 npm run deploy -- rollback
 ```
 
-4.2 上线时健康检查不通过的，上线脚本已自动回滚（OPS-046），以 `npm run deploy -- status` 确认版本后，按第 5 章判定事件级别。
+4.2 上线时健康检查不通过的，或上线后 60 分钟内上线脚本的检查发现重启过频、健康检查连续失败、内部错误占比过高的，已自动回滚（OPS-046、OPS-047），部署日志中结果为 `rolled-back`（后者的操作者为 `watch`）。以 `npm run deploy -- status` 确认版本后，按第 5 章判定事件级别。上线 60 分钟以后出现 OPS-047 所列情况的，由每日检查（第 2 章）发现后按第 4.1 条手动回滚。
 
 4.3 安装 `yi.service` 后服务异常、而安装脚本未能自动恢复的，以原文件恢复后重启：
 

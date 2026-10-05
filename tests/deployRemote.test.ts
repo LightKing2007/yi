@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { SCRIPT, at, calls, deployLog, incoming, layout, link, read, run, setupServer, teardownServer, write } from './fakeServer';
+import { SCRIPT, at, calls, deployLog, incoming, layout, link, read, run, serviceCalls, setupServer, teardownServer, write } from './fakeServer';
 
 beforeEach(setupServer);
 afterEach(teardownServer);
@@ -42,7 +42,7 @@ describe('上线（install）', () => {
     expect(read(at('opt/releases/2.0.5/env'))).toBe('YI_LATEST=2.0.5\n');
     expect(read(at('sim/running'))).toBe('2.0.5 c205');
     expect(calls()).toContain('flock -n -E 75 ' + at('lock'));
-    expect(calls().filter(line => line.startsWith('systemctl'))).toEqual(['systemctl restart yi']);
+    expect(serviceCalls()).toEqual(['systemctl restart yi']);
     expect(deployLog()).toEqual(['tester deploy 2.0.5 ok']);
     expect(fs.existsSync(at('incoming'))).toBe(true); // 不在 /opt/yi/.incoming/ 下：不删
   });
@@ -110,7 +110,7 @@ describe('维护模式（OPS-045）', () => {
     write(at('sim/games'), '2');
     write(at('sim/drain'), '');
     expect(run(['install', '2.0.5'], incoming('2.0.5'))).toMatchObject({ code: 0 });
-    const seq = calls().filter(line => !line.startsWith('flock') && line !== 'sleep 1');
+    const seq = calls().filter(line => !line.startsWith('flock') && line !== 'sleep 1' && !/yi-watch/.test(line));
     expect(seq).toEqual(['systemctl kill -s SIGUSR2 yi', 'sleep 10', 'sleep 10', 'systemctl restart yi']);
   });
 
@@ -129,7 +129,7 @@ describe('维护模式（OPS-045）', () => {
     write(at('sim/nohealth-2.0.4'), '');
     write(at('sim/games'), '1');
     expect(run(['install', '2.0.5'], incoming('2.0.5'))).toMatchObject({ code: 0 });
-    expect(calls().filter(line => line.startsWith('systemctl'))).toEqual(['systemctl restart yi']);
+    expect(serviceCalls()).toEqual(['systemctl restart yi']);
   });
 });
 
