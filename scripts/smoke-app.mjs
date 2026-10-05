@@ -21,6 +21,8 @@ if (!exe) {
 const PORT = 9333;
 const START_TIMEOUT_MS = 60_000;
 const QUIT_TIMEOUT_MS = 10_000;
+/** 游戏画布的 WebGL 上下文丢失时，等它恢复的最长时间 */
+const RESTORE_WAIT_MS = 15_000;
 /** 主进程规定的窗口最小尺寸（electron/main.ts 的 minWidth、minHeight） */
 const MIN_WINDOW = { width: 800, height: 600 };
 /** 附带的字体（src/ui/styles.css 的 @font-face） */
@@ -133,18 +135,27 @@ async function quit(game, label) {
 /** 开始菜单：版本、预加载接口、沙箱、WebGL2、按钮、附带字体 */
 async function checkMenu(game) {
   const info = (await game.evaluate(`(async () => {
-    // 再向游戏的画布要上下文，在 Linux 软件渲染下偶尔得到 null（游戏照常绘制）；另用一块新画布探测环境是否支持 WebGL2。
-    // 游戏自己建不起上下文时会抛出“当前环境不支持 WebGL2”，由“页面没有异常与报错”检出
-    const gl = document.getElementById('scene').getContext('webgl2') ?? document.createElement('canvas').getContext('webgl2');
     await document.fonts.ready;
     const bundled = {};
     for (const family of ${JSON.stringify(BUNDLED_FONTS)}) bundled[family] = (await document.fonts.load('16px "' + family + '"', 'A弈')).length > 0;
+    // 取游戏画布上已有的上下文（同一画布再要同类上下文时返回原来的那个），在其他等待之后、读取之前检查：Linux 开启沙箱并以软件渲染时，
+    // GPU 进程在启动阶段偶尔重置，上下文暂时丢失，游戏随后自动恢复（10-edge-cases.md“WebGL 上下文丢失”）；此时等它恢复，至多 RESTORE_WAIT_MS 毫秒
+    const canvas = document.getElementById('scene');
+    const gl = canvas.getContext('webgl2');
+    const lost = !!gl && gl.isContextLost();
+    if (lost)
+      await new Promise(res => {
+        canvas.addEventListener('webglcontextrestored', res, { once: true });
+        setTimeout(res, ${RESTORE_WAIT_MS});
+      });
     return {
       electron: navigator.userAgent.match(/Electron\\/([\\d.]+)/)?.[1],
       preload: window.yiNative ? Object.keys(window.yiNative) : [],
       sandboxed: typeof require === 'undefined' && typeof process === 'undefined',
       webgl2: !!gl && !gl.isContextLost(),
-      renderer: gl ? gl.getParameter(gl.RENDERER) : null,
+      renderer: gl && !gl.isContextLost() ? gl.getParameter(gl.RENDERER) : null,
+      lost,
+      hasContext: !!gl,
       bundled,
       buttons: [...document.querySelectorAll('button')].map(b => b.textContent),
     };
@@ -156,7 +167,7 @@ async function checkMenu(game) {
     '预加载接口 yiNative 可用',
   );
   check(info.sandboxed, '渲染进程中没有 require、process（沙箱生效）');
-  check(info.webgl2, `WebGL2 可用（${info.renderer}）`);
+  check(info.webgl2, `WebGL2 可用（${info.renderer}${info.lost ? '；启动时上下文曾丢失，已自动恢复' : ''}）`);
   check(info.buttons.length >= 4, '开始菜单的按钮已显示');
   const missing = BUNDLED_FONTS.filter(family => !info.bundled[family]);
   check(missing.length === 0, `附带的字体都可以载入${missing.length ? '，缺少：' + missing.join('、') : ''}`);
