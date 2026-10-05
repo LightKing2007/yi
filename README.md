@@ -234,6 +234,7 @@ node dist-server/server.cjs --version
 | `/var/lib/yi/deploy.log` | 上线、回滚及配置修改的记录，每次操作追加一行（OPS-048）；最近一次上线的完整输出在 `deploy-last.log` |
 | `/opt/yi/backup.sh`、`/etc/systemd/system/yi-backup.{service,timer}` | 每日本地备份，每天北京时间 04:30 前后运行（DAT-060、DAT-061），源文件为仓库中的 `scripts/server/`，由 `npm run deploy -- install-backup` 安装 |
 | `/var/lib/yi/backup/` | 段位存档的备份 `yi-ratings-UTC时间.json` 及其 `.sha256` 校验和，保留最近 7 份（DAT-064） |
+| `/opt/yi/offsite.cjs`、`/etc/systemd/system/yi-offsite.service`、`/etc/yi/offsite.env` | 异地加密备份（DAT-061 第二层、DAT-063）：每日本地备份成功后，以 age 加密最新的一份并上传到阿里云 OSS；`offsite.env` 内含 OSS 的存储桶与只能写入的访问密钥（属主 root:yi，权限 640），解密用的私钥只在维护者本机。源文件为仓库中的 `scripts/offsite.ts` 与 `scripts/server/yi-offsite.service`，由 `npm run deploy -- install-offsite` 安装 |
 | `/etc/systemd/journald.conf.d/yi.conf` | journald 的保留策略：日志总量至多 1 GB，保留 90 日（OPS-065），源文件为仓库中的 `scripts/server/journald-yi.conf`，由 `npm run deploy -- install-journald` 安装 |
 
 `yi.service` 的内容见仓库中的 [scripts/server/yi.service](scripts/server/yi.service)，由 `npm run deploy -- install-service` 安装：服务端、安装程序与 `YI_LATEST` 均经 `/opt/yi/current` 读取；加固选项按 SEC-045，安装前检查 `systemd-analyze security` 的评分不高于 4.0，装好后重启并做健康检查，不通过即恢复原文件。

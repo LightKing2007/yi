@@ -1,0 +1,39 @@
+# 段位存档的异地加密备份（DAT-061 第二层、DAT-063；整改项 P1-13），在 yi-backup.service 成功后运行（OnSuccess=）。
+# 取 /var/lib/yi/backup/ 中最新的一份，以 age 加密后上传到阿里云 OSS；只读本地文件，不写任何文件。
+# 安装到 /etc/systemd/system/，程序安装到 /opt/yi/offsite.cjs，配置在 /etc/yi/offsite.env（属主 root:yi，权限 640）：
+# npm run deploy -- install-offsite
+[Unit]
+Description=Yi offsite encrypted backup of rating data
+
+[Service]
+Type=oneshot
+User=yi
+Group=yi
+ExecStart=/opt/node/bin/node /opt/yi/offsite.cjs upload
+EnvironmentFile=/etc/yi/offsite.env
+Environment=YI_BACKUP_DIR=/var/lib/yi/backup
+TimeoutStartSec=5min
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+# V8 的即时编译需要可写可执行的内存
+MemoryDenyWriteExecute=no
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallArchitectures=native

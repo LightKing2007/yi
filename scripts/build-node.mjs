@@ -1,4 +1,4 @@
-/** 打包 Node 端：桌面版主进程与预加载（dist-electron/），独立联机服务端（dist-server/server.cjs，单文件、无需 npm install） */
+/** 打包 Node 端：桌面版主进程与预加载（dist-electron/），独立联机服务端（dist-server/server.cjs，单文件、无需 npm install），异地备份（dist-server/offsite.cjs） */
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import { build } from 'esbuild';
@@ -35,4 +35,5 @@ await Promise.all([
     banner: { js: '#!/usr/bin/env node' },
     define: { ...common.define, __PAGE_ASSETS__: JSON.stringify(pageAssets(new URL('../', import.meta.url))) }, // 下载页面的标题图、图标与字体
   }),
+  build({ ...common, entryPoints: ['scripts/offsite.ts'], outfile: 'dist-server/offsite.cjs' }), // 异地加密备份，在服务器上由 yi-offsite.service 运行（P1-13）
 ]);

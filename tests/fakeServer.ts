@@ -34,6 +34,7 @@ case "$1" in
   restart) if grep -q '^# BREAK' "$YI_UNIT_FILE" 2>/dev/null; then : > "$SIM/running"; else cat "$ROOT/current/server.cjs" > "$SIM/running"; fi
     echo 0 > "$SIM/maint" ;;
   kill) echo true > "$SIM/maint" ;;
+  start) [ ! -f "$SIM/start-fails" ] ;;
   is-active) [ -s "$SIM/running" ] ;;
 esac`,
   // systemd-analyze：verify 在 sim/verify-fails 存在时失败；security 以 sim/score 为评分
@@ -48,6 +49,8 @@ if [ -f "$SIM/drain" ]; then n=$(cat "$SIM/games"); [ "$n" -gt 0 ] && echo $((n 
 [ -f "$SIM/locked" ] && exit "$3"
 shift 4; exec "$@"`,
   'systemd-cat': `echo "systemd-cat $*" >> "$SIM/calls"; cat >> "$SIM/journal"`,
+  chown: `echo "chown $*" >> "$SIM/calls"`,
+  journalctl: `echo "journalctl $*" >> "$SIM/calls"`,
   ss: `printf 'a\\nb\\nc\\n'`,
   sha256sum: `exec shasum -a 256 "$@"`,
   // 本机脚本所用的 gh、ssh、scp：ssh 在本机执行命令，scp 复制到本机，两者都把 /opt/yi 换成模拟的目录
@@ -62,7 +65,7 @@ for last; do :; done
 dest=$(printf %s "\${last#*:}" | sed "s#/opt/yi#$ROOT#g")
 while [ $# -gt 1 ]; do cp "$1" "$dest/"; shift; done`,
   // 桩 Node.js：-e 为健康检查（运行中的版本标记为 broken 时连不上，标记为 nohealth 时没有 /healthz）；否则为 server.cjs --version
-  node: `if [ "$1" = -e ]; then
+  'fake-node': `if [ "$1" = -e ]; then
   [ -s "$SIM/running" ] || exit 1
   set -- $(cat "$SIM/running")
   [ -f "$SIM/broken-$1" ] || [ -f "$SIM/nohealth-$1" ] && exit 1
@@ -112,9 +115,11 @@ export function run(args: string[], script = SCRIPT, input = '', operator = 'tes
     ROOT: at('opt'),
     YI_ROOT: at('opt'),
     YI_STATE: at('state'),
-    YI_NODE: at('bin/node'),
+    YI_NODE: at('bin/fake-node'), // 不叫 node：PATH 上的 node 须是真的（install-offsite 要打包）
     YI_LOCK: at('lock'),
     YI_UNIT_FILE: at('yi.service'),
+    YI_SYSTEMD_DIR: at('systemd'),
+    YI_ETC: at('etc-yi'),
     YI_OPERATOR: operator,
   };
   const result = spawnSync('sh', [script, ...args], { env, encoding: 'utf8', input });
@@ -139,7 +144,7 @@ export function setupServer() {
     write(at('bin', name), `#!/bin/sh\n${body}\n`);
     fs.chmodSync(at('bin', name), 0o755);
   }
-  fs.mkdirSync(at('state'), { recursive: true });
+  for (const name of ['state', 'systemd']) fs.mkdirSync(at(name), { recursive: true });
   write(at('sim/games'), '0');
   write(at('sim/maint'), 'false');
 }

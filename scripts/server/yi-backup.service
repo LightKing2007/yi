@@ -2,6 +2,8 @@
 # 安装到 /etc/systemd/system/，脚本安装到 /opt/yi/backup.sh：npm run deploy -- install-backup
 [Unit]
 Description=Yi daily backup of rating data
+# 本地备份成功后上传异地加密备份（DAT-061 第二层，P1-13）；上传失败不影响本地备份的结果
+OnSuccess=yi-offsite.service
 
 [Service]
 Type=oneshot
