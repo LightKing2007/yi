@@ -7,6 +7,7 @@
 #   npm run deploy -- rollback                 立即换回上一版本并重启（再执行一次又换回来）
 #   npm run deploy -- migrate-layout           服务器由旧的目录结构改为版本目录（只做一次，不重启）
 #   npm run deploy -- status                   查看线上的版本、对局数、是否维护中与连接数（健康检查，API-061）
+#   npm run deploy -- install-service          安装或更新 scripts/server/yi.service（加固选项见 SEC-045），重启并检查，不通过即恢复原文件
 #   npm run deploy -- install-backup           安装或更新每日备份（scripts/server/ 下的脚本与定时器），并立即备份一次；不重启服务端
 #   npm run deploy -- install-journald         安装或更新 journald 的保留策略（scripts/server/journald-yi.conf），重启 journald；不重启服务端
 # 安装程序和服务端都取自同一个 Release 的附件，与标签上的代码一一对应；下载后与传到服务器后各按 Release 的 SHA256SUMS 核对一次（OPS-031）。
@@ -59,6 +60,10 @@ case "${1:-}" in
     remote migrate
     exit 0
     ;;
+  install-service)
+    remote service "$HERE/yi.service"
+    exit 0
+    ;;
 esac
 
 if [ "${1:-}" = install-backup ]; then
@@ -106,7 +111,7 @@ if [ "${1:-}" = install-journald ]; then
 fi
 
 V=${1:-}
-echo "$V" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || fail '用法：npm run deploy -- 版本号 [--restart] [--allow-downgrade]，或 npm run deploy -- restart、rollback、status、migrate-layout、install-backup、install-journald'
+echo "$V" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || fail '用法：npm run deploy -- 版本号 [--restart] [--allow-downgrade]，或 npm run deploy -- restart、rollback、status、migrate-layout、install-service、install-backup、install-journald'
 shift
 ALLOW=
 RESTART=
