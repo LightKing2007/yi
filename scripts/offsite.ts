@@ -5,6 +5,7 @@
  *   本机（npm run offsite -- …）：
  *     keygen 私钥文件               生成 age 密钥：私钥写入该文件（只留在本机，严禁放到服务器上），打出公钥
  *     decrypt 备份.age 私钥文件 输出  解密从 OSS 下载的备份，确认为合法 JSON 后写出
+ *   私钥文件与解密的输出都须在项目目录以外（checkOutside）。
  * 上传的对象：daily/yi-ratings-时间.json.age（OSS 生命周期规则保留 30 日）与 monthly/yi-ratings-年月.json.age
  * （每日覆盖为当月最新的一份，保留 365 日，即 12 份月备）。访问密钥只有这两个前缀的 PutObject 权限。
  * 请求以 OSS V4 签名（OSS4-HMAC-SHA256），带 Content-MD5 由 OSS 核对内容；不引入阿里云的 SDK。
@@ -217,15 +218,27 @@ export async function keygen(out: string) {
   return identityToRecipient(identity);
 }
 
+/**
+ * 本机写出的文件（私钥、解密出的段位数据明文）不得在项目目录内，以免被误提交；在目录内时抛出。
+ * npm run 在项目根目录执行，写相对路径时文件正落在仓库中
+ */
+export function checkOutside(file: string, projectRoot: string) {
+  const rel = path.relative(path.resolve(projectRoot), path.resolve(file));
+  if (rel !== '..' && !rel.startsWith(`..${path.sep}`)) throw new Error(`${file} 在项目目录内，可能被误提交；请写到项目目录以外，如 ~/Downloads/`);
+}
+
 /** 命令行入口 */
 async function main(argv: string[]) {
   const [cmd, ...args] = argv;
+  const projectRoot = path.resolve(path.dirname(process.argv[1]), '..');
   if (cmd === 'upload') {
     console.log(await upload(process.env, { fetch: globalThis.fetch as unknown as Fetch, now: () => new Date() }));
   } else if (cmd === 'keygen' && args.length === 1) {
+    checkOutside(args[0], projectRoot);
     const recipient = await keygen(args[0]);
     console.log(`私钥已写入 ${args[0]}，请妥善保存在本机或密码管理器中，严禁放到服务器上（DAT-063）。\n公钥（安装异地备份时填写）：${recipient}`);
   } else if (cmd === 'decrypt' && args.length === DECRYPT_ARGS) {
+    checkOutside(args[2], projectRoot);
     const text = await decrypt(fs.readFileSync(args[0]), fs.readFileSync(args[1], 'utf8').trim());
     fs.writeFileSync(args[2], text, { flag: 'wx', mode: 0o600 });
     console.log(`已解密为 ${args[2]}（${Object.keys(JSON.parse(text)).length} 条记录）`);

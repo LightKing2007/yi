@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 性质 | 规程，强制执行；依据 [07-operations.md](../standards/07-operations.md)、[03-data.md](../standards/03-data.md)、[05-security.md](../standards/05-security.md) |
-| 文件版本 | 1.1.1 |
+| 文件版本 | 1.1.2 |
 | 修订日期 | 2026-10-05 |
 | 适用范围 | 线上服务器 47.108.181.240 的日常检查、备份与恢复、回滚、应急处置 |
 | 相关文档 | [release.md](release.md)（发版与上线）、[README.md](../../README.md) 第 5.3、5.4 节（部署结构） |
@@ -75,10 +75,10 @@ ssh yi systemctl start yi-backup.service
 3.3 服务器上的文件不可用时，从 OSS 的异地备份恢复：在阿里云控制台的 OSS 存储桶中下载 `daily/` 下最新的 `.age` 文件，在本机仓库根目录解密（私钥文件只在本机，DAT-063）：
 
 ```bash
-npm run offsite -- decrypt 下载的文件.age 私钥文件 yi-ratings.json
+npm run offsite -- decrypt 下载的文件.age 私钥文件 ~/Downloads/yi-ratings.json
 ```
 
-脚本确认解出的内容为合法 JSON，并打出记录条数。随后以 `scp` 传到服务器的 `/var/lib/yi/backup/`，按第 3.2 条第 2 项至第 6 项恢复。恢复时间目标为 1 小时，恢复点目标为 24 小时（DAT-060）。
+输出文件须在项目目录以外，脚本会拒绝写入项目目录（段位数据的明文可能被误提交）。脚本确认解出的内容为合法 JSON，并打出记录条数。随后以 `scp` 传到服务器的 `/var/lib/yi/backup/`，按第 3.2 条第 2 项至第 6 项恢复。恢复时间目标为 1 小时，恢复点目标为 24 小时（DAT-060）。
 
 3.4 每季度演练一次恢复（DAT-065）：从 OSS 下载最新的异地备份，按第 3.3 条解密到本机临时目录，与服务器上同一天的本地备份比较内容，记下记录条数，结果记入 `docs/audits/`。演练不得改动服务器上的文件。
 

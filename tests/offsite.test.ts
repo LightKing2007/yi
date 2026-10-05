@@ -1,11 +1,12 @@
 /** 异地加密备份（scripts/offsite.ts，DAT-061、DAT-063）：OSS V4 签名、对象名、备份的选取与核对、加密与上传 */
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { generateIdentity, identityToRecipient } from 'age-encryption';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { decrypt, keygen, latestBackup, objectKeys, ossError, putObject, readConfig, signV4, upload } from '../scripts/offsite';
+import { checkOutside, decrypt, keygen, latestBackup, objectKeys, ossError, putObject, readConfig, signV4, upload } from '../scripts/offsite';
 
 let dir = '';
 beforeEach(() => {
@@ -190,5 +191,37 @@ describe('密钥', () => {
     expect(await identityToRecipient(identity)).toBe(recipient);
     expect(fs.statSync(file).mode & 0o777).toBe(0o600);
     await expect(keygen(file)).rejects.toThrow('EEXIST');
+  });
+});
+
+describe('本机写出的文件须在项目目录以外', () => {
+  const root = path.join(dir || os.tmpdir(), 'project');
+  it('项目目录内（含根目录本身与相对路径）一律拒绝，目录以外与名字相近的兄弟目录允许', () => {
+    // 项目中名为 ..foo 的目录仍在项目内；项目的上一级目录本身在项目外
+    for (const inside of [root, path.join(root, 'restored.json'), path.join(root, 'a', '..', 'key.txt'), path.join(root, '..foo', 'key.txt')])
+      expect(() => checkOutside(inside, root)).toThrow('在项目目录内');
+    for (const outside of [path.join(root, '..', 'restored.json'), path.dirname(root), path.join(root + '-other', 'key.txt'), '/tmp/key.txt'])
+      expect(() => checkOutside(outside, root)).not.toThrow();
+  });
+
+  it('命令行的 keygen 与 decrypt 写到项目目录内时拒绝，不留下文件', () => {
+    const script = path.resolve(__dirname, '../scripts/offsite.ts');
+    const project = path.resolve(__dirname, '..');
+    const name = `offsite-test-${process.pid}.txt`;
+    for (const args of [
+      ['keygen', name],
+      ['decrypt', 'x.age', 'key.txt', name],
+    ]) {
+      const result = spawnSync(process.execPath, [script, ...args], { cwd: project, encoding: 'utf8' });
+      const left = fs.existsSync(path.join(project, name));
+      fs.rmSync(path.join(project, name), { force: true }); // 检查失效时也不在仓库中留下文件
+      expect([result.status, result.stderr, left]).toEqual([1, expect.stringContaining('在项目目录内'), false]);
+    }
+  });
+
+  it('相对路径按当前目录解析：在项目根目录执行时，写相对路径即被拒绝', () => {
+    const cwd = process.cwd();
+    expect(() => checkOutside('restored.json', cwd)).toThrow('在项目目录内');
+    expect(() => checkOutside('../restored.json', cwd)).not.toThrow();
   });
 });
