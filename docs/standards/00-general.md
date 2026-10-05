@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 文件编号 | YI-STD-001 |
-| 文件版本 | 1.1.11 |
+| 文件版本 | 1.1.12 |
 | 发布日期 | 2026-10-02 |
 | 状态 | 现行；整改项按 [plan/remediation.md](../plan/remediation.md) 的期限实施 |
 | 编制 | LightKing、Claude |
@@ -273,3 +273,4 @@ GB/T 11457—2006 界定的以及下列术语和定义适用于本规范。
 | 1.1.9 | 2026-10-05 | 随整改项 P1-09 补充实施所需的细节，规定的目标不变：[07-operations.md](07-operations.md) 的 OPS-043 写明 `YI_LATEST` 存于版本目录的 `env` 文件、服务器上只保留当前与上一版本（每个版本的安装程序约 470 MB）；OPS-044 写明回滚的执行方式；OPS-045 写明维护模式以 `SIGUSR2` 开启、只能以重启结束，以及开启后拒绝的操作；OPS-046 写明自动回滚的日志；第 8 节增加 `server.maintenance`、`deploy.rolled-back`。[04-api.md](04-api.md) 的 API-061 写明 `/healthz` 的字段，以及启用反向代理后代理须屏蔽这两个路径；规则编号不变 |
 | 1.1.10 | 2026-10-05 | 同步整改项 P1-09 实施后的“现状”列，规定本身不变：[07-operations.md](07-operations.md) 的 OPS-041 至 OPS-046、OPS-048、OPS-052 改为满足，OPS-047 改为部分满足；[04-api.md](04-api.md) 的 API-061 改为部分满足（`/metrics` 尚未实现）；规则编号不变 |
 | 1.1.11 | 2026-10-05 | 同步整改项 P1-11 实施后的“现状”列，规定本身不变：[05-security.md](05-security.md) 的 SEC-045 改为满足（线上评分 1.3）；规则编号不变 |
+| 1.1.12 | 2026-10-05 | 随整改项 P1-12 建立运维规程 [procedures/ops.md](../procedures/ops.md)，同步 [11-documentation.md](11-documentation.md) 第 1.1 条文档集中该文件的“现状”；规定本身不变，规则编号不变 |
