@@ -7,6 +7,7 @@
 #   sh deploy-remote.sh migrate                                         由旧的目录结构改为版本目录（只做一次，不重启）
 #   sh deploy-remote.sh status                                          打出线上的版本、对局数、是否维护中与连接数
 #   sh deploy-remote.sh service                                         安装同目录下的 yi.service（SEC-045），重启并检查，不通过即恢复原文件
+#   sh deploy-remote.sh offsite                                         安装异地加密备份（P1-13）：程序、单元文件与配置，并立即上传一次
 # 目录（OPS-043）：/opt/yi/releases/版本号/ 下为 server.cjs、download/（安装程序）、env（YI_LATEST）；
 # /opt/yi/current、/opt/yi/previous 为指向版本目录的符号链接，yi.service 经 current 读取三者。
 # 规则：加锁 OPS-041；降级确认 OPS-042；整体回滚 OPS-044；维护模式 OPS-045；健康检查与自动回滚 OPS-046；部署日志 OPS-048
@@ -19,6 +20,8 @@ NODE=${YI_NODE:-/opt/node/bin/node}
 PORT=${YI_PORT:-8443}
 LOCK=${YI_LOCK:-/run/yi-deploy.lock}
 UNIT_FILE=${YI_UNIT_FILE:-/etc/systemd/system/yi.service}
+SYSTEMD_DIR=${YI_SYSTEMD_DIR:-/etc/systemd/system}
+ETC=${YI_ETC:-/etc/yi}
 WHO=${YI_OPERATOR:-unknown}
 WAIT_STEP=10     # 维护模式中每 10 秒查一次活跃对局数
 WAIT_POLLS=180   # 至多 180 次，即 30 分钟（OPS-045）
@@ -271,6 +274,32 @@ cmd_service() {
   fail '已恢复原来的 yi.service'
 }
 
+# 安装异地加密备份（DAT-061 第二层、DAT-063；P1-13）：程序 /opt/yi/offsite.cjs、yi-offsite.service 与 yi-backup.service；
+# 传上来 offsite.env 时更新配置（属主 root:yi，权限 640，内含 OSS 的访问密钥，所在的临时目录做完即删）。随后立即上传一次以检查
+cmd_offsite() {
+  for f in offsite.cjs yi-offsite.service yi-backup.service; do [ -f "$HERE/$f" ] || fail "没有 $f"; done
+  if [ -f "$HERE/offsite.env" ]; then
+    mkdir -p "$ETC"
+    chown root:yi "$ETC"
+    chmod 750 "$ETC"
+    cp "$HERE/offsite.env" "$ETC/offsite.env.new"
+    chown root:yi "$ETC/offsite.env.new"
+    chmod 640 "$ETC/offsite.env.new"
+    mv -f "$ETC/offsite.env.new" "$ETC/offsite.env"
+    say "配置已写入 $ETC/offsite.env"
+  fi
+  [ -f "$ETC/offsite.env" ] || fail "没有 ${ETC}/offsite.env：首次安装须填写存储桶、访问密钥与公钥（不加 --keep-config）"
+  cp "$HERE/offsite.cjs" "$ROOT/offsite.cjs"
+  cp "$HERE/yi-offsite.service" "$HERE/yi-backup.service" "$SYSTEMD_DIR/"
+  chmod 644 "$ROOT/offsite.cjs" "$SYSTEMD_DIR/yi-offsite.service" "$SYSTEMD_DIR/yi-backup.service"
+  systemctl daemon-reload
+  if systemctl start yi-offsite.service; then r=ok; else r=fail; fi
+  journalctl -u yi-offsite -n 3 --no-pager -o cat || true
+  record config 'P1-13 install-offsite' "$r"
+  [ "$r" = ok ] || fail '首次上传失败，见上面的日志；程序与配置已安装，修正后重新执行 npm run deploy -- install-offsite'
+  say '✓ 异地加密备份已安装：每日本地备份成功后上传到 OSS，私钥只在本机'
+}
+
 # 以 flock 加锁后再执行一次本脚本（OPS-041）；锁被占用时报告后退出
 locked() {
   if [ "${YI_LOCKED:-}" = 1 ]; then return 0; fi
@@ -297,5 +326,6 @@ case "$cmd" in
   rollback) locked rollback "$@" && cmd_rollback ;;
   migrate) locked migrate "$@" && cmd_migrate ;;
   service) locked service "$@" && cmd_service ;;
-  *) fail "用法：sh deploy-remote.sh preflight|install|restart|rollback|migrate|status|service" ;;
+  offsite) locked offsite "$@" && cmd_offsite ;;
+  *) fail "用法：sh deploy-remote.sh preflight|install|restart|rollback|migrate|status|service|offsite" ;;
 esac

@@ -8,6 +8,8 @@
 #   npm run deploy -- migrate-layout           服务器由旧的目录结构改为版本目录（只做一次，不重启）
 #   npm run deploy -- status                   查看线上的版本、对局数、是否维护中与连接数（健康检查，API-061）
 #   npm run deploy -- install-service          安装或更新 scripts/server/yi.service（加固选项见 SEC-045），重启并检查，不通过即恢复原文件
+#   npm run deploy -- install-offsite          安装异地加密备份（P1-13）：询问 OSS 的存储桶、地域、访问密钥与 age 公钥，立即上传一次；
+#                                              加 --keep-config 时不询问，只更新程序与单元文件
 #   npm run deploy -- install-backup           安装或更新每日备份（scripts/server/ 下的脚本与定时器），并立即备份一次；不重启服务端
 #   npm run deploy -- install-journald         安装或更新 journald 的保留策略（scripts/server/journald-yi.conf），重启 journald；不重启服务端
 # 安装程序和服务端都取自同一个 Release 的附件，与标签上的代码一一对应；下载后与传到服务器后各按 Release 的 SHA256SUMS 核对一次（OPS-031）。
@@ -51,6 +53,20 @@ remote() {
   ssh "$SERVER" "YI_OPERATOR=$WHO nohup sh $in/deploy-remote.sh $cmd 2>&1"
 }
 
+# 询问异地备份的配置，写入 $1（权限 600）；访问密钥的输入不回显
+ask_config() {
+  (umask 077 && : >"$1")
+  for item in 'YI_OSS_BUCKET 存储桶名称' 'YI_OSS_REGION 存储桶所在的地域（如 cn-hangzhou）' 'YI_OSS_ACCESS_KEY_ID AccessKey ID' \
+    'YI_OSS_ACCESS_KEY_SECRET AccessKey Secret（输入时不显示）' 'YI_AGE_RECIPIENT age 公钥（npm run offsite -- keygen 打出的 age1…）'; do
+    name=${item%% *}
+    printf '%s：' "${item#* }"
+    [ "$name" != YI_OSS_ACCESS_KEY_SECRET ] || stty -echo 2>/dev/null || true
+    read -r value || value=
+    [ "$name" != YI_OSS_ACCESS_KEY_SECRET ] || { stty echo 2>/dev/null || true; echo; }
+    printf '%s=%s\n' "$name" "$value" >>"$1"
+  done
+}
+
 case "${1:-}" in
   rollback | restart | status)
     remote "$1"
@@ -62,6 +78,20 @@ case "${1:-}" in
     ;;
   install-service)
     remote service "$HERE/yi.service"
+    exit 0
+    ;;
+  install-offsite)
+    npm run -s build:node >/dev/null
+    set -- "$(dirname "$0")/../dist-server/offsite.cjs" "$HERE/yi-offsite.service" "$HERE/yi-backup.service" "${2:-}"
+    if [ "$4" != --keep-config ]; then
+      CONF=$(mktemp -d)
+      trap 'rm -rf "$CONF"' EXIT
+      ask_config "$CONF/offsite.env"
+      set -- "$1" "$2" "$3" "$CONF/offsite.env"
+    else
+      set -- "$1" "$2" "$3"
+    fi
+    remote offsite "$@"
     exit 0
     ;;
 esac
@@ -111,7 +141,7 @@ if [ "${1:-}" = install-journald ]; then
 fi
 
 V=${1:-}
-echo "$V" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || fail '用法：npm run deploy -- 版本号 [--restart] [--allow-downgrade]，或 npm run deploy -- restart、rollback、status、migrate-layout、install-service、install-backup、install-journald'
+echo "$V" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || fail '用法：npm run deploy -- 版本号 [--restart] [--allow-downgrade]，或 npm run deploy -- restart、rollback、status、migrate-layout、install-service、install-offsite、install-backup、install-journald'
 shift
 ALLOW=
 RESTART=
