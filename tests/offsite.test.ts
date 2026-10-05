@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { generateIdentity, identityToRecipient } from 'age-encryption';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { decrypt, keygen, latestBackup, objectKeys, putObject, readConfig, signV4, upload } from '../scripts/offsite';
+import { decrypt, keygen, latestBackup, objectKeys, ossError, putObject, readConfig, signV4, upload } from '../scripts/offsite';
 
 let dir = '';
 beforeEach(() => {
@@ -87,16 +87,20 @@ describe('配置', () => {
   });
 });
 
-describe('上传', () => {
-  type Sent = { url: string; headers: Record<string, string>; body: Uint8Array };
-  /** 假的 OSS：记下请求；etag 为 null 时按请求体的 MD5 回应 */
-  const fakeOss = (sent: Sent[], status = 200, etag: string | null = null) =>
-    (async (url: string, init: { headers: Record<string, string>; body: Uint8Array }) => {
-      sent.push({ url, headers: init.headers, body: init.body });
-      return { status, text: async () => '<Error/>', headers: { get: () => `"${etag ?? md5(init.body).digest('hex').toUpperCase()}"` } };
-    }) as Parameters<typeof putObject>[3]['fetch'];
-  const now = () => new Date('2026-10-04T20:31:00Z');
+type Sent = { url: string; headers: Record<string, string>; body: Uint8Array };
+/** 假的 OSS：记下请求；etag 为 null 时按请求体的 MD5 回应 */
+const fakeOss = (sent: Sent[], status = 200, etag: string | null = null) =>
+  (async (url: string, init: { headers: Record<string, string>; body: Uint8Array }) => {
+    sent.push({ url, headers: init.headers, body: init.body });
+    return {
+      status,
+      text: async () => '<Error><Code>AccessDenied</Code><RequestId>R1</RequestId></Error>',
+      headers: { get: () => `"${etag ?? md5(init.body).digest('hex').toUpperCase()}"` },
+    };
+  }) as Parameters<typeof putObject>[3]['fetch'];
+const now = () => new Date('2026-10-04T20:31:00Z');
 
+describe('上传', () => {
   it('加密最新的一份后上传日备与月备，带 Content-MD5 与签名；以私钥解密得到原文', async () => {
     backup('20261004T203000Z', '{"abc":{"gomoku":{"points":1200}}}');
     const identity = await generateIdentity();
@@ -127,7 +131,7 @@ describe('上传', () => {
 
   it('OSS 返回非 200 或 ETag 与内容不符时失败', async () => {
     const body = new Uint8Array([1, 2, 3]);
-    await expect(putObject(CONFIG, 'daily/x.age', body, { fetch: fakeOss([], 403), now })).rejects.toThrow('HTTP 403');
+    await expect(putObject(CONFIG, 'daily/x.age', body, { fetch: fakeOss([], 403), now })).rejects.toThrow(/HTTP 403 Code=AccessDenied$/);
     await expect(putObject(CONFIG, 'daily/x.age', body, { fetch: fakeOss([], 200, 'ABCDEF'), now })).rejects.toThrow('ETag 不符');
     await expect(putObject(CONFIG, 'daily/x.age', body, { fetch: fakeOss([]), now })).resolves.toBeUndefined();
   });
@@ -147,6 +151,33 @@ describe('上传', () => {
     await upload(env, { fetch: fakeOss(sent), now });
     await expect(decrypt(sent[0].body, other)).rejects.toThrow();
     await expect(decrypt(sent[0].body, mine)).rejects.toThrow(SyntaxError);
+  });
+});
+
+describe('OSS 的错误回应', () => {
+  it('取出错误码、说明与拒绝原因明细（子字段写成“名称=值”），不含 RequestId', () => {
+    const body = [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<Error>',
+      '  <Code>AccessDenied</Code>',
+      '  <Message>You have no right to access this object because of bucket acl.</Message>',
+      '  <RequestId>6AC399F429E31A3338EA1B23</RequestId>',
+      '  <AccessDeniedDetail>',
+      '    <AuthPrincipalType>SubUser</AuthPrincipalType>',
+      '    <AuthAction>oss:PutObject</AuthAction>',
+      '    <PolicyType>AccountLevelIdentityBasedPolicy</PolicyType>',
+      '  </AccessDeniedDetail>',
+      '</Error>',
+    ].join('\n');
+    expect(ossError(body)).toBe(
+      'Code=AccessDenied；Message=You have no right to access this object because of bucket acl.；' +
+        'AccessDeniedDetail=AuthPrincipalType=SubUser AuthAction=oss:PutObject PolicyType=AccountLevelIdentityBasedPolicy',
+    );
+  });
+
+  it('不是错误文档时取原文的前 300 个字符', () => {
+    expect(ossError('x'.repeat(400))).toBe('x'.repeat(300));
+    expect(ossError('<Error><Code></Code></Error>')).toBe('<Error><Code></Code></Error>');
   });
 });
 
