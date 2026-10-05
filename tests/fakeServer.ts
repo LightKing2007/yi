@@ -5,7 +5,7 @@
  *   - systemctl restart 把 current 指向的服务端记为运行中，健康检查据此回应版本号与提交号；
  *   - sleep 不等待，只记下次数；设了 drain 时每次把活跃对局数减一，以此模拟时间流逝。
  */
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -96,7 +96,7 @@ export function incoming(version: string, tamper = false) {
   return at('incoming/deploy-remote.sh');
 }
 
-/** 以 sh 执行脚本 script（默认为仓库中的脚本），返回退出码与输出；input 为标准输入 */
+/** 以 sh 执行脚本 script（默认为仓库中的脚本），返回退出码与输出（标准输出在前、标准错误在后，不打到终端）；input 为标准输入 */
 export function run(args: string[], script = SCRIPT, input = '', operator = 'tester') {
   const env = {
     ...process.env,
@@ -110,12 +110,8 @@ export function run(args: string[], script = SCRIPT, input = '', operator = 'tes
     YI_UNIT_FILE: at('yi.service'),
     YI_OPERATOR: operator,
   };
-  try {
-    return { code: 0, out: execFileSync('sh', [script, ...args], { env, encoding: 'utf8', input }) };
-  } catch (err) {
-    const failed = err as { status: number; stdout: string; stderr: string };
-    return { code: failed.status, out: failed.stdout + failed.stderr };
-  }
+  const result = spawnSync('sh', [script, ...args], { env, encoding: 'utf8', input });
+  return { code: result.status, out: result.stdout + result.stderr };
 }
 /** 桩程序依次记下的调用 */
 export const calls = () => read(at('sim/calls')).trim().split('\n').filter(Boolean);

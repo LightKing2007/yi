@@ -11,7 +11,7 @@ afterEach(teardownServer);
 describe('版本号比较', () => {
   const lt = (left: string, right: string) => {
     try {
-      execFileSync('sh', ['-c', `. "${SCRIPT}" && version_lt "$1" "$2"`, 'sh', left, right], { env: { ...process.env, YI_DEPLOY_LIB: '1' } });
+      execFileSync('sh', ['-c', `. "${SCRIPT}" && version_lt "$1" "$2"`, 'sh', left, right], { env: { ...process.env, YI_DEPLOY_LIB: '1' }, stdio: 'pipe' });
       return true;
     } catch {
       return false;
