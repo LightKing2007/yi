@@ -10,6 +10,8 @@ import { rejectText } from '../src/shared/reject';
 import { BLACK, GameType, WHITE, other } from '../src/core/types';
 import { isInvalid, parseC2S, type Invalid } from '../src/shared/parse';
 import type { Log } from './log';
+import type { Metrics } from './metrics';
+import { errorCode } from './metrics';
 import { BAN_SECS, ConnLimits, type LimitedOp } from './ratelimit';
 import {
   ACTS_MAX,
@@ -173,6 +175,7 @@ export interface RoomServerOptions {
   store?: RatingStore;
   latest?: string; // 最新的客户端版本号，随 welcome 发给客户端
   download?: string; // 新版本的下载地址
+  metrics?: Metrics; // 监控指标（07-operations.md 第 9 节）：不设时不统计
 }
 
 /** 健康检查（/healthz，API-061）中由 RoomServer 提供的部分 */
@@ -213,6 +216,7 @@ export class RoomServer {
   private log: Log;
   private store: RatingStore;
   private latest: { latest?: string; url?: string };
+  private metrics: Metrics | undefined;
   /** 维护模式（OPS-045）：只能以重启结束 */
   private maintenance = false;
 
@@ -222,6 +226,7 @@ export class RoomServer {
     this.log = opt.log ?? (() => {});
     this.store = opt.store ?? new MemoryStore();
     this.latest = opt.latest ? { latest: opt.latest, url: opt.download } : {};
+    this.metrics = opt.metrics;
   }
 
   // ---------------- 对外接口 ----------------
@@ -266,6 +271,7 @@ export class RoomServer {
       return p;
     }
     const m = parseC2S(raw);
+    this.metrics?.inc('yi_messages_total', { type: isInvalid(m) ? 'invalid' : m.t });
     if (isInvalid(m)) {
       this.rejectInvalid(p, m);
       return p;
@@ -359,6 +365,25 @@ export class RoomServer {
   queued(mode: QueueMode, type: number) {
     return this.queue.filter(e => e.mode === mode && e.type === type).length;
   }
+  /** 按种类与状态统计的房间数、按模式与棋类统计的排队人数（指标 yi_rooms_active、yi_queue_waiting） */
+  stats() {
+    const rooms = new Map<string, number>();
+    for (const r of this.rooms.values()) {
+      const state = r.state === RoomState.Wait ? 'wait' : r.state === RoomState.Over ? 'over' : r.g.scoring ? 'scoring' : 'play';
+      const key = `${r.kind} ${state}`;
+      rooms.set(key, (rooms.get(key) ?? 0) + 1);
+    }
+    const queue = new Map<string, number>();
+    for (const entry of this.queue) {
+      const key = `${entry.mode} ${typeKey(entry.type)}`;
+      queue.set(key, (queue.get(key) ?? 0) + 1);
+    }
+    const split = (map: Map<string, number>) => [...map].map(([key, count]) => [...key.split(' '), count] as [string, string, number]);
+    return {
+      rooms: split(rooms).map(([kind, state, count]) => ({ kind, state, count })),
+      queue: split(queue).map(([mode, type, count]) => ({ mode, type, count })),
+    };
+  }
 
   /** 健康检查的数据（API-061） */
   health(): Health {
@@ -417,7 +442,10 @@ export class RoomServer {
   }
 
   private send(p: Player | null | undefined, msg: S2C) {
-    if (p?.conn) p.conn.send(msg);
+    if (!p?.conn) return;
+    p.conn.send(msg);
+    if (msg.t === 'error' || msg.t === 'info') this.metrics?.inc('yi_errors_total', { code: errorCode(msg.text) });
+    else if (msg.t === 'joinNo') this.metrics?.inc('yi_errors_total', { code: errorCode(msg.reason) });
   }
   private byId(id: number) {
     if (!id) return undefined;
@@ -464,6 +492,7 @@ export class RoomServer {
 
   /** 超出频率限制（E3）：丢弃这次请求，1 秒内只提示一次，并累计一次违规 */
   private limited(p: Player) {
+    this.metrics?.inc('yi_rate_limited_total');
     const now = this.now();
     if (p.limits.notice(now)) {
       this.send(p, { t: 'error', text: LIMITED_TEXT });
@@ -667,6 +696,7 @@ export class RoomServer {
     r.result = { winner, reason };
     this.broadcast(r, { t: 'over', winner, reason });
     this.log('info', 'game.over', { msg: `房间 ${r.id} 结束`, roomId: r.id, gameId: r.gameId, winner, reason, moves: r.g.moves.length });
+    this.metrics?.inc('yi_games_finished_total', { kind: r.kind, reason });
     if (r.kind === 'ranked') this.rate(r, winner);
   }
 

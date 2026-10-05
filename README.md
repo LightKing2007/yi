@@ -243,6 +243,7 @@ node dist-server/server.cjs --version
 
 - **更新**：服务端随发版一同更新，由 `npm run deploy -- 版本号` 部署对应 Release 中的安装程序与 `yi-server-版本.cjs`：有对局时先进入维护模式，等对局结束后重启，重启后以健康检查核对版本，不通过即自动回滚；`npm run deploy -- rollback` 立即回退至上一版本。详见 [开发与发布规程](docs/procedures/release.md) 第 6 章。
 - **健康检查**：`npm run deploy -- status` 经服务器本机读取 `/healthz`，打出版本号、提交号、活跃对局数、是否处于维护模式与连接数；`/healthz` 只回应来自本机的请求（API-061）。
+- **监控指标**：同一端口上的 `/metrics`（只回应来自本机的请求，API-061）以 Prometheus 文本格式输出 [07-operations.md](docs/standards/07-operations.md) 第 9 节的指标（连接数、在线玩家、房间、排队、消息与错误码计数、处理耗时、事件循环延迟、内存等）；服务端另每 60 秒在日志中写一条 `metrics.snapshot`（OPS-071）。查看：`ssh root@47.108.181.240 /opt/node/bin/node -e "fetch('http://127.0.0.1:8443/metrics').then(r=>r.text()).then(console.log)"`。
 - **查看日志**：`ssh root@47.108.181.240 journalctl -u yi -f`。日志为 JSON Lines，每行一个事件，`ver` 字段为服务端的版本号及提交号（格式与事件码见 [07-operations.md](docs/standards/07-operations.md) 第 5 节、第 8 节）；只看警告及以上：`journalctl -u yi -p warning`；临时输出 debug 级别：以 `systemctl edit yi` 在附加配置中设 `Environment=YI_LOG_LEVEL=debug`（OPS-062），不改动 `yi.service` 本身，用完以 `systemctl revert yi` 删除。
 - **修改服务配置**：修改仓库中的 `scripts/server/yi.service`，经 PR 合并后执行 `npm run deploy -- install-service`；严禁在服务器上直接改动该文件。
 - **防火墙**：阿里云安全组与主机防火墙 UFW 均仅放行 TCP 22、8443 端口，两者须保持一致（SEC-041）。

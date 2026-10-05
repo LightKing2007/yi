@@ -10,6 +10,7 @@ import { MemoryStore, RoomServer, type Conn, type RoomServerOptions, type Sessio
 import { HTTP_LIMITS, hardenHttp, startHost } from '../server/host';
 import { fileServer } from '../server/files';
 import { withHealth } from '../server/health';
+import { Metrics } from '../server/metrics';
 import type { Log, LogEntry, LogLevel } from '../server/log';
 import { CLOSE_CODE, CONFIRM_SECS, GRACE_SECS, HELLO_SECS, PROTO_VERSION, type C2S, type S2C } from '../src/shared/protocol';
 import { parseS2C } from '../src/shared/parse';
@@ -1308,21 +1309,26 @@ describe('健康检查（API-061）', () => {
     }
   });
 
-  it('不是来自本机的请求交给下一个处理者（下载页对其返回 404）', () => {
+  it('不是来自本机的请求交给下一个处理者（下载页对其返回 404），/healthz 与 /metrics 都是', () => {
     const health = () => ({ players: 1, games: 0, maintenance: false });
     const handled: string[] = [];
-    const web = withHealth(build, health, req => handled.push(String(req.socket.remoteAddress)));
-    const call = (remoteAddress: string) => {
+    const web = withHealth(
+      build,
+      health,
+      req => handled.push(`${req.url} ${req.socket.remoteAddress}`),
+      () => 'yi_connections 0\n',
+    );
+    const call = (url: string, remoteAddress: string) => {
       let status = 0;
       const res = { writeHead: (code: number) => (status = code), end: () => {} };
-      web({ method: 'GET', url: '/healthz', socket: { remoteAddress } } as unknown as http.IncomingMessage, res as unknown as http.ServerResponse);
+      web({ method: 'GET', url, socket: { remoteAddress } } as unknown as http.IncomingMessage, res as unknown as http.ServerResponse);
       return status;
     };
-    expect(call('203.0.113.7')).toBe(0);
-    expect(call('::ffff:10.0.0.2')).toBe(0);
-    expect(handled).toEqual(['203.0.113.7', '::ffff:10.0.0.2']);
-    expect(call('::1')).toBe(200);
-    expect(call('::ffff:127.0.0.1')).toBe(200);
+    for (const url of ['/healthz', '/metrics']) {
+      expect([call(url, '203.0.113.7'), call(url, '::ffff:10.0.0.2')]).toEqual([0, 0]);
+      expect([call(url, '::1'), call(url, '::ffff:127.0.0.1')]).toEqual([200, 200]);
+    }
+    expect(handled).toEqual(['/healthz 203.0.113.7', '/healthz ::ffff:10.0.0.2', '/metrics 203.0.113.7', '/metrics ::ffff:10.0.0.2']);
   });
 });
 
@@ -1344,5 +1350,86 @@ describe('关闭（OPS-052）', () => {
     const conns = [await connect(true), await connect(false)];
     await host.close();
     expect(await Promise.all(conns.map(conn => conn.closed))).toEqual([CLOSE_CODE.restart, CLOSE_CODE.restart]);
+  });
+});
+
+describe('监控指标的统计点（OPS-071）', () => {
+  /** 带指标的服务端；value 取某个样本的值（没有时为 undefined） */
+  const counted = () => {
+    const metrics = new Metrics({ version: '1.0.0', commit: 'c' });
+    const env = world(new MemoryStore(), { metrics });
+    const value = (sample: string) =>
+      metrics.snapshot({ connections: 0, playersOnline: 0, rooms: [], queue: [], downloadsActive: 0, eventLoopLagSeconds: 0, residentMemoryBytes: 0 })[sample];
+    return { ...env, metrics, value };
+  };
+
+  it('入站消息按类型计数，非法消息记为 invalid；下发的错误按错误码计数；限流计次', () => {
+    const { srv, value } = counted();
+    const [black, white] = [new Client(srv, '甲'), new Client(srv, '乙')];
+    startGame(black, white);
+    white.send({ t: 'move', x: 7, y: 7 }); // 还没轮到白方
+    black.send({ t: 'join', code: '0000' }); // 已在房间里
+    black.send({ bad: 1 } as unknown as C2S);
+    for (let i = 0; i < 100; i++) black.send({ t: 'ping' }); // 超出令牌桶
+    expect(value('yi_messages_total{type="hello"}')).toBe(2);
+    expect(value('yi_messages_total{type="invalid"}')).toBe(1);
+    expect(value('yi_errors_total{code="game.not-your-turn"}')).toBe(1);
+    expect(value('yi_errors_total{code="room.already-in"}')).toBe(1);
+    expect(value('yi_errors_total{code="proto.invalid-message"}')).toBe(1);
+    expect(value('yi_errors_total{code="rate.limited"}')).toBe(1);
+    expect(value('yi_rate_limited_total')).toBeGreaterThanOrEqual(1);
+  });
+
+  it('终局按种类与原因计数', () => {
+    const { srv, value } = counted();
+    const [black, white] = [new Client(srv, '甲'), new Client(srv, '乙')];
+    startGame(black, white);
+    black.send({ t: 'resign' });
+    expect(value('yi_games_finished_total{kind="friend",reason="resign"}')).toBe(1);
+  });
+
+  it('房间按种类与状态统计（含点目），排队按模式与棋类统计', () => {
+    const { srv } = counted();
+    const [black, white, host, queuer] = ['甲', '乙', '丙', '丁'].map(name => new Client(srv, name));
+    startGame(black, white, { type: 1, size: 9 });
+    black.send({ t: 'pass' });
+    white.send({ t: 'pass' }); // 双方停一手，进入点目
+    host.send({ t: 'create', type: 0, size: 15, hostColor: 0, renju: true, moveTime: 0 });
+    queuer.send({ t: 'queue', mode: 'ranked', type: 1, size: 19 });
+    expect(srv.stats()).toEqual({
+      rooms: [
+        { kind: 'friend', state: 'scoring', count: 1 },
+        { kind: 'friend', state: 'wait', count: 1 },
+      ],
+      queue: [{ mode: 'ranked', type: 'go', count: 1 }],
+    });
+  });
+});
+
+describe('/metrics（API-061、OPS-071）', () => {
+  it('本机的 GET /metrics 返回 Prometheus 文本：连接数、在线玩家、处理耗时按注入的时钟计；未设指标时 404', async () => {
+    const metrics = new Metrics({ version: '1.0.0', commit: 'c' });
+    let clock = 100;
+    const host = await startHost(0, { host: '127.0.0.1', metrics, now: () => (clock += 0.002), eventLoopLag: () => 0.25 });
+    const plain = await startHost(0, { host: '127.0.0.1' });
+    try {
+      const ws = new WebSocket(`ws://127.0.0.1:${host.port}`);
+      await new Promise(res => ws.on('open', res));
+      ws.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, name: '甲', uid: newUid() }));
+      await new Promise(res => ws.once('message', res));
+      const res = await fetch(`http://127.0.0.1:${host.port}/metrics`);
+      expect(res.headers.get('content-type')).toBe('text/plain; version=0.0.4; charset=utf-8');
+      const lines = (await res.text()).split('\n');
+      expect(lines).toEqual(
+        expect.arrayContaining(['yi_connections 1', 'yi_players_online 1', 'yi_event_loop_lag_seconds 0.25', 'yi_message_handle_seconds_count 1']),
+      );
+      expect(lines).toContain('yi_message_handle_seconds_bucket{le="0.001"} 0');
+      expect(lines).toContain('yi_message_handle_seconds_bucket{le="+Inf"} 1'); // 注入的时钟每读一次前进 2 毫秒，耗时必大于 1 毫秒
+      expect((await fetch(`http://127.0.0.1:${plain.port}/metrics`)).status).toBe(404);
+      ws.close();
+    } finally {
+      await host.close();
+      await plain.close();
+    }
   });
 });

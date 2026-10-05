@@ -128,7 +128,7 @@ export function fileServer(dir: string, stall: StallLimit = STALL) {
     res.writeHead(404, { ...BASE_HEADERS, 'Content-Type': 'text/plain; charset=utf-8' }).end('未找到所请求的文件。');
   };
 
-  return (req: IncomingMessage, res: ServerResponse) => {
+  const handle = (req: IncomingMessage, res: ServerResponse) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       res.writeHead(405, { ...BASE_HEADERS, Allow: 'GET, HEAD' }).end();
       return;
@@ -250,4 +250,6 @@ export function fileServer(dir: string, stall: StallLimit = STALL) {
     stream.on('error', () => res.destroy());
     stream.pipe(res);
   };
+  /** 进行中的下载数（指标 yi_downloads_active） */
+  return Object.assign(handle, { active: () => total });
 }
