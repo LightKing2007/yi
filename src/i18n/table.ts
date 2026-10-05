@@ -1,5 +1,6 @@
 /** 界面文字的译文表：[中文原文（也是查表的键）, 文言, English]。新增界面文字时在这里补一行 */
 export const TABLE: [string, string, string][] = [
+  ["改进对未启用显卡加速的计算机的支持：在虚拟机及显卡驱动不受支持的计算机上，游戏改以软件方式绘制画面，不再提示不支持 WebGL2。", "未启显卡加速之机，今亦可用：于虚拟机及显卡驱动不受支持之机，改以软件绘画面，不复示不支持 WebGL2。", "Improved support for computers without graphics acceleration: on virtual machines and computers with unsupported graphics drivers, the game now draws with software rendering instead of reporting that WebGL2 is unsupported."],
   ["改进联机服务器的维护方式：服务器维护前不再开始新的对局，正在进行的对局可以下完，并向在线玩家发出通知。", "枢纽修治之法更善：将修之前不开新局，已开之局可终，并告在线诸君。", "Improved server maintenance: no new games start before maintenance, games in progress can finish, and online players are notified."],
   ["优化界面文字的显示：文字不再自动缩小，较长的提示折为两行。", "界面之文更善：字不复自缩，较长之示析为两行。", "Improved text display: text is no longer shrunk, and long messages wrap."],
   ["调整字母与数字的字体：各操作系统统一使用游戏附带的字体。", "易字母与数字之体：诸系统统用戏中所附之字体。", "Changed letters and digits to use the bundled typeface on all operating systems."],

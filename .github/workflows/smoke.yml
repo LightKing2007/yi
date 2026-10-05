@@ -52,14 +52,13 @@ jobs:
         continue-on-error: true
         env:
           APPIMAGE_EXTRACT_AND_RUN: '1' # 运行机器上没有 FUSE 2：AppImage 解压后运行
-          # 运行机器没有 GPU。Chromium 已取消 WebGL 自动退回软件渲染，须显式允许 SwiftShader，否则游戏提示“当前环境不支持 WebGL2”
-          SMOKE_ARGS: --enable-unsafe-swiftshader
+          # 运行机器没有 GPU，不附加任何参数：游戏自身启用 SwiftShader 软件渲染（electron/main.ts，P1-18），在此验证
         run: xvfb-run -a -s "-screen 0 1600x1000x24" node scripts/smoke-app.mjs "$(ls release/*.AppImage)" smoke
       - name: 启动 AppImage 并检查（--no-sandbox，仅用于诊断）
         if: runner.os == 'Linux' && steps.sandboxed.outcome == 'failure'
         env:
           APPIMAGE_EXTRACT_AND_RUN: '1'
-          SMOKE_ARGS: --enable-unsafe-swiftshader --no-sandbox
+          SMOKE_ARGS: --no-sandbox
         run: xvfb-run -a -s "-screen 0 1600x1000x24" node scripts/smoke-app.mjs "$(ls release/*.AppImage)" smoke-no-sandbox
       - name: 开启沙箱时未通过
         if: runner.os == 'Linux' && steps.sandboxed.outcome == 'failure'

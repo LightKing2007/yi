@@ -12,6 +12,12 @@ const DEV_URL = process.env.YI_DEV_URL; // 开发时：YI_DEV_URL=http://localho
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, codeCache: true } }]);
 
+// 没有 GPU 加速的环境（虚拟机、显卡驱动被 Chromium 列入黑名单）中，以 SwiftShader 软件渲染 WebGL2（整改项 P1-18）。
+// Chromium 已取消 WebGL 自动退回软件渲染，不加此开关时游戏提示“当前环境不支持 WebGL2”；有 GPU 时照常使用硬件渲染。
+// 开关名中的 unsafe 指浏览器以软件渲染执行不可信网页的 WebGL 时攻击面更大；游戏只加载 asar 中自身的代码（SEC-035），
+// 导航与新窗口均被拦截（SEC-031），影响有限。2026-10-05 项目所有者确认启用
+app.commandLine.appendSwitch('enable-unsafe-swiftshader');
+
 let win: BrowserWindow | null = null;
 
 // ---------------- 日志 ----------------
