@@ -14,15 +14,27 @@
  * 信号：SIGTERM、SIGINT 以 1001 断开全部连接、落盘后退出（OPS-052）；SIGUSR2 进入维护模式（OPS-045），只能以重启结束。
  */
 import path from 'node:path';
+import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { PROTO_PORT, PROTO_VERSION } from '../src/shared/protocol';
 import { startHost } from './host';
 import { processLogger } from './log';
+import { Metrics, countingLog } from './metrics';
 import { FileStore, StoreLoadError } from './store';
 
 /** 退出码：配置不合法（sysexits.h 的 EX_CONFIG） */
 const EXIT_CONFIG = 78;
 /** 输出日志汇总行（OPS-063）的间隔 */
 const LOG_FLUSH_MS = 1000;
+/** 指标快照 metrics.snapshot 的间隔（OPS-071） */
+const SNAPSHOT_MS = 60_000;
+/** 事件循环延迟的采样精度（毫秒） */
+const LAG_RESOLUTION_MS = 20;
+/** 纳秒换算为秒 */
+const NS_PER_SEC = 1e9;
+/** 毫秒换算为秒 */
+const MS_PER_SEC = 1000;
+/** 事件循环延迟取 p99 */
+const LAG_PERCENTILE = 99;
 
 if (process.argv.includes('--version')) {
   process.stdout.write(`${__APP_VERSION__}（${__APP_COMMIT__}）\n`);
@@ -47,10 +59,18 @@ const latest = process.env.YI_LATEST || undefined;
 const download = process.env.YI_DOWNLOAD || undefined;
 const files = process.env.YI_FILES ? path.resolve(process.env.YI_FILES) : undefined;
 
+const build = { version: __APP_VERSION__, commit: __APP_COMMIT__ };
+const metrics = new Metrics(build);
+// 事件循环延迟：每次写快照后重新统计，/metrics 与快照中为上一次快照以来的 p99。
+// monitorEventLoopDelay 记录的是相邻两次采样的间隔，含采样周期本身，减去采样周期才是延迟
+const lag = monitorEventLoopDelay({ resolution: LAG_RESOLUTION_MS });
+lag.enable();
+const eventLoopLag = () => (lag.count ? Math.max(0, lag.percentile(LAG_PERCENTILE) / NS_PER_SEC - LAG_RESOLUTION_MS / MS_PER_SEC) : 0);
+
 const dataFile = path.resolve(process.env.YI_DATA ?? 'yi-ratings.json');
 let store: FileStore;
 try {
-  store = new FileStore(dataFile, { log });
+  store = new FileStore(dataFile, { log: countingLog(log, metrics) });
 } catch (err) {
   if (!(err instanceof StoreLoadError)) throw err;
   // 存档损坏时宁可不启动，也不以空数据覆盖原文件（DAT-050）
@@ -61,9 +81,14 @@ try {
 const flusher = setInterval(() => logger.flush(), LOG_FLUSH_MS);
 flusher.unref();
 
-startHost([port, ...extra], { log, store, host, latest, download, files, build: { version: __APP_VERSION__, commit: __APP_COMMIT__ } })
+startHost([port, ...extra], { log, store, host, latest, download, files, build, metrics, eventLoopLag })
   .then(started => {
     const msg = `弈 联机服务端已启动${host ? `，地址 ${host}` : ''}${latest ? `，最新客户端 ${latest}` : ''}${files ? `，安装包目录 ${files}` : ''}`;
+    const snapshots = setInterval(() => {
+      log('info', 'metrics.snapshot', { msg: '指标快照', ...metrics.snapshot(started.gauges()) });
+      lag.reset();
+    }, SNAPSHOT_MS);
+    snapshots.unref();
     log('info', 'server.start', { msg, ports: started.ports, protoRange: [PROTO_VERSION, PROTO_VERSION], dataFile });
     const stop = (signal: NodeJS.Signals) => {
       log('info', 'server.stop', { msg: '正在关闭', reason: signal });

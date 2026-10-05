@@ -15,3 +15,5 @@ const TEXT: Record<Reject, string> = {
 };
 
 export const rejectText = (why: Reject) => TEXT[why];
+/** 全部提示文字（服务端的指标按此识别“着法不合法”，07-operations.md 第 9 节 yi_errors_total） */
+export const REJECT_TEXTS: readonly string[] = [...new Set(Object.values(TEXT))];

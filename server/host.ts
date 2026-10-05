@@ -10,6 +10,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { CLOSE_CODE } from '../src/shared/protocol';
 import { fileServer } from './files';
 import { withHealth, type Build, type Web } from './health';
+import type { Gauges } from './metrics';
 import { IpGate, NEW_CONN_BLOCK_SECS, NEW_CONN_MAX, NEW_CONN_WINDOW_SECS } from './ratelimit';
 import { RoomServer, type Conn, type RoomServerOptions } from './rooms';
 
@@ -43,6 +44,8 @@ export interface Host {
   port: number;
   ports: number[];
   close(): Promise<void>;
+  /** 读取时的各项仪表（监控指标，07-operations.md 第 9 节） */
+  gauges(): Gauges;
 }
 
 const notFound: Web = (_req, res) => {
@@ -115,7 +118,16 @@ class IpLimits {
 }
 
 /** 把一条 WebSocket 连接接到 RoomServer 上 */
-function accept(ws: WebSocket, ip: string, server: RoomServer, limits: IpLimits) {
+/** 一条消息处理完时记下耗时（秒）；不统计时为空函数 */
+type Timing = <T>(work: () => T) => T;
+
+/** 各连接共用的限制与计时 */
+interface AcceptContext {
+  limits: IpLimits;
+  timed: Timing;
+}
+
+function accept(ws: WebSocket, ip: string, server: RoomServer, { limits, timed }: AcceptContext) {
   if (!limits.admit(ip)) {
     ws.close(CLOSE_CODE.overload, 'too many');
     return;
@@ -148,7 +160,8 @@ function accept(ws: WebSocket, ip: string, server: RoomServer, limits: IpLimits)
     } catch {
       msg = undefined; /* 不是 JSON：交给 parseC2S 按非法消息处理 */
     }
-    sess = server.message(sess, msg, conn);
+    const current = sess;
+    sess = timed(() => server.message(current, msg, conn));
   });
   ws.on('pong', () => {
     if (sess) server.touch(sess, conn);
@@ -170,23 +183,46 @@ function closeAll(listening: Listening[]) {
   ).then(() => {});
 }
 
-/** startHost 的选项：files 为安装包所在的目录；build 为健康检查中的版本号与提交号，不设时提交号为空串 */
-export type HostOptions = RoomServerOptions & { host?: string; files?: string; build?: Build };
+/**
+ * startHost 的选项：files 为安装包所在的目录；build 为健康检查中的版本号与提交号，不设时提交号为空串；
+ * metrics 为监控指标（设了才提供 /metrics），eventLoopLag 返回事件循环延迟 p99（秒）
+ */
+export type HostOptions = RoomServerOptions & { host?: string; files?: string; build?: Build; eventLoopLag?: () => number };
 
 /** 在 ports 上开服（第一个是主端口）；有端口被占用时抛出 */
 export async function startHost(ports: number | number[], opt: HostOptions = {}): Promise<Host> {
   const server = new RoomServer(opt);
   const build = opt.build ?? { version: __APP_VERSION__, commit: '' };
-  const web = withHealth(build, () => server.health(), opt.files ? fileServer(opt.files) : notFound);
+  const files = opt.files ? fileServer(opt.files) : undefined;
+  const now = opt.now ?? (() => performance.now() / MS_PER_SEC);
+  let servers: WebSocketServer[] = [];
+  const gauges = (): Gauges => ({
+    connections: servers.reduce((n, wss) => n + wss.clients.size, 0),
+    playersOnline: server.online(),
+    ...server.stats(),
+    downloadsActive: files?.active() ?? 0,
+    eventLoopLagSeconds: opt.eventLoopLag?.() ?? 0,
+    residentMemoryBytes: process.memoryUsage.rss(),
+  });
+  const { metrics } = opt;
+  const web = withHealth(build, () => server.health(), files ?? notFound, metrics ? () => metrics.render(gauges()) : undefined);
   const listening = await listenAll(Array.isArray(ports) ? ports : [ports], opt.host, web);
-  const servers = listening.map(item => item.wss);
-  const limits = new IpLimits(opt.now ?? (() => performance.now() / MS_PER_SEC));
+  servers = listening.map(item => item.wss);
+  const limits = new IpLimits(now);
+  const timed: Timing = metrics
+    ? work => {
+        const start = now();
+        const result = work();
+        metrics.observe(now() - start);
+        return result;
+      }
+    : work => work();
   // 服务器对象本身出错（不是某条连接出错）：未预期，按 internal.error 记录（07-operations.md 第 8 节）
   const onError = (err: Error) => opt.log?.('error', 'internal.error', { msg: '服务端错误', errorId: randomUUID(), err });
   for (const item of listening) item.http.on('error', onError);
   for (const wss of servers) {
     wss.on('error', onError);
-    wss.on('connection', (ws: WebSocket, req) => accept(ws, req.socket.remoteAddress ?? '', server, limits));
+    wss.on('connection', (ws: WebSocket, req) => accept(ws, req.socket.remoteAddress ?? '', server, { limits, timed }));
   }
 
   const timer = setInterval(() => server.tick(), TICK_MS);
@@ -205,5 +241,6 @@ export async function startHost(ports: number | number[], opt: HostOptions = {})
       server.shutdown();
       return closeAll(listening);
     },
+    gauges,
   };
 }
