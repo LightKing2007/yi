@@ -8,6 +8,7 @@
 #   sh deploy-remote.sh status                                          打出线上的版本、对局数、是否维护中与连接数
 #   sh deploy-remote.sh service                                         安装同目录下的 yi.service（SEC-045），重启并检查，不通过即恢复原文件
 #   sh deploy-remote.sh offsite                                         安装异地加密备份（P1-13）：程序、单元文件与配置，并立即上传一次
+#   sh deploy-remote.sh watch                                           上线后的检查（OPS-047），由上线成功后建立的定时器 yi-watch 每分钟运行
 # 目录（OPS-043）：/opt/yi/releases/版本号/ 下为 server.cjs、download/（安装程序）、env（YI_LATEST）；
 # /opt/yi/current、/opt/yi/previous 为指向版本目录的符号链接，yi.service 经 current 读取三者。
 # 规则：加锁 OPS-041；降级确认 OPS-042；整体回滚 OPS-044；维护模式 OPS-045；健康检查与自动回滚 OPS-046；部署日志 OPS-048
@@ -28,6 +29,12 @@ WAIT_POLLS=180   # 至多 180 次，即 30 分钟（OPS-045）
 HEALTH_POLLS=30  # 重启后每秒查一次健康检查，至多 30 秒（OPS-046）
 SCORE_MAX=4.0    # systemd-analyze security 的评分上限（SEC-045）
 LOCK_BUSY=75     # flock 拿不到锁时的退出码
+WATCH_SECS=3600         # 上线后检查 60 分钟（OPS-047）
+WATCH_WINDOW=5          # 重启次数与错误占比按最近 5 分钟计
+WATCH_RESTARTS=3        # 5 分钟内重启 ≥ 3 次即回滚
+WATCH_HEALTH_FAILS=3    # 健康检查连续失败 3 次即回滚
+WATCH_MIN_MESSAGES=100  # 5 分钟内少于 100 条消息时不计错误占比
+WATCH_ERROR_PERCENT=1   # E5 错误占全部消息 ≥ 1% 即回滚
 HERE=$(cd "$(dirname "$0")" && pwd)
 
 # 版本号 $1 是否低于 $2（均为 主.次.修订）
@@ -129,17 +136,91 @@ finish() {
     rm -rf "$ROOT/server.cjs" "$ROOT/server.cjs.prev" "$ROOT/download" # 旧的目录结构留下的文件（migrate 之后的第一次上线）
     record "$1" "$ver" ok
     say "✓ $ver 已上线，健康检查通过"
+    start_watch "$ver"
     return 0
   fi
-  say "✗ 重启后 30 秒内健康检查没有返回 ${ver}：自动回滚"
-  swap || { record "$1" "$ver" fail; fail '没有上一版本可以回滚，请立即查看 journalctl -u yi'; }
+  auto_rollback "$1" "$ver" healthz "重启后 30 秒内健康检查没有返回 ${ver}"
+}
+
+# 自动回滚到上一版本（OPS-046、OPS-047）：写 deploy.rolled-back 日志与部署日志后以非零退出。
+# $1 为部署日志中的操作名，$2 为出问题的版本，$3 为原因代码（healthz、restarts、errors），$4 为原因说明
+auto_rollback() {
+  say "✗ ${4}：自动回滚"
+  swap || { record "$1" "$2" fail; fail '没有上一版本可以回滚，请立即查看 journalctl -u yi'; }
   prev=$(linked current)
-  printf '{"ts":"%s","level":"error","event":"deploy.rolled-back","msg":"上线后健康检查不通过，已自动回滚","version":"%s","target":"%s","reason":"healthz"}\n' \
-    "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" "$ver" "$prev" | systemd-cat -t yi-deploy -p err
+  printf '{"ts":"%s","level":"error","event":"deploy.rolled-back","msg":"%s，已自动回滚","version":"%s","target":"%s","reason":"%s"}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" "$4" "$2" "$prev" "$3" | systemd-cat -t yi-deploy -p err
   if rolled_back; then r=rolled-back; else r=fail; fi
-  record "$1" "$ver" "$r"
+  record "$1" "$2" "$r"
   [ "$r" = rolled-back ] || fail "回滚到 ${prev} 后仍不正常，请立即查看 journalctl -u yi"
-  fail "已回滚到 ${prev}，${ver} 留作 previous"
+  fail "已回滚到 ${prev}，${2} 留作 previous"
+}
+
+# ---------------- 上线后的检查（OPS-047） ----------------
+
+WATCH_DIR=$STATE/watch
+
+# 建立定时器 yi-watch：60 分钟内每分钟以 watch 运行本脚本的一份副本（传上来的临时目录做完即删）。$1 为刚上线的版本
+start_watch() {
+  stop_watch
+  mkdir -p "$WATCH_DIR"
+  echo "$(date +%s) $1" >"$WATCH_DIR/started"
+  cp "$0" "$ROOT/deploy-remote.sh"
+  chmod 644 "$ROOT/deploy-remote.sh"
+  systemd-run --unit=yi-watch --collect --on-active=60 --on-unit-active=60 --timer-property=AccuracySec=5s \
+    --setenv=YI_OPERATOR=watch --description='Yi post-deploy watch (OPS-047)' sh "$ROOT/deploy-remote.sh" watch >/dev/null
+  say "上线后 60 分钟内每分钟检查一次：重启次数、健康检查、错误占比（OPS-047）"
+}
+
+# 停止上线后的检查，清除其记录
+stop_watch() {
+  systemctl stop yi-watch.timer yi-watch.service 2>/dev/null || true
+  systemctl reset-failed yi-watch.timer yi-watch.service 2>/dev/null || true
+  rm -rf "$WATCH_DIR"
+}
+
+# 记下一个样本（“时刻 值”）到 $1，只留最近 WATCH_WINDOW 分钟内的；打出其中最早的值。
+# 按时刻而非次数取窗口：某次检查因上线过程持有锁而跳过时，窗口不会因此变长
+sample() {
+  now=$(date +%s)
+  echo "$now $2" >>"$WATCH_DIR/$1"
+  awk -v since=$((now - WATCH_WINDOW * 60)) '$1 >= since' "$WATCH_DIR/$1" >"$WATCH_DIR/$1.new"
+  mv "$WATCH_DIR/$1.new" "$WATCH_DIR/$1"
+  head -n 1 "$WATCH_DIR/$1" | cut -d' ' -f2
+}
+
+# 入站消息总数（/metrics 的 yi_messages_total 各项之和）；连不上或没有 /metrics（2.0.6 及以前）时打出空串
+messages_total() {
+  "$NODE" -e 'fetch("http://127.0.0.1:" + process.argv[1] + "/metrics")
+    .then(r => (r.ok ? r.text() : Promise.reject(r.status)))
+    .then(t => console.log(t.split("\n").filter(l => l.startsWith("yi_messages_total")).reduce((n, l) => n + Number(l.split(" ").pop()), 0)), () => {})' "$PORT" 2>/dev/null || true
+}
+
+cmd_watch() {
+  [ -f "$WATCH_DIR/started" ] || { stop_watch; return 0; }
+  read -r started ver <"$WATCH_DIR/started"
+  if [ $(($(date +%s) - started)) -ge "$WATCH_SECS" ] || [ "$(linked current)" != "$ver" ]; then
+    stop_watch
+    say "上线后的检查结束：$ver"
+    return 0
+  fi
+  restarts=$(systemctl show yi -p NRestarts --value)
+  first=$(sample restarts "$restarts")
+  if [ $((restarts - first)) -ge "$WATCH_RESTARTS" ]; then stop_watch; auto_rollback watch "$ver" restarts "上线后 5 分钟内重启 $((restarts - first)) 次"; fi
+  if health >/dev/null; then echo 0 >"$WATCH_DIR/health-fails"; else
+    fails=$(($(cat "$WATCH_DIR/health-fails" 2>/dev/null || echo 0) + 1))
+    echo "$fails" >"$WATCH_DIR/health-fails"
+    if [ "$fails" -ge "$WATCH_HEALTH_FAILS" ]; then stop_watch; auto_rollback watch "$ver" healthz "上线后健康检查连续 ${fails} 次失败"; fi
+  fi
+  total=$(messages_total)
+  [ -n "$total" ] || return 0
+  first=$(sample messages "$total")
+  count=$((total - first))
+  errors=$(journalctl -u yi --since "@$(($(date +%s) - WATCH_WINDOW * 60))" --no-pager -o cat | grep -c '"event":"internal.error"' || true)
+  if [ "$count" -ge "$WATCH_MIN_MESSAGES" ] && [ $((errors * 100)) -ge $((count * WATCH_ERROR_PERCENT)) ]; then
+    stop_watch
+    auto_rollback watch "$ver" errors "上线后 5 分钟内服务端内部错误 ${errors} 次，占 ${count} 条消息的 1% 以上"
+  fi
 }
 
 # 检查能否上线 $1：已改为版本目录、不是线上版本、不低于线上版本（除非 --allow-downgrade）
@@ -201,6 +282,7 @@ cmd_install() {
 }
 
 cmd_rollback() {
+  stop_watch
   swap || fail '没有上一版本可以换回'
   v=$(linked current)
   say "换回 ${v}，立即重启（不等待对局结束，OPS-044）"
@@ -305,6 +387,8 @@ locked() {
   if [ "${YI_LOCKED:-}" = 1 ]; then return 0; fi
   rc=0
   YI_LOCKED=1 flock -n -E "$LOCK_BUSY" "$LOCK" sh "$0" "$@" || rc=$?
+  # 上线后的检查遇到正在进行的上线时跳过这一次
+  if [ "$rc" -eq "$LOCK_BUSY" ] && [ "$1" = watch ]; then exit 0; fi
   [ "$rc" -ne "$LOCK_BUSY" ] || fail "另一个上线过程正在进行（${LOCK}），稍后再试"
   exit "$rc"
 }
@@ -327,5 +411,6 @@ case "$cmd" in
   migrate) locked migrate "$@" && cmd_migrate ;;
   service) locked service "$@" && cmd_service ;;
   offsite) locked offsite "$@" && cmd_offsite ;;
-  *) fail "用法：sh deploy-remote.sh preflight|install|restart|rollback|migrate|status|service|offsite" ;;
+  watch) locked watch "$@" && cmd_watch ;;
+  *) fail "用法：sh deploy-remote.sh preflight|install|restart|rollback|migrate|status|service|offsite|watch" ;;
 esac
