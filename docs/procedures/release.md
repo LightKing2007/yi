@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 性质 | 规程，强制执行；依据 [07-operations.md](../standards/07-operations.md)、[08-versioning.md](../standards/08-versioning.md)、[09-text-and-i18n.md](../standards/09-text-and-i18n.md) |
-| 文件版本 | 1.1.7 |
+| 文件版本 | 1.1.8 |
 | 修订日期 | 2026-10-05 |
 | 适用范围 | 从修改代码到玩家获得新版本的全部步骤：分支、提交、PR、更新日志、发版、上线、回滚、紧急修复 |
 
@@ -151,7 +151,7 @@ npm run deploy -- restart
 npm run deploy -- rollback
 ```
 
-回滚把 `current` 指回上一版本，服务端、安装程序与 `YI_LATEST` 一并恢复（OPS-044）；立即重启，不等待对局结束。再执行一次即换回。运维规程 `ops.md` 由整改项 P1-12 建立后，按该规程执行。
+回滚把 `current` 指回上一版本，服务端、安装程序与 `YI_LATEST` 一并恢复（OPS-044）；立即重启，不等待对局结束。再执行一次即换回。回滚后的检查与事件处置按 [ops.md](ops.md) 第 4 章、第 5 章执行。
 
 6.6 上线后按 [checklists.md](../standards/checklists.md) 第 4 节逐项核对。
 
