@@ -135,8 +135,11 @@ async function quit(game, label) {
 /** 开始菜单：版本、预加载接口、沙箱、WebGL2、按钮、附带字体 */
 async function checkMenu(game) {
   const info = (await game.evaluate(`(async () => {
-    // 取游戏画布上已有的上下文（同一画布再要同类上下文时返回原来的那个）。Linux 开启沙箱并以软件渲染时，GPU 进程在启动阶段
-    // 偶尔重置，上下文暂时丢失，游戏随后自动恢复（10-edge-cases.md“WebGL 上下文丢失”）；此时等它恢复，至多 RESTORE_WAIT_MS 毫秒
+    await document.fonts.ready;
+    const bundled = {};
+    for (const family of ${JSON.stringify(BUNDLED_FONTS)}) bundled[family] = (await document.fonts.load('16px "' + family + '"', 'A弈')).length > 0;
+    // 取游戏画布上已有的上下文（同一画布再要同类上下文时返回原来的那个），在其他等待之后、读取之前检查：Linux 开启沙箱并以软件渲染时，
+    // GPU 进程在启动阶段偶尔重置，上下文暂时丢失，游戏随后自动恢复（10-edge-cases.md“WebGL 上下文丢失”）；此时等它恢复，至多 RESTORE_WAIT_MS 毫秒
     const canvas = document.getElementById('scene');
     const gl = canvas.getContext('webgl2');
     const lost = !!gl && gl.isContextLost();
@@ -145,9 +148,6 @@ async function checkMenu(game) {
         canvas.addEventListener('webglcontextrestored', res, { once: true });
         setTimeout(res, ${RESTORE_WAIT_MS});
       });
-    await document.fonts.ready;
-    const bundled = {};
-    for (const family of ${JSON.stringify(BUNDLED_FONTS)}) bundled[family] = (await document.fonts.load('16px "' + family + '"', 'A弈')).length > 0;
     return {
       electron: navigator.userAgent.match(/Electron\\/([\\d.]+)/)?.[1],
       preload: window.yiNative ? Object.keys(window.yiNative) : [],
@@ -155,6 +155,7 @@ async function checkMenu(game) {
       webgl2: !!gl && !gl.isContextLost(),
       renderer: gl && !gl.isContextLost() ? gl.getParameter(gl.RENDERER) : null,
       lost,
+      hasContext: !!gl,
       bundled,
       buttons: [...document.querySelectorAll('button')].map(b => b.textContent),
     };
