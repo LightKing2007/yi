@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 性质 | 规程，强制执行；依据 [07-operations.md](../standards/07-operations.md)、[08-versioning.md](../standards/08-versioning.md)、[09-text-and-i18n.md](../standards/09-text-and-i18n.md) |
-| 文件版本 | 1.1.8 |
+| 文件版本 | 1.1.9 |
 | 修订日期 | 2026-10-05 |
 | 适用范围 | 从修改代码到玩家获得新版本的全部步骤：分支、提交、PR、更新日志、发版、上线、回滚、紧急修复 |
 
@@ -143,7 +143,7 @@ npm run deploy -- migrate-layout
 npm run deploy -- restart
 ```
 
-严禁以 `systemctl restart yi` 代替：该命令不进入维护模式，也不检查与回滚。上线须在北京时间 10:00 至 22:00 之间执行（OPS-050）。
+严禁以 `systemctl restart yi` 代替：该命令不进入维护模式，也不检查与回滚。上线须在北京时间 23:00 至次日 05:00 之间执行（OPS-050）。
 
 6.5 新版本出现 OPS-047 所列情况之一时，立即回滚：
 
