@@ -1,0 +1,59 @@
+# 弈 联机服务端。安装与更新：npm run deploy -- install-service（scripts/server/deploy-remote.sh）。
+# 服务端、安装程序与 YI_LATEST 经 /opt/yi/current 读取（OPS-043）；上线与回滚用 npm run deploy，严禁直接替换文件或 systemctl restart yi。
+# 加固选项见 SEC-045：systemd-analyze security yi 的评分必须 ≤ 4.0，install-service 安装前检查
+[Unit]
+Description=Yi online server (Gomoku & Go)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=yi
+Group=yi
+WorkingDirectory=/var/lib/yi
+ExecStart=/opt/node/bin/node /opt/yi/current/server.cjs 8443
+EnvironmentFile=/opt/yi/current/env
+Environment=NODE_ENV=production
+Environment=YI_DATA=/var/lib/yi/yi-ratings.json
+Environment=YI_FILES=/opt/yi/current/download
+Environment=YI_DOWNLOAD=http://47.108.181.240:8443/
+Restart=always
+RestartSec=3
+RestartPreventExitStatus=65 74
+
+# 资源上限（SEC-045）：常驻内存约 85 MB（docs/audits/perf-2.0.5.md）
+MemoryMax=512M
+TasksMax=64
+LimitNOFILE=65536
+UMask=0077
+
+# 只给需要的：网络与 /var/lib/yi 的写权限
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/yi
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+# V8 的即时编译需要可写可执行的内存
+MemoryDenyWriteExecute=no
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallErrorNumber=EPERM
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

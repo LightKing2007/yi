@@ -2,7 +2,7 @@
  * 上线脚本测试的替身（tests/deployRemote.test.ts、tests/deployLocal.test.ts）：两份脚本都以 sh 实际执行，
  * systemctl、sleep、flock、Node.js 等换成桩程序，在临时目录中模拟服务器：
  *   - server.cjs 的内容为“版本号 提交号”，桩 Node.js 以“版本号（提交号）”回应 --version；
- *   - systemctl restart 把 current 指向的服务端记为运行中，健康检查据此回应版本号与提交号；
+ *   - systemctl restart 把 current 指向的服务端记为运行中，健康检查据此回应版本号与提交号；yi.service 中有“# BREAK”一行时服务起不来；
  *   - sleep 不等待，只记下次数；设了 drain 时每次把活跃对局数减一，以此模拟时间流逝。
  */
 import { spawnSync } from 'node:child_process';
@@ -31,9 +31,16 @@ export const sha256 = (text: string) => createHash('sha256').update(text).digest
 const STUBS: Record<string, string> = {
   systemctl: `echo "systemctl $*" >> "$SIM/calls"
 case "$1" in
-  restart) cat "$ROOT/current/server.cjs" > "$SIM/running"; echo 0 > "$SIM/maint" ;;
+  restart) if grep -q '^# BREAK' "$YI_UNIT_FILE" 2>/dev/null; then : > "$SIM/running"; else cat "$ROOT/current/server.cjs" > "$SIM/running"; fi
+    echo 0 > "$SIM/maint" ;;
   kill) echo true > "$SIM/maint" ;;
   is-active) [ -s "$SIM/running" ] ;;
+esac`,
+  // systemd-analyze：verify 在 sim/verify-fails 存在时失败；security 以 sim/score 为评分
+  'systemd-analyze': `echo "systemd-analyze $1" >> "$SIM/calls"
+case "$1" in
+  verify) [ ! -f "$SIM/verify-fails" ] ;;
+  security) echo "→ Overall exposure level for yi.service: $(cat "$SIM/score") OK :-)" ;;
 esac`,
   sleep: `echo "sleep $*" >> "$SIM/calls"
 if [ -f "$SIM/drain" ]; then n=$(cat "$SIM/games"); [ "$n" -gt 0 ] && echo $((n - 1)) > "$SIM/games"; fi; true`,

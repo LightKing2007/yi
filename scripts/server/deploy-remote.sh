@@ -6,6 +6,7 @@
 #   sh deploy-remote.sh rollback                                        立即换回上一版本并重启（再执行一次又换回来）
 #   sh deploy-remote.sh migrate                                         由旧的目录结构改为版本目录（只做一次，不重启）
 #   sh deploy-remote.sh status                                          打出线上的版本、对局数、是否维护中与连接数
+#   sh deploy-remote.sh service                                         安装同目录下的 yi.service（SEC-045），重启并检查，不通过即恢复原文件
 # 目录（OPS-043）：/opt/yi/releases/版本号/ 下为 server.cjs、download/（安装程序）、env（YI_LATEST）；
 # /opt/yi/current、/opt/yi/previous 为指向版本目录的符号链接，yi.service 经 current 读取三者。
 # 规则：加锁 OPS-041；降级确认 OPS-042；整体回滚 OPS-044；维护模式 OPS-045；健康检查与自动回滚 OPS-046；部署日志 OPS-048
@@ -22,6 +23,7 @@ WHO=${YI_OPERATOR:-unknown}
 WAIT_STEP=10     # 维护模式中每 10 秒查一次活跃对局数
 WAIT_POLLS=180   # 至多 180 次，即 30 分钟（OPS-045）
 HEALTH_POLLS=30  # 重启后每秒查一次健康检查，至多 30 秒（OPS-046）
+SCORE_MAX=4.0    # systemd-analyze security 的评分上限（SEC-045）
 LOCK_BUSY=75     # flock 拿不到锁时的退出码
 HERE=$(cd "$(dirname "$0")" && pwd)
 
@@ -240,6 +242,35 @@ cmd_migrate() {
   say "✓ 已改为版本目录：current → releases/${v}；yi.service 下一次重启起生效（原文件备份为 $ROOT/yi.service.before-migrate）"
 }
 
+# 安装 yi.service（SEC-045）：先校验并离线评分，评分高于 SCORE_MAX 时不装；装好后按上线的方式重启（有对局时先进入维护模式）并做健康检查，
+# 不通过即恢复原来的文件并再次重启。原文件备份为 /opt/yi/yi.service.prev
+cmd_service() {
+  new=$HERE/yi.service
+  [ -f "$new" ] || fail "没有 $new"
+  systemd-analyze verify "$new" || fail 'yi.service 校验不通过，未安装'
+  score=$(systemd-analyze security --offline=true --no-pager "$new" | awk '/Overall exposure level/ { print $(NF - 2) }')
+  awk -v score="$score" -v max="$SCORE_MAX" 'BEGIN { exit !(score != "" && score + 0 <= max + 0) }' ||
+    fail "评分 ${score:-（无）} 高于 ${SCORE_MAX}（SEC-045），未安装"
+  say "yi.service 的评分：${score}（上限 ${SCORE_MAX}）"
+  cp -p "$UNIT_FILE" "$ROOT/yi.service.prev"
+  cp "$new" "$UNIT_FILE"
+  chmod 644 "$UNIT_FILE"
+  systemctl daemon-reload
+  drain
+  if restarted; then
+    record config 'P1-11 install-service' ok
+    say '✓ yi.service 已安装，重启后健康检查通过'
+    return 0
+  fi
+  say '✗ 重启后 30 秒内健康检查没有通过：恢复原来的 yi.service'
+  cp -p "$ROOT/yi.service.prev" "$UNIT_FILE"
+  systemctl daemon-reload
+  if rolled_back; then r=restored; else r=fail; fi
+  record config 'P1-11 install-service' "$r"
+  [ "$r" = restored ] || fail '恢复原来的 yi.service 后仍不正常，请立即查看 journalctl -u yi'
+  fail '已恢复原来的 yi.service'
+}
+
 # 以 flock 加锁后再执行一次本脚本（OPS-041）；锁被占用时报告后退出
 locked() {
   if [ "${YI_LOCKED:-}" = 1 ]; then return 0; fi
@@ -265,5 +296,6 @@ case "$cmd" in
   restart) locked restart "$@" && finish restart ;;
   rollback) locked rollback "$@" && cmd_rollback ;;
   migrate) locked migrate "$@" && cmd_migrate ;;
-  *) fail "用法：sh deploy-remote.sh preflight|install|restart|rollback|migrate|status" ;;
+  service) locked service "$@" && cmd_service ;;
+  *) fail "用法：sh deploy-remote.sh preflight|install|restart|rollback|migrate|status|service" ;;
 esac
