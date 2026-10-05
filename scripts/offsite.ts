@@ -28,8 +28,10 @@ const HEX = 16,
 /** 时间戳 YYYYMMDDTHHMMSSZ 中日期（YYYYMMDD）与年月（YYYYMM）的长度 */
 const DATE_LEN = 8,
   MONTH_LEN = 6;
-/** 错误信息中最多附上 OSS 回应的多少个字符 */
+/** OSS 的回应不是错误文档时，错误信息中最多附上回应的多少个字符 */
 const ERROR_BODY_CHARS = 300;
+/** 错误文档中提取的字段（阿里云文档“OSS 错误响应”）：错误码、说明，以及拒绝访问时的原因明细 */
+const ERROR_FIELDS = ['Code', 'Message', 'AccessDeniedDetail'];
 /** decrypt 的参数个数：备份、私钥文件、输出文件 */
 const DECRYPT_ARGS = 3;
 
@@ -156,6 +158,24 @@ export async function decrypt(data: Uint8Array, identity: string) {
   return text;
 }
 
+/**
+ * OSS 错误回应的要点：从错误文档（XML）中取出 ERROR_FIELDS 各字段（嵌套的子字段写成“名称=值”），合并空白，以“；”连接（不含 RequestId 等）；
+ * 不是错误文档时取原文的前 ERROR_BODY_CHARS 个字符
+ */
+export function ossError(body: string) {
+  const parts: string[] = [];
+  for (const field of ERROR_FIELDS) {
+    const value = new RegExp(`<${field}>([\\s\\S]*?)</${field}>`).exec(body)?.[1];
+    const text = value
+      ?.replace(/<(\w+)>([^<]*)<\/\1>/g, ' $1=$2 ') // 嵌套的子字段写成“名称=值”
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (text) parts.push(`${field}=${text}`);
+  }
+  return parts.length ? parts.join('；') : body.slice(0, ERROR_BODY_CHARS);
+}
+
 type Fetch = (
   url: string,
   init: { method: string; headers: Record<string, string>; body: Uint8Array; signal: AbortSignal },
@@ -175,7 +195,7 @@ export async function putObject(config: OssConfig, key: string, body: Uint8Array
   });
   const url = `https://${config.bucket}.oss-${config.region}.aliyuncs.com/${uriEncode(key, false)}`;
   const res = await options.fetch(url, { method: 'PUT', headers, body, signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS) });
-  if (res.status !== HTTP_OK) throw new Error(`上传 ${key} 失败：HTTP ${res.status} ${(await res.text()).slice(0, ERROR_BODY_CHARS)}`);
+  if (res.status !== HTTP_OK) throw new Error(`上传 ${key} 失败：HTTP ${res.status} ${ossError(await res.text())}`);
   const etag = (res.headers.get('etag') ?? '').replaceAll('"', '').toLowerCase();
   if (etag !== md5Hex) throw new Error(`上传 ${key} 后 ETag 不符：应为 ${md5Hex}，实为 ${etag}`);
 }
