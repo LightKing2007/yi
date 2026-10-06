@@ -49,8 +49,10 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           node scripts/check-fuses.mjs release/linux-unpacked/yi
-          # 探针：未经改动的 Electron 必须判为不符（退出码 1），证明核对确实有效
-          status=0; node scripts/check-fuses.mjs node_modules/electron/dist/electron || status=$?
+          # 探针：未经改动的 Electron 必须判为不符（退出码 1），证明核对确实有效。取自 electron-builder 打包时下载到缓存的压缩包
+          # （npm ci 不执行安装脚本，node_modules 中没有 Electron 本体）
+          unzip -p "$(ls ~/.cache/electron/electron-v*-linux-x64.zip | head -1)" electron > "$RUNNER_TEMP/electron-stock"
+          status=0; node scripts/check-fuses.mjs "$RUNNER_TEMP/electron-stock" || status=$?
           test "$status" = 1
       - if: runner.os == 'Linux'
         run: sudo apt-get update -q && sudo apt-get install -yq xvfb
