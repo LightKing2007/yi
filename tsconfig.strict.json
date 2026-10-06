@@ -2,5 +2,5 @@
   "//": "整改项 P2-10 的过渡：已整改的目录在此开启 noUncheckedIndexedAccess（按下标读取时须处理取不到的情况），由 npm run typecheck 一并检查，整改过的代码不会退回。全部整改后在 tsconfig.json 中开启，并删除本文件",
   "extends": "./tsconfig.json",
   "compilerOptions": { "noUncheckedIndexedAccess": true },
-  "include": ["electron", "server", "src/shared", "src/core", "src/vite-env.d.ts"]
+  "include": ["electron", "server", "src/shared", "src/core", "src/audio/synth.worker.ts", "src/vite-env.d.ts"]
 }

@@ -28,6 +28,16 @@ class Lcg {
   }
 }
 
+// 采样与滤波状态按下标读写：下标都在数组范围内，取不到时的 0 只为满足类型检查
+/** arr[i]；取不到时为 0 */
+function val(arr: ArrayLike<number>, i: number) {
+  return arr[i] ?? 0;
+}
+/** arr[i] 加上 delta */
+function addAt(arr: Float32Array, i: number, delta: number) {
+  arr[i] = val(arr, i) + delta;
+}
+
 /** Schroeder 混响（4 个梳状 + 2 个全通）；spread 让左右声道的延时略有不同 */
 function reverb(x: Float32Array, sr: number, mix: number, room: number, spread: number) {
   const n = x.length,
@@ -37,23 +47,23 @@ function reverb(x: Float32Array, sr: number, mix: number, room: number, spread: 
       buf = new Float32Array(len);
     let lp = 0;
     for (let i = 0, p = 0; i < n; i++, p = (p + 1) % len) {
-      const y = buf[p];
+      const y = val(buf, p);
       lp += (y - lp) * 0.45;
-      buf[p] = x[i] + lp * room;
-      wet[i] += y * 0.25;
+      buf[p] = val(x, i) + lp * room;
+      addAt(wet, i, y * 0.25);
     }
   }
   for (const ms of [5.0, 1.7]) {
     const len = Math.floor(((ms * sr) / 1000) * spread),
       buf = new Float32Array(len);
     for (let i = 0, p = 0; i < n; i++, p = (p + 1) % len) {
-      const bb = buf[p],
-        y = -wet[i] * 0.5 + bb;
-      buf[p] = wet[i] + bb * 0.5;
-      wet[i] = y;
+      const bb = val(buf, p),
+        wi = val(wet, i);
+      buf[p] = wi + bb * 0.5;
+      wet[i] = -wi * 0.5 + bb;
     }
   }
-  for (let i = 0; i < n; i++) x[i] = x[i] * (1 - mix * 0.4) + wet[i] * mix;
+  for (let i = 0; i < n; i++) x[i] = val(x, i) * (1 - mix * 0.4) + val(wet, i) * mix;
 }
 
 /** 结尾淡出、软限幅（tanh） */
@@ -63,15 +73,15 @@ function finish(l: Float32Array, r: Float32Array | null, sr: number, gain: numbe
     k = 31000 / 32768;
   for (let i = 0; i < n; i++) {
     const f = i > n - fade ? (n - i) / fade : 1;
-    l[i] = Math.tanh(l[i] * gain) * k * f * f;
-    if (r) r[i] = Math.tanh(r[i] * gain) * k * f * f;
+    l[i] = Math.tanh(val(l, i) * gain) * k * f * f;
+    if (r) r[i] = Math.tanh(val(r, i) * gain) * k * f * f;
   }
 }
 
 function pan(L: Float32Array, R: Float32Array, i: number, v: number, p: number) {
   const th = (p + 1) * 0.785398;
-  L[i] += v * Math.cos(th);
-  R[i] += v * Math.sin(th);
+  addAt(L, i, v * Math.cos(th));
+  addAt(R, i, v * Math.sin(th));
 }
 
 /** 太鼓：音高从 f1 急降到 f0 的正弦，过饱和 */
@@ -97,7 +107,7 @@ function braam(
 ) {
   const n = L.length,
     det = [0.993, 1.0, 1.007],
-    ph = notes.map(() => [0, 0, 0, 0, 0, 0]),
+    ph = new Float64Array(notes.length * 6), // 第 m 个音、声道 c、第 j 个失谐的相位在 m * 6 + c * 3 + j
     f1 = [0, 0],
     f2 = [0, 0];
   for (let i = Math.floor(start * sr); i < n; i++) {
@@ -109,15 +119,18 @@ function braam(
       let v = 0;
       for (let m = 0; m < notes.length; m++)
         for (let j = 0; j < 3; j++) {
-          const q = ph[m];
-          q[c * 3 + j] += (notes[m] * (c ? det[2 - j] : det[j])) / sr;
-          if (q[c * 3 + j] >= 1) q[c * 3 + j] -= 1;
-          v += q[c * 3 + j] * 2 - 1;
+          const at = m * 6 + c * 3 + j;
+          let q = val(ph, at) + (val(notes, m) * val(det, c ? 2 - j : j)) / sr;
+          if (q >= 1) q -= 1;
+          ph[at] = q;
+          v += q * 2 - 1;
         }
       v = Math.tanh(v * 0.55);
-      f1[c] += (v - f1[c]) * k;
-      f2[c] += (f1[c] - f2[c]) * k;
-      (c ? R : L)[i] += f2[c] * env * gain;
+      const stage1 = val(f1, c) + (v - val(f1, c)) * k;
+      f1[c] = stage1;
+      const stage2 = val(f2, c) + (stage1 - val(f2, c)) * k;
+      f2[c] = stage2;
+      addAt(c ? R : L, i, stage2 * env * gain);
     }
   }
 }
@@ -127,15 +140,9 @@ function choir(L: Float32Array, R: Float32Array, sr: number, start: number, atta
   const n = L.length,
     fc = [700, 1150],
     q = 0.35,
-    ph = notes.map(() => [0, 0]),
-    lo = [
-      [0, 0],
-      [0, 0],
-    ],
-    bd = [
-      [0, 0],
-      [0, 0],
-    ];
+    ph = new Float64Array(notes.length * 2), // 第 m 个音、声道 c 的相位在 m * 2 + c
+    lo = new Float64Array(4), // 声道 c、第 k 个共振峰的滤波状态在 c * 2 + k
+    bd = new Float64Array(4);
   for (let i = Math.floor(start * sr); i < n; i++) {
     const u = i / sr - start,
       env = Math.min(1, u / attack) * Math.exp(-Math.max(u - attack, 0) * decay);
@@ -143,19 +150,22 @@ function choir(L: Float32Array, R: Float32Array, sr: number, start: number, atta
       let v = 0;
       const vib = 1 + 0.004 * Math.sin(TAU * (5 + 0.4 * c) * u);
       for (let m = 0; m < notes.length; m++) {
-        ph[m][c] += (notes[m] * vib * (c ? 1.004 : 0.996)) / sr;
-        if (ph[m][c] >= 1) ph[m][c] -= 1;
-        v += ph[m][c] * 2 - 1;
+        let p = val(ph, m * 2 + c) + (val(notes, m) * vib * (c ? 1.004 : 0.996)) / sr;
+        if (p >= 1) p -= 1;
+        ph[m * 2 + c] = p;
+        v += p * 2 - 1;
       }
       let out = 0;
       for (let k = 0; k < 2; k++) {
-        const f = 2 * Math.sin((Math.PI * fc[k]) / sr);
-        lo[c][k] += f * bd[c][k];
-        const hi = v - lo[c][k] - q * bd[c][k];
-        bd[c][k] += f * hi;
-        out += bd[c][k] * (k ? 0.7 : 1);
+        const f = 2 * Math.sin((Math.PI * val(fc, k)) / sr),
+          at = c * 2 + k;
+        const low = val(lo, at) + f * val(bd, at);
+        lo[at] = low;
+        const band = val(bd, at) + f * (v - low - q * val(bd, at));
+        bd[at] = band;
+        out += band * (k ? 0.7 : 1);
       }
-      (c ? R : L)[i] += out * env * gain;
+      addAt(c ? R : L, i, out * env * gain);
     }
   }
 }
@@ -170,11 +180,11 @@ function shing(L: Float32Array, R: Float32Array, sr: number, start: number, gain
       r = 0;
     for (let k = 0; k < 6; k++) {
       const e = (Math.exp(-u * (2.5 + 1.2 * k)) * Math.min(1, u / 0.001)) / (1 + 0.3 * k);
-      l += e * Math.sin(TAU * f[k] * u);
-      r += e * Math.sin(TAU * f[k] * 1.003 * u + 0.7);
+      l += e * Math.sin(TAU * val(f, k) * u);
+      r += e * Math.sin(TAU * val(f, k) * 1.003 * u + 0.7);
     }
-    L[i] += l * gain;
-    R[i] += r * gain;
+    addAt(L, i, l * gain);
+    addAt(R, i, r * gain);
   }
 }
 
@@ -187,9 +197,11 @@ function air(L: Float32Array, R: Float32Array, sr: number, start: number, attack
       env = Math.min(1, u / attack) * Math.exp(-Math.max(u - attack, 0) * decay);
     for (let c = 0; c < 2; c++) {
       const nz = rs.noise();
-      lp[c] += (nz - lp[c]) * 0.55;
-      lp2[c] += (lp[c] - lp2[c]) * 0.12;
-      (c ? R : L)[i] += (lp[c] - lp2[c]) * env * gain;
+      const smooth = val(lp, c) + (nz - val(lp, c)) * 0.55;
+      lp[c] = smooth;
+      const smoother = val(lp2, c) + (smooth - val(lp2, c)) * 0.12;
+      lp2[c] = smoother;
+      addAt(c ? R : L, i, (smooth - smoother) * env * gain);
     }
   }
 }
@@ -207,8 +219,8 @@ function strings(L: Float32Array, R: Float32Array, sr: number, start: number, at
       l += Math.sin(TAU * f * (1 + vib) * u * 0.999) + 0.25 * Math.sin(TAU * f * 2 * u);
       r += Math.sin(TAU * f * (1 + vib) * u * 1.001 + 0.4) + 0.25 * Math.sin(TAU * f * 2 * u + 0.9);
     });
-    L[i] += l * env * gain;
-    R[i] += r * env * gain;
+    addAt(L, i, l * env * gain);
+    addAt(R, i, r * env * gain);
   }
 }
 
@@ -256,7 +268,7 @@ function synthWin(sr: number, rs: Lcg): SynthOut {
       const v = u - k * WIN_STAGGER;
       if (v < 0) continue;
       const env = Math.min(1, v / 0.003) * Math.exp(-v * 1.4),
-        f = bells[k];
+        f = val(bells, k);
       const bell =
         env * 0.16 * (Math.sin(TAU * f * v) + 0.3 * Math.sin(TAU * f * 2 * v) * Math.exp(-v * 3) + 0.15 * Math.sin(TAU * f * 2.76 * v) * Math.exp(-v * 5));
       pan(L, R, i, bell, -0.5 + 0.25 * k);
@@ -268,8 +280,8 @@ function synthWin(sr: number, rs: Lcg): SynthOut {
       const wh = (bp1 - bp2) * 3 * Math.min(1, (u - 0.03) / 0.2) * Math.exp(-Math.max(u - 0.4, 0) * 1.8);
       pan(L, R, i, wh, -0.8 + 1.6 * Math.min(1, u / 1.4));
     }
-    L[i] += c;
-    R[i] += c;
+    addAt(L, i, c);
+    addAt(R, i, c);
   }
   braam(L, R, sr, H, 0.03, 0.55, [73.42, 110, 146.83], 1500, 220, 0.4);
   braam(L, R, sr, H + 0.9, 1.2, 0.45, [36.71, 73.42], 420, 160, 0.38);
@@ -309,29 +321,29 @@ function synthGoEnd(sr: number, rs: Lcg): SynthOut {
       let bl = 0,
         br = 0;
       for (let k = 0; k < 8; k++) {
-        const e = amp[k] * Math.exp(-tb * dec[k]) * Math.sin(TAU * f0 * part[k] * tb);
+        const e = val(amp, k) * Math.exp(-tb * val(dec, k)) * Math.sin(TAU * f0 * val(part, k) * tb);
         bl += e * (1 + 0.28 * Math.sin(TAU * (0.7 + 0.3 * k) * tb));
         br += e * (1 + 0.28 * Math.sin(TAU * (0.9 + 0.3 * k) * tb + 1.3));
       }
-      L[i] += bl * strike * 0.6;
-      R[i] += br * strike * 0.6;
+      addAt(L, i, bl * strike * 0.6);
+      addAt(R, i, br * strike * 0.6);
       let gl = 0,
         gr = 0;
       for (let k = 0; k < 10; k++) {
         const bloom = Math.min(1, tb / (0.3 + 0.1 * k)),
           e = (bloom * bloom * Math.exp(-tb * (0.5 + 0.15 * k))) / (1 + 0.5 * k);
-        gl += e * Math.sin(TAU * g0 * gong[k] * tb * 0.998);
-        gr += e * Math.sin(TAU * g0 * gong[k] * tb * 1.002 + 0.5);
+        gl += e * Math.sin(TAU * g0 * val(gong, k) * tb * 0.998);
+        gr += e * Math.sin(TAU * g0 * val(gong, k) * tb * 1.002 + 0.5);
       }
-      L[i] += gl * 0.3;
-      R[i] += gr * 0.3;
+      addAt(L, i, gl * 0.3);
+      addAt(R, i, gr * 0.3);
     }
     const fc = 0.01 + 0.04 * Math.exp(-t * 0.9);
     b1 += (nz - b1) * fc;
     b2 += (b1 - b2) * fc;
     pan(L, R, i, (b1 - b2) * 2.6 * Math.min(1, t / 0.25) * Math.exp(-t * 0.9), -0.8 + 1.6 * Math.min(1, t / 1.6));
-    L[i] += c;
-    R[i] += c;
+    addAt(L, i, c);
+    addAt(R, i, c);
   }
   braam(L, R, sr, 0, 0.35, 0.45, [65.41, 98, 130.81], 1100, 180, 0.42);
   choir(L, R, sr, 0.4, 1.1, 0.8, [261.63, 329.63, 392, 523.25], 0.11);
@@ -387,7 +399,7 @@ function synthBasic(sr: number, rs: Lcg): SynthOut[] {
     const env = i < hit ? Math.pow(tr, 2.5) : Math.exp(-(t - RW_RING_BASE) * 40);
     let v = lp2 * env * 0.9;
     const j = i - (hit - n);
-    if (j >= 0 && j < n) v += clack[n - 1 - j] * 0.8;
+    if (j >= 0 && j < n) v += val(clack, n - 1 - j) * 0.8;
     rew[i] = Math.tanh(v) * (30000 / 32768);
   }
   // 棋罐移动：提起时木头的一声闷响，随后木底在盘面上滑动的摩擦声，罐里棋子相互碰撞的轻响
@@ -404,7 +416,7 @@ function synthBasic(sr: number, rs: Lcg): SynthOut[] {
     if ((i & 255) === 0) grain = 0.6 + 0.4 * rs.u01();
     const slide = (b1 - b2) * 2.2 * Math.min(1, t / 0.18) * Math.exp(-Math.max(0, t - 0.35) * 3.2) * grain;
     const knock = Math.exp(-t * 38) * (0.7 * Math.sin(TAU * 165 * t) + 0.3 * Math.sin(TAU * 310 * t));
-    acc[i] += slide * 0.55 + knock * 0.6;
+    addAt(acc, i, slide * 0.55 + knock * 0.6);
   }
   for (let k = 0; k < 14; k++) {
     const r1 = rs.u01(),
@@ -413,10 +425,10 @@ function synthBasic(sr: number, rs: Lcg): SynthOut[] {
       amp = 0.08 + 0.18 * rs.u01();
     for (let i = 0; i < Math.floor(sr * 0.04) && at + i < bn; i++) {
       const t = i / sr;
-      acc[at + i] += amp * Math.exp(-t * 150) * (Math.sin(TAU * f * t) + 0.4 * Math.sin(TAU * f * 1.63 * t));
+      addAt(acc, at + i, amp * Math.exp(-t * 150) * (Math.sin(TAU * f * t) + 0.4 * Math.sin(TAU * f * 1.63 * t)));
     }
   }
-  for (let i = 0; i < bn; i++) acc[i] = Math.tanh(acc[i]) * (30000 / 32768);
+  for (let i = 0; i < bn; i++) acc[i] = Math.tanh(val(acc, i)) * (30000 / 32768);
   return [
     { id: 'clack', sr, l: clack, r: null },
     { id: 'rewind', sr, l: rew, r: null },
@@ -443,7 +455,7 @@ function penta(n: number) {
   const off = [0, 2, 4, 7, 9];
   const octave = Math.floor(n / 5),
     deg = ((n % 5) + 5) % 5;
-  const midi = 50 + 12 * octave + off[deg];
+  const midi = 50 + 12 * octave + val(off, deg);
   return 440 * Math.pow(2, (midi - 69) / 12);
 }
 
@@ -470,7 +482,7 @@ function pluck(L: Float32Array, R: Float32Array, rs: Lcg, t0: number, f: number,
     if (rp >= 0) {
       const a = Math.floor(rp),
         u = rp - a;
-      y = line[a % M] * (1 - u) + line[(a + 1) % M] * u;
+      y = val(line, a % M) * (1 - u) + val(line, (a + 1) % M) * u;
     }
     let ex = 0;
     if (i < Math.floor(D)) {
@@ -481,8 +493,8 @@ function pluck(L: Float32Array, R: Float32Array, rs: Lcg, t0: number, f: number,
     prev = y;
     line[i % M] = v;
     const env = Math.min(1, t / 0.002);
-    L[start + i] += v * env * gl;
-    R[start + i] += v * env * gr;
+    addAt(L, start + i, v * env * gl);
+    addAt(R, start + i, v * env * gr);
   }
 }
 
@@ -492,30 +504,28 @@ function freeverb(x: Float32Array, spread: number, mix: number) {
     out = new Float32Array(n);
   const cl = [1116, 1188, 1277, 1356].map(v => Math.floor(((v + spread) * MUS_SR) / 44100)),
     al = [556, 441].map(v => Math.floor(((v + spread) * MUS_SR) / 44100));
-  const comb = cl.map(l => new Float32Array(l)),
-    ap = al.map(l => new Float32Array(l)),
-    store = [0, 0, 0, 0],
-    ci = [0, 0, 0, 0],
-    ai = [0, 0];
+  // 每个滤波器：延时线 buf、当前位置 pos，梳状滤波另有阻尼状态 store
+  const combs = cl.map(len => ({ buf: new Float32Array(len), pos: 0, store: 0 })),
+    aps = al.map(len => ({ buf: new Float32Array(len), pos: 0 }));
   for (let i = 0; i < n; i++) {
-    const inp = x[i] * 0.03;
+    const inp = val(x, i) * 0.03;
     let o = 0;
-    for (let k = 0; k < 4; k++) {
-      const y = comb[k][ci[k]];
-      store[k] = y * 0.6 + store[k] * 0.4;
-      comb[k][ci[k]] = inp + store[k] * 0.86;
-      ci[k] = (ci[k] + 1) % cl[k];
+    for (const cb of combs) {
+      const y = val(cb.buf, cb.pos);
+      cb.store = y * 0.6 + cb.store * 0.4;
+      cb.buf[cb.pos] = inp + cb.store * 0.86;
+      cb.pos = (cb.pos + 1) % cb.buf.length;
       o += y;
     }
-    for (let k = 0; k < 2; k++) {
-      const b = ap[k][ai[k]];
-      ap[k][ai[k]] = o + b * 0.5;
+    for (const ap of aps) {
+      const b = val(ap.buf, ap.pos);
+      ap.buf[ap.pos] = o + b * 0.5;
       o = b - o;
-      ai[k] = (ai[k] + 1) % al[k];
+      ap.pos = (ap.pos + 1) % ap.buf.length;
     }
     out[i] = o;
   }
-  for (let i = 0; i < n; i++) x[i] += out[i] * mix;
+  for (let i = 0; i < n; i++) addAt(x, i, val(out, i) * mix);
 }
 
 function renderMusic(st: Style, id: string): SynthOut {
@@ -534,9 +544,9 @@ function renderMusic(st: Style, id: string): SynthOut {
       [3, 6, 9],
     ],
     seg = MUS_LEN / 4;
-  for (let c = 0; c < 4; c++) {
-    for (let v = 0; v < 3; v++) {
-      const f = penta(chords[c][v] + 5);
+  for (const [c, chord] of chords.entries()) {
+    for (const [v, degree] of chord.entries()) {
+      const f = penta(degree + 5);
       for (let ch = 0; ch < 2; ch++) {
         const det = ch ? 1.0021 : 0.9979,
           dst = ch ? R : L;
@@ -547,11 +557,11 @@ function renderMusic(st: Style, id: string): SynthOut {
           ph += (TAU * f * det) / MUS_SR;
           const w = Math.sin(ph) + 0.25 * Math.sin(2 * ph) + 0.08 * Math.sin(3 * ph);
           const at = Math.floor(c * seg * MUS_SR) + i;
-          dst[at % body] += w * env * st.pad * (1 + 0.15 * Math.sin(TAU * 0.07 * t + v));
+          addAt(dst, at % body, w * env * st.pad * (1 + 0.15 * Math.sin(TAU * 0.07 * t + v)));
         }
       }
     }
-    if (rs.u01() < st.guqin) pluck(L, R, rs, c * seg + 0.3 + rs.u01() * 1.5, penta(chords[c][0] + 5) * 0.5, 0.9, -0.1, 2, 5.5);
+    if (rs.u01() < st.guqin) pluck(L, R, rs, c * seg + 0.3 + rs.u01() * 1.5, penta(val(chord, 0) + 5) * 0.5, 0.9, -0.1, 2, 5.5);
   }
   // 旋律：一句 3～7 个音，在音阶上随机游走；句首偶尔来一段上行刮奏；句间长短不一的休止
   let t = 1 + rs.u01() * 2,
@@ -571,24 +581,24 @@ function renderMusic(st: Style, id: string): SynthOut {
       if (cur > st.high) cur = st.high - 1;
       const bend = rs.u01() < 0.2 ? (rs.u01() < 0.5 ? 1 : 2) : 0;
       pluck(L, R, rs, t, penta(cur), 0.55 + 0.35 * rs.u01(), (rs.u01() - 0.5) * 0.8, bend, 3.2);
-      t += durs[Math.floor(rs.u01() * 6)] * beat;
+      t += val(durs, Math.floor(rs.u01() * 6)) * beat;
     }
     t += (beat * (1.5 + rs.u01() * 3)) / st.density;
   }
   freeverb(L, 0, 0.55);
   freeverb(R, 23, 0.55);
   for (let i = 0; i < tail; i++) {
-    L[i] += L[body + i];
-    R[i] += R[body + i];
+    addAt(L, i, val(L, body + i));
+    addAt(R, i, val(R, body + i));
   } // 把尾音接回开头，循环无缝
   let peak = 1e-6;
-  for (let i = 0; i < body; i++) peak = Math.max(peak, Math.abs(L[i]), Math.abs(R[i]));
+  for (let i = 0; i < body; i++) peak = Math.max(peak, Math.abs(val(L, i)), Math.abs(val(R, i)));
   const sc = 0.7 / peak,
     ol = new Float32Array(body),
     or = new Float32Array(body);
   for (let i = 0; i < body; i++) {
-    ol[i] = Math.tanh(L[i] * sc) * (32000 / 32768);
-    or[i] = Math.tanh(R[i] * sc) * (32000 / 32768);
+    ol[i] = Math.tanh(val(L, i) * sc) * (32000 / 32768);
+    or[i] = Math.tanh(val(R, i) * sc) * (32000 / 32768);
   }
   return { id, sr: MUS_SR, l: ol, r: or };
 }
