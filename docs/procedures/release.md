@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 性质 | 规程，强制执行；依据 [07-operations.md](../standards/07-operations.md)、[08-versioning.md](../standards/08-versioning.md)、[09-text-and-i18n.md](../standards/09-text-and-i18n.md) |
-| 文件版本 | 1.1.10 |
+| 文件版本 | 1.1.11 |
 | 修订日期 | 2026-10-05 |
 | 适用范围 | 从修改代码到玩家获得新版本的全部步骤：分支、提交、PR、更新日志、发版、上线、回滚、紧急修复 |
 
@@ -81,7 +81,7 @@ fix(联机): 返回时界面闪烁
 
 5.1 前提：待发布的变更已全部合并到 `main`，更新日志最上面一节即待发布的版本。
 
-5.2 执行：
+5.2 发版前，在 GitHub Actions 上对待发布的提交运行“平台冒烟检查”与“服务端压测”（TST-045），并以 `node scripts/bench.mjs` 测量性能基线；结果记入 `docs/audits/perf-版本号.md`，任一指标较上一版本劣化 > 20% 时严禁发布（TST-046）。随后执行：
 
 ```bash
 git switch main && git pull
