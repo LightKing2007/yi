@@ -121,6 +121,14 @@
       "synopsis": "五子棋与围棋"
     },
     "asar": true,
+    "electronFuses": {
+      "runAsNode": false,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true,
+      "grantFileProtocolExtraPrivileges": false
+    },
     "artifactName": "Yi-${version}-${os}-${arch}.${ext}",
     "electronLanguages": [
       "zh_CN",
