@@ -22,7 +22,7 @@
 | `docs/plan/roadmap.md` | 软件设计说明、开发计划 | 开发者 | 是 | 已有 |
 | `docs/plan/remediation.md` | 规范整改计划 | 全部参与者 | 是 | 已有 |
 | `docs/procedures/ops.md` | 运维手册 | 维护者 | 是 | 已有（P1-12） |
-| `SECURITY.md` | 安全策略 | 外部报告者 | 是 | 未建（P2-09） |
+| `SECURITY.md` | 安全策略 | 外部报告者 | 是 | 已有（P2-09） |
 | `docs/adr/` | 架构决策记录 | 开发者 | 是 | 未建（P2-11） |
 | `docs/audits/` | 审计与性能报告 | 维护者 | 是 | 已有 |
 | `docs/incidents/` | 事件复盘报告 | 维护者 | 发生事件时 | 未建 |

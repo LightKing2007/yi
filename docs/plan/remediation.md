@@ -58,7 +58,7 @@
 | P2-06 | 指标与告警 | OPS-071 至 OPS-075 | 进行中（#92 `/metrics` 与每分钟的指标快照，随下一个版本上线；D-4 决定暂不建立告警通知；上线后 60 分钟内的自动检查与回滚（OPS-047）待实施） |
 | P2-07 | 性能基准脚本与服务端压测 | TST-041 至 TST-046 | 已完成（`scripts/bench.mjs` 测电脑思考、服务端消息处理、下载页面与打包体积；#95 `scripts/loadtest.mjs` 与“服务端压测”工作流以真实连接压测，2026-10-06 首次实测，TST-045 各项达标。10-edge-cases.md 中“服务器重启后重连风暴”的压测未包括在内） |
 | P2-08 | Electron Fuses | SEC-033 | 待实施 |
-| P2-09 | `SECURITY.md` | SEC-063 | 待实施 |
+| P2-09 | `SECURITY.md` | SEC-063 | 已完成（[SECURITY.md](../../SECURITY.md)：支持的版本、经 GitHub 私下报告提交、范围与测试守则、72 小时内确认、按 SEC-060 的期限修复、修复后 30 日内公开说明；2026-10-06 开启仓库的私下报告漏洞功能） |
 | P2-10 | 开启 `noImplicitOverride`、`noUncheckedIndexedAccess` 并整改 | F-32；COD-050 | 待实施 |
 | P2-11 | 建立 `docs/adr/`，补录近期决策 | ARC-060 | 待实施 |
 | P2-12 | 存量超长文件与函数拆分（`server/rooms.ts`、`src/online/client.ts`、`src/core/game.ts` 等）；文档注释覆盖率提升至 ≥ 80% | F-30；COD-031、COD-037、COD-040 | 待实施 |
