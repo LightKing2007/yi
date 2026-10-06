@@ -113,8 +113,9 @@ function takeFields(obj: Record<string, unknown>, fields: Fields, where: string,
 function takeUnion(raw: unknown, tag: string, schema: Record<string, Fields>, what: string): Record<string, unknown> | string {
   if (!isRecord(raw)) return `${what}不是对象`;
   const kind = raw[tag];
-  if (typeof kind !== 'string' || !Object.hasOwn(schema, kind)) return `未知的${what}类型 ${shown(kind)}`;
-  const got = takeFields(raw, schema[kind], kind, tag);
+  const fields = typeof kind === 'string' && Object.hasOwn(schema, kind) ? schema[kind] : undefined;
+  if (typeof kind !== 'string' || !fields) return `未知的${what}类型 ${shown(kind)}`;
+  const got = takeFields(raw, fields, kind, tag);
   return typeof got === 'string' ? got : { [tag]: kind, ...got };
 }
 

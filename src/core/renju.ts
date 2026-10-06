@@ -22,10 +22,14 @@ const DIRS = [
   [1, -1],
 ] as const;
 
+/** 方向：DIRS 的下标 */
+type Dir = 0 | 1 | 2 | 3;
+const DIR_IDS: readonly Dir[] = [0, 1, 2, 3];
+
 const inB = (N: number, x: number, y: number) => x >= 0 && y >= 0 && x < N && y < N;
 
 /** 过 (x, y) 在方向 d 上的黑子连续长度（(x, y) 须已是黑子） */
-function runLen(b: Board, N: number, x: number, y: number, d: number) {
+function runLen(b: Board, N: number, x: number, y: number, d: Dir) {
   const [dx, dy] = DIRS[d];
   let n = 1;
   for (let k = 1; inB(N, x + k * dx, y + k * dy) && b[(x + k * dx) * MAXN + y + k * dy] === BLACK; k++) n++;
@@ -34,7 +38,7 @@ function runLen(b: Board, N: number, x: number, y: number, d: number) {
 }
 
 /** 在空点 q 补一颗黑子后，方向 d 上经过 p 能否恰好成五 */
-function fiveThrough(b: Board, N: number, px: number, py: number, qx: number, qy: number, d: number) {
+function fiveThrough(b: Board, N: number, px: number, py: number, qx: number, qy: number, d: Dir) {
   b[qx * MAXN + qy] = BLACK;
   const ok = runLen(b, N, px, py, d) === 5;
   b[qx * MAXN + qy] = EMPTY;
@@ -42,7 +46,7 @@ function fiveThrough(b: Board, N: number, px: number, py: number, qx: number, qy
 }
 
 /** 方向 d 上经过已落黑子 p 的“四”的个数（0、1 或 2）。活四（两头都能成五）只算一个 */
-function foursInDir(b: Board, N: number, px: number, py: number, d: number) {
+function foursInDir(b: Board, N: number, px: number, py: number, d: Dir) {
   const [dx, dy] = DIRS[d];
   const qs: number[] = [];
   for (let k = -4; k <= 4; k++) {
@@ -51,12 +55,13 @@ function foursInDir(b: Board, N: number, px: number, py: number, d: number) {
     if (k === 0 || !inB(N, qx, qy) || b[qx * MAXN + qy] !== EMPTY) continue;
     if (fiveThrough(b, N, px, py, qx, qy, d)) qs.push(k);
   }
-  if (qs.length === 2 && qs[1] - qs[0] === 5) return 1; // _XXXX_ 活四
+  const [first, second] = qs;
+  if (qs.length === 2 && first !== undefined && second !== undefined && second - first === 5) return 1; // _XXXX_ 活四
   return qs.length >= 2 ? 2 : qs.length;
 }
 
 /** 方向 d 上经过已落黑子 p 是否有活三：存在一个空点，补上后形成经过 p 的活四，且该点不是禁手 */
-function threeInDir(b: Board, N: number, px: number, py: number, d: number, depth: number) {
+function threeInDir(b: Board, N: number, px: number, py: number, d: Dir, depth: number) {
   const [dx, dy] = DIRS[d];
   for (let k = -4; k <= 4; k++) {
     const qx = px + k * dx,
@@ -95,14 +100,18 @@ function forbiddenDepth(b: Board, N: number, x: number, y: number, depth: number
     over = false,
     fours = 0,
     threes = 0;
-  for (let d = 0; d < 4; d++) {
+  for (const d of DIR_IDS) {
     const n = runLen(b, N, x, y, d);
     if (n === 5) five = true;
     else if (n > 5) over = true;
   }
   if (!five && !over) {
-    for (let d = 0; d < 4; d++) fours += foursInDir(b, N, x, y, d);
-    if (fours < 2) for (let d = 0; d < 4 && threes < 2; d++) threes += threeInDir(b, N, x, y, d, depth) ? 1 : 0;
+    for (const d of DIR_IDS) fours += foursInDir(b, N, x, y, d);
+    if (fours < 2)
+      for (const d of DIR_IDS) {
+        if (threes >= 2) break;
+        threes += threeInDir(b, N, x, y, d, depth) ? 1 : 0;
+      }
   }
   b[x * MAXN + y] = EMPTY;
   if (five) return Renju.Ok;
@@ -119,8 +128,7 @@ function forbiddenDepth(b: Board, N: number, x: number, y: number, depth: number
 function mayBeForbidden(b: Board, N: number, x: number, y: number) {
   let lines2 = 0,
     lines3 = 0;
-  for (let d = 0; d < 4; d++) {
-    const [dx, dy] = DIRS[d];
+  for (const [dx, dy] of DIRS) {
     let n = 0;
     for (const s of [1, -1]) {
       for (let k = 1; k <= 4; k++) {

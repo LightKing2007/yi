@@ -125,7 +125,7 @@ export class Game {
   forbiddenAt(x: number, y: number): Renju {
     if (this.type !== GameType.Gomoku || !this.renju || this.over || this.cur.toMove !== BLACK || !this.inB(x, y)) return Renju.Ok;
     let h = 2166136261;
-    for (let i = 0; i < this.N; i++) for (let j = 0; j < this.N; j++) h = Math.imul(h ^ this.cur.b[i * MAXN + j], 16777619) >>> 0;
+    for (let i = 0; i < this.N; i++) for (let j = 0; j < this.N; j++) h = Math.imul(h ^ (this.cur.b[i * MAXN + j] ?? 0), 16777619) >>> 0;
     h = (h ^ Math.imul(this.N, 7919)) >>> 0;
     const c = this.forbidCache;
     if (h !== c.stamp) {
@@ -135,10 +135,10 @@ export class Game {
       for (let i = 0; i < this.N; i++)
         for (let j = 0; j < this.N; j++) {
           const why = rulesForbidden(cfg, this.cur, i, j);
-          c.map[i * MAXN + j] = why ? code[why] : Renju.Ok;
+          c.map[i * MAXN + j] = (why && code[why]) || Renju.Ok;
         }
     }
-    return c.map[x * MAXN + y];
+    return c.map[x * MAXN + y] ?? Renju.Ok;
   }
 
   /** 数子法：活子 + 只被一方包围的空点；白方加贴目 */
@@ -151,7 +151,7 @@ export class Game {
 
   /** 按规则走一手；合法则记入历史与棋谱，返回结果，否则记下原因返回 null */
   private step(m: Move): Applied | null {
-    const r = applyMove(this.cfg, this.cur, m, this.hist.length ? this.hist[this.hist.length - 1].b : null);
+    const r = applyMove(this.cfg, this.cur, m, this.hist.at(-1)?.b ?? null);
     if (!r.ok) {
       this.lastReject = r.why;
       return null;
@@ -231,7 +231,7 @@ export class Game {
     if (!this.inB(x, y) || this.b(x, y) === EMPTY) return;
     const g = group(this.cur.b, this.N, x, y),
       v = this.dead[at(x, y)] ? 0 : 1;
-    for (let i = 0; i < g.xs.length; i++) this.dead[at(g.xs[i], g.ys[i])] = v;
+    g.xs.forEach((gx, i) => (this.dead[at(gx, g.ys[i] ?? 0)] = v));
     this.computeScore();
     this.push({ type: 'stone', strength: 0.35 });
   }
@@ -257,7 +257,7 @@ export class Game {
     const cur = this.cur;
     if (cur.lastX >= 0 && cur.b[at(cur.lastX, cur.lastY)] === winner) return { x: cur.lastX, y: cur.lastY };
     for (let i = this.hist.length - 1; i >= 0; i--) {
-      const after = i + 1 < this.hist.length ? this.hist[i + 1] : cur;
+      const after = this.hist[i + 1] ?? cur; // 最后一手之后的局面即当前局面
       const lx = after.lastX,
         ly = after.lastY;
       if (lx >= 0 && after.b[at(lx, ly)] === winner && cur.b[at(lx, ly)] === winner) return { x: lx, y: ly };

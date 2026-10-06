@@ -63,8 +63,9 @@ function board() {
     const last = i === OPENING.length - 1 ? ' last' : '';
     return `<b class="s ${i % 2 ? 'w' : 'b'}${last}" style="left:${pct(x)};top:${pct(y)};--i:${i}"></b>`;
   }).join('');
-  const [lx, ly] = OPENING[OPENING.length - 1];
-  const ring = `<b class="ring" style="left:${pct(lx)};top:${pct(ly)};--i:${OPENING.length - 1}"></b>`;
+  const ring = OPENING.slice(-1)
+    .map(([x, y]) => `<b class="ring" style="left:${pct(x)};top:${pct(y)};--i:${OPENING.length - 1}"></b>`)
+    .join('');
   const cells = Array.from({ length: SIZE * SIZE }, (_, k) => (taken.has(k) ? '<i class="o"></i>' : '<i></i>')).join('');
   return (
     `<div class="board"><div class="grid">` +
@@ -75,6 +76,7 @@ function board() {
 
 function card(p: PagePkg, i: number) {
   const info = PLATFORMS[p.platform];
+  if (!info) return ''; // list() 只列出 ORDER 中的平台
   const sum = p.sha256 ? `<code>${p.sha256}</code>` : '<code>正在计算，请稍后刷新页面。</code>';
   return `<article class="panel card" style="--i:${i}">
 <div class="name"><span class="pip ${info.pip}"></span><h3>${esc(info.label)}</h3><span class="tag">${esc(info.tag)}</span></div>

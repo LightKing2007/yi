@@ -233,7 +233,7 @@ export async function startHost(ports: number | number[], opt: HostOptions = {})
   const actual = listening.map(item => (item.http.address() as AddressInfo).port);
   return {
     server,
-    port: actual[0],
+    port: actual[0] ?? 0, // listenAll 至少监听一个端口
     ports: actual,
     close: () => {
       clearInterval(timer);
