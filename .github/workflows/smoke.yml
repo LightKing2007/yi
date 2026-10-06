@@ -1,6 +1,7 @@
 # 平台冒烟检查（checklists.md 第 3 节中可以自动化的部分，见 scripts/smoke-app.mjs）：在 GitHub 的 Ubuntu、macOS、Windows 机器上
 # 从当前提交打出安装程序，按玩家的方式安装后启动并检查，Windows 另检查卸载；截图作为附件。手动运行，发版前对待发布的提交运行一次。
 # Linux 先在开启 Chromium 沙箱的情况下运行，这才是玩家的实际情况；不通过时再以 --no-sandbox 运行一次，用来区分是否为沙箱的问题。
+# 打包后另核对 Electron Fuses 已按 package.json 的 build.electronFuses 写入（scripts/check-fuses.mjs，SEC-033）。
 # 不能自动化、仍须在实机上确认的项：macOS 公证提示与 Windows SmartScreen 的首次打开提示、声音、与真人联机对局、Intel 芯片的 Mac。
 name: 平台冒烟检查
 
@@ -44,6 +45,13 @@ jobs:
       # ---------------- Linux：AppImage ----------------
       - if: runner.os == 'Linux'
         run: npx electron-builder --linux --publish never
+      - name: 核对 Electron Fuses（SEC-033）
+        if: runner.os == 'Linux'
+        run: |
+          node scripts/check-fuses.mjs release/linux-unpacked/yi
+          # 探针：未经改动的 Electron 必须判为不符（退出码 1），证明核对确实有效
+          status=0; node scripts/check-fuses.mjs node_modules/electron/dist/electron || status=$?
+          test "$status" = 1
       - if: runner.os == 'Linux'
         run: sudo apt-get update -q && sudo apt-get install -yq xvfb
       - name: 启动 AppImage 并检查（开启沙箱）
@@ -67,6 +75,9 @@ jobs:
       # ---------------- macOS：DMG（运行机器为 Apple 芯片，只打 arm64） ----------------
       - if: runner.os == 'macOS'
         run: npx electron-builder --mac --arm64 --publish never
+      - name: 核对 Electron Fuses（SEC-033）
+        if: runner.os == 'macOS'
+        run: node scripts/check-fuses.mjs release/mac-arm64/弈.app
       - name: 校验 DMG 中应用的签名
         if: runner.os == 'macOS'
         id: codesign
@@ -100,6 +111,9 @@ jobs:
       # ---------------- Windows：NSIS 安装程序（静默安装、检查、静默卸载） ----------------
       - if: runner.os == 'Windows'
         run: npx electron-builder --win --publish never
+      - name: 核对 Electron Fuses（SEC-033）
+        if: runner.os == 'Windows'
+        run: node scripts/check-fuses.mjs release/win-unpacked/弈.exe
       - name: 静默安装并检查，再静默卸载
         if: runner.os == 'Windows'
         shell: pwsh
