@@ -20,6 +20,7 @@
     "lint": "eslint .",
     "ratchet": "node scripts/ratchet.mjs",
     "bench": "node scripts/bench.mjs",
+    "loadtest": "node scripts/loadtest.mjs",
     "build:web": "vite build",
     "build:node": "node scripts/build-node.mjs",
     "build": "npm run typecheck && npm run build:web && npm run build:node",
