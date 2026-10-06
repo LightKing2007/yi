@@ -329,4 +329,6 @@ docs/                 standards/（工程规范）、procedures/（操作规程�
 
 Copyright © 2026 LightKing. All rights reserved.
 
-本项目使用 [Preact](https://preactjs.com)、[Electron](https://www.electronjs.org) 及 [ws](https://github.com/websockets/ws)（均为 MIT 许可证），并附带[思源黑体、思源宋体](https://github.com/notofonts/noto-cjk)的子集（SIL Open Font License 1.1）。
+本项目使用 [Preact](https://preactjs.com)、[Electron](https://www.electronjs.org) 及 [ws](https://github.com/websockets/ws)（均为 MIT 许可证），并附带[思源黑体、思源宋体](https://github.com/notofonts/noto-cjk)的子集（SIL Open Font License 1.1）。服务器上的异地备份程序另打包了 [age-encryption](https://github.com/FiloSottile/typage)（BSD-3-Clause 许可证，不随游戏分发）。
+
+发现安全漏洞请按 [SECURITY.md](SECURITY.md) 私下报告，不要在公开的 Issue 中披露。

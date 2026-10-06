@@ -3,8 +3,8 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.4 |
-| 修订日期 | 2026-10-05 |
+| 文件版本 | 1.1.5 |
+| 修订日期 | 2026-10-06 |
 | 规则前缀 | `SEC` |
 
 参考：ISO/IEC 27001:2022、ISO/IEC 27002:2022；GB/T 22239—2019（第二级）；GB/T 20984—2022；OWASP ASVS 5.0；Electron Security Checklist；CIS Ubuntu Linux 24.04 LTS Benchmark；ISO/IEC 29147:2018、ISO/IEC 30111:2019。
@@ -83,7 +83,7 @@
 | SEC-060 | A | 依赖漏洞的修复期限统一为：严重 7 日、高危 30 日、中危 90 日、低危在下一次依赖升级时修复；运行时依赖与随安装程序分发的组件（Electron）不允许豁免 | 未满足（F-03） |
 | SEC-061 | A | CI 必须运行 `scripts/audit.mjs`：读取 `npm audit --json` 的结果，随游戏与服务端分发的依赖（`preact`、`@preact/signals`、`ws` 及其下级依赖，以及 `electron` 包本身）存在高危及以上漏洞即阻断；其余依赖的漏洞只列出，每周汇总一次。本项目的依赖全部登记在 `devDependencies`，`npm audit --omit=dev` 不检查任何包，严禁以它代替；新增随程序分发的依赖时必须同时加入该脚本的分发范围 | 未满足 |
 | SEC-062 | A | 必须启用 Dependabot（或等效工具），每周检查一次 npm 与 GitHub Actions 的更新 | 未满足 |
-| SEC-063 | C | 仓库根目录必须提供 `SECURITY.md`，写明漏洞报告方式与响应时限：72 小时内确认，按 SEC-060 的期限修复，修复后 30 日内公开说明 | 未满足 |
+| SEC-063 | C | 仓库根目录必须提供 `SECURITY.md`，写明漏洞报告方式与响应时限：72 小时内确认，按 SEC-060 的期限修复，修复后 30 日内公开说明 | 满足（P2-09：仓库根目录的 [SECURITY.md](../../SECURITY.md)；报告经 GitHub 的私下报告提交，2026-10-06 开启） |
 
 ## 8 分发完整性
 
