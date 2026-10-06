@@ -23,8 +23,8 @@ export function replay(rec: GameRecord): { history: Pos[]; pos: Pos; last: Appli
   let pos = newPos(),
     last: Applied | null = null;
   const history: Pos[] = [];
-  for (let i = 0; i < rec.moves.length; i++) {
-    const r = applyMove(rec.cfg, pos, rec.moves[i].m, history.length ? history[history.length - 1].b : null);
+  for (const [i, { m }] of rec.moves.entries()) {
+    const r = applyMove(rec.cfg, pos, m, history.at(-1)?.b ?? null);
     if (!r.ok) throw new Error(`棋谱第 ${i + 1} 手不合法：${r.why}`);
     history.push(pos);
     pos = r.v.pos;

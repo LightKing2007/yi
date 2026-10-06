@@ -453,7 +453,7 @@ export class RoomServer {
     return undefined;
   }
   private seat(r: Room, color: number) {
-    return this.byId(r.pid[color]);
+    return this.byId(r.pid[color] ?? 0);
   }
   private colorOf(r: Room, p: Player) {
     return r.pid[BLACK] === p.id ? BLACK : r.pid[WHITE] === p.id ? WHITE : 0;
@@ -548,9 +548,11 @@ export class RoomServer {
     this.unqueue(other.p);
     const m: Match = { mode, type: entry.type, size: entry.size, side: [other, entry], ok: [false, false], deadline: this.now() + CONFIRM_SECS };
     this.matches.add(m);
-    for (let i = 0; i < 2; i++) {
-      const me = m.side[i].p,
-        opp = m.side[1 - i].p;
+    const [first, second] = m.side;
+    for (const [me, opp] of [
+      [first.p, second.p],
+      [second.p, first.p],
+    ] as const) {
       me.match = m;
       this.send(me, { t: 'found', opp: this.oppInfo(opp, m.mode, m.type), secs: CONFIRM_SECS });
     }
@@ -591,6 +593,7 @@ export class RoomServer {
     const m = p.match;
     if (!m) return;
     const i = m.side[0].p === p ? 0 : 1;
+    const other = m.side[i === 0 ? 1 : 0];
     if (!ok) {
       this.dropMatch(m, [p], '对方未接受');
       return;
@@ -598,7 +601,7 @@ export class RoomServer {
     if (m.ok[i]) return;
     m.ok[i] = true;
     if (!m.ok[1 - i]) {
-      this.send(m.side[1 - i].p, { t: 'accepted' });
+      this.send(other.p, { t: 'accepted' });
       return;
     }
     this.matches.delete(m);
@@ -1187,7 +1190,7 @@ export class RoomServer {
       this.send(p, { t: 'info', text: '现在不能申请悔棋' });
       return;
     }
-    if (r.undoUsed[me] >= UNDO_LIMIT) {
+    if ((r.undoUsed[me] ?? 0) >= UNDO_LIMIT) {
       this.send(p, { t: 'info', text: '本局悔棋次数已用完' });
       return;
     }
@@ -1195,7 +1198,7 @@ export class RoomServer {
       this.send(p, { t: 'info', text: '你还没有可以悔的棋' });
       return;
     } // 轮到自己时要连对方那一手一起退
-    r.undoUsed[me]++;
+    r.undoUsed[me] = (r.undoUsed[me] ?? 0) + 1;
     this.ask(r, me, 'undo');
   }
 
@@ -1204,11 +1207,11 @@ export class RoomServer {
       this.send(p, { t: 'info', text: '请先等对方回应申请' });
       return;
     }
-    if (r.drawUsed[me] >= DRAW_LIMIT) {
+    if ((r.drawUsed[me] ?? 0) >= DRAW_LIMIT) {
       this.send(p, { t: 'info', text: '本局求和次数已用完' });
       return;
     }
-    r.drawUsed[me]++;
+    r.drawUsed[me] = (r.drawUsed[me] ?? 0) + 1;
     this.ask(r, me, 'draw');
   }
 

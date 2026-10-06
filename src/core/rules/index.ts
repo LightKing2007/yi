@@ -27,8 +27,13 @@ export interface Applied {
 
 export type ApplyResult = { ok: true; v: Applied } | { ok: false; why: Reject };
 
-const DX = [1, -1, 0, 0],
-  DY = [0, 0, 1, -1];
+/** 上下左右四个相邻点的偏移 */
+const STEPS = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+] as const;
 const WIN_DIRS = [
   [1, 0],
   [0, 1],
@@ -120,11 +125,11 @@ export function group(b: Board, N: number, x: number, y: number) {
   let libs = 0;
   seen[at(x, y)] = 1;
   for (let head = 0; head < xs.length; head++) {
-    const cx = xs[head],
-      cy = ys[head];
-    for (let d = 0; d < 4; d++) {
-      const nx = cx + DX[d],
-        ny = cy + DY[d];
+    const cx = xs[head] ?? 0,
+      cy = ys[head] ?? 0; // xs 与 ys 等长，head 在范围内
+    for (const [dx, dy] of STEPS) {
+      const nx = cx + dx,
+        ny = cy + dy;
       if (!inB(N, nx, ny) || seen[at(nx, ny)]) continue;
       const v = b[at(nx, ny)];
       if (v === EMPTY) {
@@ -158,20 +163,21 @@ function goApply(cfg: GameConfig, pos: Pos, m: Move, prev: Board | null): ApplyR
   const next = clonePos(pos);
   next.b[at(x, y)] = c;
   const captured: Pt[] = [];
-  for (let d = 0; d < 4; d++) {
-    const nx = x + DX[d],
-      ny = y + DY[d];
+  for (const [dx, dy] of STEPS) {
+    const nx = x + dx,
+      ny = y + dy;
     if (!inB(N, nx, ny) || next.b[at(nx, ny)] !== o) continue;
     const g = group(next.b, N, nx, ny);
     if (g.libs === 0)
-      for (let i = 0; i < g.xs.length; i++) {
-        next.b[at(g.xs[i], g.ys[i])] = EMPTY;
-        captured.push({ x: g.xs[i], y: g.ys[i] });
-      }
+      g.xs.forEach((gx, i) => {
+        const gy = g.ys[i] ?? 0; // xs 与 ys 等长
+        next.b[at(gx, gy)] = EMPTY;
+        captured.push({ x: gx, y: gy });
+      });
   }
   if (group(next.b, N, x, y).libs === 0) return { ok: false, why: 'suicide' };
   if (prev && boardsEqual(next.b, prev)) return { ok: false, why: 'ko' };
-  next.cap[c] += captured.length;
+  next.cap[c] = (next.cap[c] ?? 0) + captured.length;
   next.lastX = x;
   next.lastY = y;
   next.passes = 0;
@@ -205,9 +211,11 @@ export function score(cfg: GameConfig, pos: Pos, dead: Uint8Array) {
         let border = 0;
         vis[at(x, y)] = 1;
         for (let h = 0; h < qx.length; h++) {
-          for (let d = 0; d < 4; d++) {
-            const nx = qx[h] + DX[d],
-              ny = qy[h] + DY[d];
+          const hx = qx[h] ?? 0,
+            hy = qy[h] ?? 0; // qx 与 qy 等长，h 在范围内
+          for (const [dx, dy] of STEPS) {
+            const nx = hx + dx,
+              ny = hy + dy;
             if (!inB(N, nx, ny)) continue;
             const w = t[at(nx, ny)];
             if (w === EMPTY) {
@@ -216,11 +224,11 @@ export function score(cfg: GameConfig, pos: Pos, dead: Uint8Array) {
                 qx.push(nx);
                 qy.push(ny);
               }
-            } else border |= w;
+            } else border |= w ?? 0;
           }
         }
         const owner = border === BLACK ? BLACK : border === WHITE ? WHITE : 0;
-        for (let i = 0; i < qx.length; i++) terr[at(qx[i], qy[i])] = owner;
+        qx.forEach((px, i) => (terr[at(px, qy[i] ?? 0)] = owner));
         if (owner === BLACK) terB += qx.length;
         else if (owner === WHITE) terW += qx.length;
       }

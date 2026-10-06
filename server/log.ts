@@ -106,7 +106,7 @@ function fit(obj: Record<string, unknown>): string {
     if (!slot) break;
     let keep = Math.max(0, slot.len - over - Buffer.byteLength(ELLIPSIS));
     const text = slot.holder[slot.key] as string;
-    if (keep > 0 && /[\uD800-\uDBFF]/.test(text[keep - 1])) keep--; // 不把代理对拆开
+    if (keep > 0 && /[\uD800-\uDBFF]/.test(text.charAt(keep - 1))) keep--; // 不把代理对拆开
     slot.holder[slot.key] = text.slice(0, keep) + ELLIPSIS;
   }
   const { ts, level, event, ver, msg } = obj;

@@ -14,7 +14,7 @@
   "scripts": {
     "prepare": "git config core.hooksPath .githooks || true",
     "dev": "vite",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.strict.json",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",

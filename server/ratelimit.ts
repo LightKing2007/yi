@@ -85,7 +85,7 @@ export class WindowCounter {
   }
 
   private prune(now: number) {
-    while (this.times.length && now - this.times[0] >= this.windowSecs) this.times.shift();
+    for (let first = this.times[0]; first !== undefined && now - first >= this.windowSecs; first = this.times[0]) this.times.shift();
   }
 }
 

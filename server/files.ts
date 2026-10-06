@@ -72,8 +72,8 @@ function list(dir: string): Pkg[] {
   }
   const best = new Map<string, Pkg>();
   for (const file of names) {
-    const m = NAME.exec(file);
-    if (!m) continue;
+    const [, version, platform] = NAME.exec(file) ?? [];
+    if (!version || !platform) continue;
     let st: fs.Stats;
     try {
       st = fs.statSync(path.join(dir, file));
@@ -81,11 +81,11 @@ function list(dir: string): Pkg[] {
       continue;
     } // 刚好被删掉或改名：本次不列出
     if (!st.isFile()) continue;
-    const p = { file, version: m[1], platform: m[2], size: st.size, mtimeMs: st.mtimeMs };
+    const p = { file, version, platform, size: st.size, mtimeMs: st.mtimeMs };
     const old = best.get(p.platform);
     if (!old || cmpVer(p.version, old.version) > 0) best.set(p.platform, p);
   }
-  return ORDER.filter(k => best.has(k)).map(k => best.get(k)!); // 例外 COD-052：best.has(k) 刚确认过有这一项
+  return ORDER.flatMap(k => best.get(k) ?? []);
 }
 
 /**

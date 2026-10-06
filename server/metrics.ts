@@ -42,7 +42,8 @@ const ERROR_CODES: Record<string, string> = {
 
 /** 下发的提示文本对应的错误码 */
 export function errorCode(text: string) {
-  if (Object.hasOwn(ERROR_CODES, text)) return ERROR_CODES[text];
+  const code = Object.hasOwn(ERROR_CODES, text) ? ERROR_CODES[text] : undefined;
+  if (code) return code;
   return REJECT_TEXTS.includes(text) ? 'game.illegal-move' : 'other';
 }
 
@@ -109,7 +110,7 @@ export class Metrics {
   observe(seconds: number) {
     const i = HANDLE_BUCKETS.findIndex(le => seconds <= le);
     if (i < 0) this.over++;
-    else this.buckets[i]++;
+    else this.buckets[i] = (this.buckets[i] ?? 0) + 1;
     this.sum += seconds;
     this.count++;
   }
@@ -130,7 +131,7 @@ export class Metrics {
     }
     let cumulative = 0;
     HANDLE_BUCKETS.forEach((le, i) => {
-      cumulative += this.buckets[i];
+      cumulative += this.buckets[i] ?? 0;
       out.push([`yi_message_handle_seconds_bucket{le="${le}"}`, cumulative]);
     });
     out.push(
@@ -164,7 +165,7 @@ export class Metrics {
       const name = sample.replace(/\{.*$/, '');
       const family = name.startsWith(HISTOGRAM) ? HISTOGRAM : name; // 直方图的 _bucket、_sum、_count 同属一族
       if (family !== last) {
-        const [type, text] = help[family];
+        const [type, text] = help[family] ?? ['untyped', family];
         lines.push(`# HELP ${family} ${text}`, `# TYPE ${family} ${type}`);
         last = family;
       }
