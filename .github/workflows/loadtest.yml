@@ -1,0 +1,41 @@
+# 服务端压测（TST-045，整改项 P2-07，见 scripts/loadtest.mjs）：在 GitHub 的 Ubuntu 机器上启动打包好的服务端，
+# 以 500 条真实的 WebSocket 连接、每条每秒 2 条消息施压 60 秒，按 /metrics 与进程统计检查 TST-045 的各项上限。
+# 服务端以 taskset 限定在 2 个核上（TST-045 按 2 vCPU 规定），施压的客户端在其余的核上。手动运行，发版前对待发布的提交运行一次，
+# 结果记入当版的性能报告（TST-046）。
+name: 服务端压测
+
+on:
+  workflow_dispatch:
+  pull_request: # 改动压测本身时自动运行一次
+    paths:
+      - .github/workflows/loadtest.yml
+      - scripts/loadtest.mjs
+
+permissions:
+  contents: read
+
+jobs:
+  loadtest:
+    name: 压测
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build:node
+      - name: 机器
+        run: nproc && free -m
+      - name: 压测（服务端限定在第 0、1 号核，客户端在第 2 号核起）
+        env:
+          LOADTEST_SERVER_PREFIX: taskset -c 0,1
+        run: taskset -c 2-$(($(nproc) - 1)) node scripts/loadtest.mjs --json loadtest.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: loadtest
+          path: loadtest.json
+          retention-days: 30 # 记入性能报告后即可丢弃
