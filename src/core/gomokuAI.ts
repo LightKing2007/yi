@@ -18,9 +18,13 @@ export interface GomokuSnap {
   renju: boolean;
 }
 
-const DX = [1, 0, 1, 1],
-  DY = [0, 1, 1, -1];
-const STEP = [MAXN, 1, MAXN + 1, MAXN - 1]; // 四个方向在一维下标里的步长
+/** 四个方向：横向步长 dx、纵向步长 dy、在一维下标里的步长 */
+const DIRS = [
+  [1, 0, MAXN],
+  [0, 1, 1],
+  [1, 1, MAXN + 1],
+  [1, -1, MAXN - 1],
+] as const;
 const WIN_SCORE = 1e9;
 const HARD_DEPTH = 6;
 const HARD_BUDGET_MS = 1200; // 困难一步最多想多久：慢电脑上也不会一步想好几秒
@@ -57,9 +61,7 @@ class Searcher {
   makesFive(x: number, y: number, c: number) {
     const b = this.b,
       N = this.N;
-    for (let d = 0; d < 4; d++) {
-      const dx = DX[d],
-        dy = DY[d];
+    for (const [dx, dy] of DIRS) {
       let n = 1,
         px = x + dx,
         py = y + dy;
@@ -86,10 +88,7 @@ class Searcher {
       N = this.N,
       op = 3 - me;
     let s = 0;
-    for (let d = 0; d < 4; d++) {
-      const dx = DX[d],
-        dy = DY[d],
-        st = STEP[d];
+    for (const [dx, dy, st] of DIRS) {
       for (let k = -4; k <= 0; k++) {
         const sx = x + k * dx,
           sy = y + k * dy,
@@ -104,7 +103,7 @@ class Searcher {
           if (v === me) m++;
           else if (v === op) t++;
         }
-        s += m && t ? 0 : m ? MY[m] : t ? OP[t] : MY[0];
+        s += m && t ? 0 : ((m ? MY[m] : t ? OP[t] : MY[0]) ?? 0); // 此点为空，五元组中一方至多 4 子
       }
     }
     const cd = Math.abs(x - (N - 1) / 2) + Math.abs(y - (N - 1) / 2); // 同分时略偏向中央
@@ -116,6 +115,7 @@ class Searcher {
     const b = this.b,
       N = this.N,
       c = this.levels[level];
+    if (!c) throw new Error(`没有第 ${level} 层的候选点缓冲`);
     c.n = 0;
     for (let x = 0; x < N; x++)
       for (let y = 0; y < N; y++) {
@@ -133,13 +133,14 @@ class Searcher {
             }
         if (!near) continue;
         const s = this.pointScore(x, y, me);
-        if (c.n === max && s <= c.s[max - 1]) continue;
+        if (c.n === max && s <= (c.s[max - 1] ?? -Infinity)) continue;
         if (this.renju && me === BLACK && !this.makesFive(x, y, me) && renjuForbidden(b, N, x, y)) continue; // 黑棋不下禁手
         let k = c.n < max ? c.n++ : max - 1;
-        while (k > 0 && c.s[k - 1] < s) {
-          c.x[k] = c.x[k - 1];
-          c.y[k] = c.y[k - 1];
-          c.s[k] = c.s[k - 1];
+        // 插入排序：缓冲中前 c.n 项都已写入
+        while (k > 0 && (c.s[k - 1] ?? Infinity) < s) {
+          c.x[k] = c.x[k - 1] ?? 0;
+          c.y[k] = c.y[k - 1] ?? 0;
+          c.s[k] = c.s[k - 1] ?? 0;
           k--;
         }
         c.x[k] = x;
@@ -155,10 +156,7 @@ class Searcher {
       N = this.N,
       op = 3 - me;
     let s = 0;
-    for (let d = 0; d < 4; d++) {
-      const dx = DX[d],
-        dy = DY[d],
-        st = STEP[d];
+    for (const [dx, dy, st] of DIRS) {
       const xa = 0,
         xb = N - 1 - 4 * dx,
         ya = dy < 0 ? 4 : 0,
@@ -173,8 +171,8 @@ class Searcher {
             if (v === me) m++;
             else if (v === op) t++;
           }
-          if (!t) s += MINE[m];
-          else if (!m) s -= THEIRS[t];
+          if (!t) s += MINE[m] ?? 0;
+          else if (!m) s -= THEIRS[t] ?? 0;
         }
     }
     return s;
@@ -186,10 +184,10 @@ class Searcher {
     const c = this.candidates(me, 10, depth);
     const n = c.n;
     if (!n) return this.evaluate(me);
-    for (let i = 0; i < n; i++) if (this.makesFive(c.x[i], c.y[i], me)) return WIN_SCORE + depth;
+    for (let i = 0; i < n; i++) if (this.makesFive(c.x[i] ?? 0, c.y[i] ?? 0, me)) return WIN_SCORE + depth;
     let best = -WIN_SCORE * 2;
     for (let i = 0; i < n; i++) {
-      const p = c.x[i] * MAXN + c.y[i];
+      const p = (c.x[i] ?? 0) * MAXN + (c.y[i] ?? 0);
       this.b[p] = me;
       const v = -this.negamax(3 - me, depth - 1, -beta, -alpha);
       this.b[p] = EMPTY;
@@ -213,7 +211,7 @@ export function gomokuMove(snap: GomokuSnap, level: number, random: () => number
   const s = new Searcher(snap.b.slice(), N, snap.renju);
   const top = s.candidates(me, 16, HARD_DEPTH + 1);
   const n = top.n;
-  const cand = (i: number) => ({ x: top.x[i], y: top.y[i] });
+  const cand = (i: number) => ({ x: top.x[i] ?? 0, y: top.y[i] ?? 0 }); // i 小于候选点数 n
   if (!n) {
     // 空棋盘：下天元
     const c = N >> 1;
@@ -242,7 +240,7 @@ export function gomokuMove(snap: GomokuSnap, level: number, random: () => number
     let pick = 0,
       best = -1;
     for (let i = 0; i < n; i++) {
-      const v = top.s[i] + Math.floor(random() * 7);
+      const v = (top.s[i] ?? 0) + Math.floor(random() * 7);
       if (v > best) {
         best = v;
         pick = i;
@@ -258,12 +256,12 @@ export function gomokuMove(snap: GomokuSnap, level: number, random: () => number
   let pick = 0;
   s.deadline = now() + budgetMs / MS_PER_SEC; // 时间经 clock.ts 读取，测试可换成手动推进的时钟（ARC-020、TST-020）
   for (const depth of [2, 4, HARD_DEPTH]) {
-    let bestI = order[0],
+    let bestI = order[0] ?? 0,
       best = -WIN_SCORE * 4,
       alpha = -WIN_SCORE * 4;
     try {
       for (const i of order) {
-        const p = xs[i] * MAXN + ys[i];
+        const p = (xs[i] ?? 0) * MAXN + (ys[i] ?? 0);
         s.b[p] = me;
         const v = -s.negamax(op, depth - 1, -WIN_SCORE * 4, -alpha);
         s.b[p] = EMPTY;
@@ -281,5 +279,5 @@ export function gomokuMove(snap: GomokuSnap, level: number, random: () => number
     order.splice(order.indexOf(bestI), 1);
     order.unshift(bestI);
   }
-  return { x: xs[pick], y: ys[pick] };
+  return { x: xs[pick] ?? 0, y: ys[pick] ?? 0 };
 }

@@ -19,7 +19,7 @@ export function goSnap(g: Game): GoSnap {
     lastX: c.lastX,
     lastY: c.lastY,
     komi: g.komi,
-    prev: g.hist.length ? g.hist[g.hist.length - 1].b.slice() : null,
+    prev: g.hist.at(-1)?.b.slice() ?? null,
   };
 }
 

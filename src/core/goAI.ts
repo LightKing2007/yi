@@ -31,6 +31,32 @@ class GB {
   komi = 7.5;
   d: [number, number, number, number] = [1, -1, 0, 0];
 
+  // 下列取值方法供按下标读取时使用：下标都由棋盘内的点与方向算出，不会超出数组；取不到时的返回值只为满足类型检查
+  /** 点 p 的颜色；超出数组时视为界外 */
+  col(p: number) {
+    return this.c[p] ?? BORDER;
+  }
+  /** 点 p 所在棋块的块首 */
+  hd(p: number) {
+    return this.head[p] ?? 0;
+  }
+  /** 环形链表中 p 的下一个子；取不到时返回 p 本身，使遍历终止 */
+  next(p: number) {
+    return this.nxt[p] ?? p;
+  }
+  /** 棋块 block 的伪气数 */
+  lib(block: number) {
+    return this.libs[block] ?? 0;
+  }
+  /** 棋块 block 的伪气数加 n */
+  addLib(block: number, n: number) {
+    this.libs[block] = this.lib(block) + n;
+  }
+  /** 棋块 block 的子数 */
+  sz(block: number) {
+    return this.size[block] ?? 0;
+  }
+
   copyFrom(o: GB) {
     this.N = o.N;
     this.W = o.W;
@@ -60,8 +86,8 @@ class GB {
     this.empty[this.ne++] = p;
   }
   emptyDel(p: number) {
-    const i = this.epos[p],
-      q = this.empty[--this.ne];
+    const i = this.epos[p] ?? 0,
+      q = this.empty[--this.ne] ?? 0;
     this.empty[i] = q;
     this.epos[q] = i;
   }
@@ -83,7 +109,7 @@ class GB {
     for (let x = 0; x < N; x++)
       for (let y = 0; y < N; y++) {
         const p = this.idx(x, y);
-        this.c[p] = b[x * MAXN + y];
+        this.c[p] = b[x * MAXN + y] ?? EMPTY;
         if (!this.c[p]) this.emptyAdd(p);
       }
     const d = this.d,
@@ -100,10 +126,11 @@ class GB {
         this.nxt[p] = p;
         for (let i = 0; i < n; i++)
           for (let k = 0; k < 4; k++) {
-            const q = queue[i] + d[k];
-            if (this.c[q] === col && !this.head[q]) {
+            const dk = d[k] ?? 0;
+            const q = (queue[i] ?? 0) + dk;
+            if (this.col(q) === col && !this.head[q]) {
               this.head[q] = p;
-              this.nxt[q] = this.nxt[p];
+              this.nxt[q] = this.next(p);
               this.nxt[p] = q;
               queue[n++] = q;
             }
@@ -115,7 +142,7 @@ class GB {
         // 伪气：每个棋子每个相邻空点记一次
         const p = this.idx(x, y);
         if (this.c[p] !== BLACK && this.c[p] !== WHITE) continue;
-        for (let k = 0; k < 4; k++) if (this.c[p + d[k]] === EMPTY) this.libs[this.head[p]]++;
+        for (let k = 0; k < 4; k++) if (this.col(p + (d[k] ?? 0)) === EMPTY) this.addLib(this.hd(p), 1);
       }
     this.toMove = toMove;
     this.passes = passes;
@@ -127,10 +154,11 @@ class GB {
     let s = h;
     do {
       for (let k = 0; k < 4; k++) {
-        const q = s + d[k];
-        if (this.c[q] === EMPTY && q !== p) return true;
+        const dk = d[k] ?? 0;
+        const q = s + dk;
+        if (this.col(q) === EMPTY && q !== p) return true;
       }
-      s = this.nxt[s];
+      s = this.next(s);
     } while (s !== h);
     return false;
   }
@@ -147,14 +175,15 @@ class GB {
       s = h;
     do {
       for (let k = 0; k < 4; k++) {
-        const q = s + d[k];
-        if (this.c[q] === EMPTY && stamp[q] !== stampCur) {
+        const dk = d[k] ?? 0;
+        const q = s + dk;
+        if (this.col(q) === EMPTY && stamp[q] !== stampCur) {
           stamp[q] = stampCur;
           if (lib) lib[0] = q;
           if (++n >= max) return n;
         }
       }
-      s = this.nxt[s];
+      s = this.next(s);
     } while (s !== h);
     return n;
   }
@@ -163,11 +192,12 @@ class GB {
     if (this.c[p] !== EMPTY || p === this.ko) return false;
     const d = this.d;
     for (let k = 0; k < 4; k++) {
-      const q = p + d[k],
-        c = this.c[q];
+      const dk = d[k] ?? 0;
+      const q = p + dk,
+        c = this.col(q);
       if (c === EMPTY) return true;
       if (c === BORDER) continue;
-      const otherLib = this.hasOtherLib(this.head[q], p);
+      const otherLib = this.hasOtherLib(this.hd(q), p);
       if (c === me && otherLib) return true; // 连上一块还有气的棋
       if (c !== me && !otherLib) return true; // 提掉对方
     }
@@ -181,17 +211,18 @@ class GB {
     let edge = false,
       bad = 0;
     for (let k = 0; k < 4; k++) {
-      const c = this.c[p + d[k]];
+      const dk = d[k] ?? 0;
+      const c = this.col(p + dk);
       if (c === BORDER) edge = true;
       else if (c !== me) return false;
     }
     const dg = [W + 1, W - 1, -W + 1, -W - 1];
-    for (let k = 0; k < 4; k++) if (this.c[p + dg[k]] === 3 - me) bad++;
+    for (const g of dg) if (this.col(p + g) === 3 - me) bad++;
     return edge ? bad === 0 : bad < 2;
   }
 
   private merge(a: number, c: number) {
-    if (this.size[a] < this.size[c]) {
+    if (this.sz(a) < this.sz(c)) {
       const t = a;
       a = c;
       c = t;
@@ -199,13 +230,13 @@ class GB {
     let s = c;
     do {
       this.head[s] = a;
-      s = this.nxt[s];
+      s = this.next(s);
     } while (s !== c);
-    const t = this.nxt[a];
-    this.nxt[a] = this.nxt[c];
+    const t = this.next(a);
+    this.nxt[a] = this.next(c);
     this.nxt[c] = t;
-    this.size[a] += this.size[c];
-    this.libs[a] += this.libs[c];
+    this.size[a] = this.sz(a) + this.sz(c);
+    this.libs[a] = this.lib(a) + this.lib(c);
   }
 
   private remove(h: number, one: number[]) {
@@ -217,14 +248,15 @@ class GB {
       this.emptyAdd(s);
       one[0] = s;
       n++;
-      s = this.nxt[s];
+      s = this.next(s);
     } while (s !== h);
     s = h;
     do {
-      const nx = this.nxt[s];
+      const nx = this.next(s);
       for (let k = 0; k < 4; k++) {
-        const q = s + d[k];
-        if (this.c[q] === BLACK || this.c[q] === WHITE) this.libs[this.head[q]]++;
+        const dk = d[k] ?? 0;
+        const cq = this.col(s + dk);
+        if (cq === BLACK || cq === WHITE) this.addLib(this.hd(s + dk), 1);
       }
       this.head[s] = 0;
       s = nx;
@@ -245,30 +277,42 @@ class GB {
       return;
     }
     this.passes = 0;
-    const d = this.d;
     this.c[p] = me;
     this.emptyDel(p);
     this.head[p] = p;
     this.nxt[p] = p;
     this.size[p] = 1;
     this.libs[p] = 0;
+    this.settle(p, me);
+    this.capture(p, op);
+  }
+
+  /** 新落在 p 的 me 子：记它的气、扣相邻棋块的气，并与相连的己方棋块合并 */
+  private settle(p: number, me: number) {
+    const dirs = this.d;
     for (let k = 0; k < 4; k++) {
-      const q = p + d[k];
-      if (this.c[q] === EMPTY) this.libs[p]++;
-      else if (this.c[q] === BLACK || this.c[q] === WHITE) this.libs[this.head[q]]--;
+      const q = p + (dirs[k] ?? 0),
+        cq = this.col(q);
+      if (cq === EMPTY) this.addLib(p, 1);
+      else if (cq === BLACK || cq === WHITE) this.addLib(this.hd(q), -1);
     }
     for (let k = 0; k < 4; k++) {
-      const q = p + d[k];
-      if (this.c[q] === me && this.head[q] !== this.head[p]) this.merge(this.head[p], this.head[q]);
+      const q = p + (dirs[k] ?? 0);
+      if (this.col(q) === me && this.hd(q) !== this.hd(p)) this.merge(this.hd(p), this.hd(q));
     }
+  }
+
+  /** 提掉 p 四周没有气的 op 棋块，并按提子数判断劫 */
+  private capture(p: number, op: number) {
+    const dirs = this.d;
     let captured = 0;
     const one = [-1];
     for (let k = 0; k < 4; k++) {
-      const q = p + d[k];
-      if (this.c[q] === op && this.libs[this.head[q]] === 0) captured += this.remove(this.head[q], one);
+      const q = p + (dirs[k] ?? 0);
+      if (this.col(q) === op && this.lib(this.hd(q)) === 0) captured += this.remove(this.hd(q), one);
     }
-    const h = this.head[p];
-    this.ko = captured === 1 && this.size[h] === 1 && this.countLibs(h, 2) === 1 ? one[0] : -1;
+    const h = this.hd(p);
+    this.ko = captured === 1 && this.sz(h) === 1 && this.countLibs(h, 2) === 1 ? (one[0] ?? -1) : -1;
   }
 
   /** 数子法判胜负 */
@@ -284,7 +328,8 @@ class GB {
         else {
           let seen = 0;
           for (let k = 0; k < 4; k++) {
-            const q = this.c[p + d[k]];
+            const dk = d[k] ?? 0;
+            const q = this.col(p + dk);
             if (q === BLACK || q === WHITE) seen |= q;
           }
           if (seen === BLACK) s++;
@@ -305,21 +350,23 @@ function playoutMove(b: GB, heavy: boolean, rng: Rng) {
     const d = b.d,
       lib = [0];
     for (let k = -1; k < 4; k++) {
-      const q = k < 0 ? b.last : b.last + d[k],
-        c = b.c[q];
+      const q = k < 0 ? b.last : b.last + (d[k] ?? 0),
+        c = b.col(q);
       if (c !== BLACK && c !== WHITE) continue;
-      if (b.countLibs(b.head[q], 2, lib) !== 1 || !b.legal(lib[0], me)) continue;
-      if (c !== me) return lib[0]; // 提子
+      if (b.countLibs(b.hd(q), 2, lib) !== 1) continue;
+      const only = lib[0] ?? 0;
+      if (!b.legal(only, me)) continue;
+      if (c !== me) return only; // 提子
       let free = 0; // 逃子：逃完至少两口气
-      for (let j = 0; j < 4; j++) if (b.c[lib[0] + d[j]] === EMPTY) free++;
-      if (free >= 2) return lib[0];
+      for (let k = 0; k < 4; k++) if (b.col(only + (d[k] ?? 0)) === EMPTY) free++;
+      if (free >= 2) return only;
     }
   }
   const n = b.ne;
   if (!n) return PASS;
   const start = rng.u32() % n;
   for (let i = 0; i < n; i++) {
-    const p = b.empty[(start + i) % n];
+    const p = b.empty[(start + i) % n] ?? 0;
     if (b.legal(p, me) && !b.isEye(p, me)) return p;
   }
   return PASS;
@@ -381,6 +428,18 @@ function newNode(i: number, move: number) {
   nRW[i] = 0;
 }
 
+/** 子结点 c 的选择值：胜率与 RAVE 胜率按访问次数加权，加上 UCT 的探索项；lg 为父结点访问次数加 1 的对数 */
+function uct(c: number, lg: number, passes: number) {
+  const n = nN[c] ?? 0,
+    rn = nRN[c] ?? 0;
+  const q = n ? (nW[c] ?? 0) / n : 0.5,
+    aq = rn ? (nRW[c] ?? 0) / rn : 0.5;
+  const beta = rn ? rn / (rn + n + (rn * n) / RAVE_K) : 0;
+  let v = n || rn ? (1 - beta) * q + beta * aq : 1.1;
+  if (nMove[c] === PASS && passes === 0) v -= 0.25; // 没人停着时先别急着停
+  return v + UCT_C * Math.sqrt(lg / (n + 1));
+}
+
 class Search {
   root = new GB();
   tmp = new GB();
@@ -420,13 +479,13 @@ class Search {
       bestS = -500;
     const early = root.moves < (root.N * root.N) / 4;
     for (let i = 0; i < root.ne; i++) {
-      const p = root.empty[i];
+      const p = root.empty[i] ?? 0;
       if (!this.realLegal(root, p) || root.isEye(p, me)) continue;
       t.copyFrom(root);
       const before = t.ne;
       t.play(p);
       const caught = t.ne - before + 1; // 提掉的子数
-      const libs = t.countLibs(t.head[p], 3);
+      const libs = t.countLibs(t.hd(p), 3);
       let s = this.rng.u32() % 20;
       s += caught * 400;
       if (!caught && libs === 1)
@@ -434,9 +493,10 @@ class Search {
       else if (libs === 2 && !caught) s -= 60;
       const d = root.d;
       for (let k = 0; k < 4; k++) {
+        const dk = d[k] ?? 0;
         // 救出被叫吃的己方棋块
-        const q = p + d[k];
-        if (root.c[q] === me && root.countLibs(root.head[q], 2) === 1 && libs >= 2) s += 500 + 40 * root.size[root.head[q]];
+        const q = p + dk;
+        if (root.col(q) === me && root.countLibs(root.hd(q), 2) === 1 && libs >= 2) s += 500 + 40 * root.sz(root.hd(q));
       }
       const x = (p % root.W) - 1,
         y = Math.floor(p / root.W) - 1;
@@ -464,7 +524,7 @@ class Search {
     if (nodeCount + b.ne + 1 >= NODE_POOL) return 0;
     let n = 0;
     for (let i = 0; i < b.ne; i++) {
-      const p = b.empty[i];
+      const p = b.empty[i] ?? 0;
       if (b.isEye(p, me) || !(atRoot ? this.realLegal(b, p) : b.legal(p, me))) continue;
       newNode(first + n++, p);
     }
@@ -476,23 +536,17 @@ class Search {
   }
 
   select(node: number, passes: number) {
-    const lg = Math.log(nN[node] + 1),
-      c0 = nChild[node];
+    // 搜索树的结构数组：下标都是已分配的结点，?? 只为满足类型检查
+    const lg = Math.log((nN[node] ?? 0) + 1),
+      c0 = nChild[node] ?? 0,
+      count = nChildCount[node] ?? 0;
     let best = -1e9,
       pick = c0;
-    for (let i = 0; i < nChildCount[node]; i++) {
-      const c = c0 + i,
-        n = nN[c],
-        rn = nRN[c];
-      const q = n ? nW[c] / n : 0.5,
-        aq = rn ? nRW[c] / rn : 0.5;
-      const beta = rn ? rn / (rn + n + (rn * n) / RAVE_K) : 0;
-      let v = n || rn ? (1 - beta) * q + beta * aq : 1.1;
-      if (nMove[c] === PASS && passes === 0) v -= 0.25; // 没人停着时先别急着停
-      v += UCT_C * Math.sqrt(lg / (n + 1));
-      if (v > best) {
-        best = v;
-        pick = c;
+    for (let i = 0; i < count; i++) {
+      const value = uct(c0 + i, lg, passes);
+      if (value > best) {
+        best = value;
+        pick = c0 + i;
       }
     }
     return pick;
@@ -512,9 +566,9 @@ class Search {
     path[np] = 0;
     mover[np] = b.toMove;
     np++;
-    while (nChild[node] >= 0 && b.passes < 2 && np < 1000) {
+    while ((nChild[node] ?? -1) >= 0 && b.passes < 2 && np < 1000) {
       const ch = this.select(node, b.passes),
-        m = nMove[ch];
+        m = nMove[ch] ?? PASS;
       if (m !== PASS && !amaf[m]) amaf[m] = b.toMove;
       b.play(m);
       node = ch;
@@ -523,9 +577,9 @@ class Search {
       np++;
     }
     const threshold = b.N >= 13 ? 3 : 1;
-    if (b.passes < 2 && nChild[node] < 0 && nN[node] >= threshold && this.expand(node, b, false)) {
+    if (b.passes < 2 && (nChild[node] ?? 0) < 0 && (nN[node] ?? 0) >= threshold && this.expand(node, b, false)) {
       const ch = this.select(node, b.passes),
-        m = nMove[ch];
+        m = nMove[ch] ?? PASS;
       if (m !== PASS && !amaf[m]) amaf[m] = b.toMove;
       b.play(m);
       path[np] = ch;
@@ -534,24 +588,25 @@ class Search {
     }
     const winner = b.passes >= 2 ? b.winner() : playout(b, this.level >= 2, this.rng, amaf);
     // 回传：结点 i 的这一手由 mover[i-1] 落下
-    nN[0]++;
+    nN[0] = (nN[0] ?? 0) + 1;
     for (let i = 1; i < np; i++) {
-      const c = path[i];
-      nN[c]++;
-      if (winner === mover[i - 1]) nW[c] += 1;
+      const c = path[i] ?? 0;
+      nN[c] = (nN[c] ?? 0) + 1;
+      if (winner === mover[i - 1]) nW[c] = (nW[c] ?? 0) + 1;
     }
     // RAVE：路径上每个结点的孩子里，凡是之后由同一方先下到的点都算一次
     for (let i = 0; i < np; i++) {
-      const P = path[i];
-      if (nChild[P] < 0) continue;
+      const P = path[i] ?? 0,
+        c0 = nChild[P] ?? -1;
+      if (c0 < 0) continue;
       const who = mover[i],
-        c0 = nChild[P];
-      for (let k = 0; k < nChildCount[P]; k++) {
+        count = nChildCount[P] ?? 0;
+      for (let k = 0; k < count; k++) {
         const c = c0 + k,
-          m = nMove[c];
+          m = nMove[c] ?? PASS;
         if (m !== PASS && amaf[m] === who) {
-          nRN[c]++;
-          if (winner === who) nRW[c] += 1;
+          nRN[c] = (nRN[c] ?? 0) + 1;
+          if (winner === who) nRW[c] = (nRW[c] ?? 0) + 1;
         }
       }
     }
@@ -572,17 +627,20 @@ export function goThink(snap: GoSnap, level: number, opt: GoThinkOptions = {}): 
   } else {
     const budget = (level >= 2 ? 3.0 : 1.2) * (opt.timeScale ?? 1) * 1000,
       t0 = performance.now();
-    while (nChildCount[0] > 1 && performance.now() - t0 < budget && !(opt.cancelled && opt.cancelled())) {
+    while ((nChildCount[0] ?? 0) > 1 && performance.now() - t0 < budget && !(opt.cancelled && opt.cancelled())) {
       for (let i = 0; i < 16; i++) s.iterate();
     }
   }
   let most = -1,
     p = PASS;
-  for (let i = 0; i < nChildCount[0]; i++) {
-    const c = nChild[0] + i;
-    if (nN[c] > most) {
-      most = nN[c];
-      p = nMove[c];
+  const count = nChildCount[0] ?? 0,
+    c0 = nChild[0] ?? 0;
+  for (let i = 0; i < count; i++) {
+    const c = c0 + i,
+      visits = nN[c] ?? 0;
+    if (visits > most) {
+      most = visits;
+      p = nMove[c] ?? PASS;
     }
   }
   return s.toXY(p);
@@ -609,12 +667,13 @@ export function estimateDead(b: Board, N: number, komi: number): { x: number; y:
         if (c === EMPTY) {
           let seen = 0;
           for (let k = 0; k < 4; k++) {
-            const q = work.c[p + d[k]];
+            const dk = d[k] ?? 0;
+            const q = work.col(p + dk);
             if (q === BLACK || q === WHITE) seen |= q;
           }
           c = seen === 3 ? EMPTY : seen;
         }
-        own[x * MAXN + y] += c === BLACK ? 1 : c === WHITE ? -1 : 0;
+        own[x * MAXN + y] = (own[x * MAXN + y] ?? 0) + (c === BLACK ? 1 : c === WHITE ? -1 : 0);
       }
   }
   // 一块棋多数子最后都归了对方，就判为死子
@@ -624,7 +683,7 @@ export function estimateDead(b: Board, N: number, komi: number): { x: number; y:
     for (let y = 0; y < N; y++) {
       const c = b[x * MAXN + y];
       if (c === EMPTY || done[x * MAXN + y]) continue;
-      const h = root.head[root.idx(x, y)];
+      const h = root.hd(root.idx(x, y));
       let s = h,
         total = 0,
         sum = 0;
@@ -633,10 +692,10 @@ export function estimateDead(b: Board, N: number, komi: number): { x: number; y:
         const sx = (s % root.W) - 1,
           sy = Math.floor(s / root.W) - 1;
         done[sx * MAXN + sy] = 1;
-        sum += (own[sx * MAXN + sy] * (c === BLACK ? 1 : -1)) / runs;
+        sum += ((own[sx * MAXN + sy] ?? 0) * (c === BLACK ? 1 : -1)) / runs;
         total++;
         group.push({ x: sx, y: sy });
-        s = root.nxt[s];
+        s = root.next(s);
       } while (s !== h);
       if (sum / total < -0.05) dead.push(...group);
     }
