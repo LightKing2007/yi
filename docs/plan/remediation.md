@@ -56,7 +56,7 @@
 | P2-04 | `server/config.ts` 集中解析与校验配置 | ARC-042 | 随阶段 5 |
 | P2-05 | TLS 与 CSP 收紧 | F-08；SEC-010 至 SEC-013 | 随阶段 4 |
 | P2-06 | 指标与告警 | OPS-071 至 OPS-075 | 进行中（#92 `/metrics` 与每分钟的指标快照，随下一个版本上线；D-4 决定暂不建立告警通知；上线后 60 分钟内的自动检查与回滚（OPS-047）待实施） |
-| P2-07 | 性能基准脚本与服务端压测 | TST-041 至 TST-046 | 待实施 |
+| P2-07 | 性能基准脚本与服务端压测 | TST-041 至 TST-046 | 已完成（`scripts/bench.mjs` 测电脑思考、服务端消息处理、下载页面与打包体积；#95 `scripts/loadtest.mjs` 与“服务端压测”工作流以真实连接压测，2026-10-06 首次实测，TST-045 各项达标。10-edge-cases.md 中“服务器重启后重连风暴”的压测未包括在内） |
 | P2-08 | Electron Fuses | SEC-033 | 待实施 |
 | P2-09 | `SECURITY.md` | SEC-063 | 待实施 |
 | P2-10 | 开启 `noImplicitOverride`、`noUncheckedIndexedAccess` 并整改 | F-32；COD-050 | 待实施 |
