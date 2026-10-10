@@ -7,6 +7,7 @@ import path from 'node:path';
 import { generateIdentity, identityToRecipient } from 'age-encryption';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { checkOutside, decrypt, keygen, latestBackup, objectKeys, ossError, putObject, readConfig, signV4, upload } from '../scripts/offsite';
+import { must } from './must';
 
 let dir = '';
 beforeEach(() => {
@@ -150,8 +151,9 @@ describe('上传', () => {
       YI_BACKUP_DIR: dir,
     };
     await upload(env, { fetch: fakeOss(sent), now });
-    await expect(decrypt(sent[0].body, other)).rejects.toThrow();
-    await expect(decrypt(sent[0].body, mine)).rejects.toThrow(SyntaxError);
+    const body = must(sent[0], '上传的请求').body;
+    await expect(decrypt(body, other)).rejects.toThrow();
+    await expect(decrypt(body, mine)).rejects.toThrow(SyntaxError);
   });
 });
 

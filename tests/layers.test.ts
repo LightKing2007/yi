@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { refsOf, resolve, sourceFiles, type Ref } from './importGraph';
+import { must } from './must';
 
 const ROOT = path.join(__dirname, '..');
 
@@ -53,11 +54,14 @@ function layerOf(file: string): string | null {
   const parts = file.split('/');
   if (parts[0] === 'server' || parts[0] === 'electron') return parts[0];
   if (parts[0] !== 'src') return null;
-  return parts.length === 2 ? parts[1].replace(/\.tsx?$/, '') : parts[1];
+  const sub = parts[1];
+  if (sub === undefined) return null;
+  return parts.length === 2 ? sub.replace(/\.tsx?$/, '') : sub;
 }
 
 /** 该层能否使用这个包 */
-const packageAllowed = (layer: string, pkg: string) => PACKAGES[layer].includes(pkg) || (pkg.startsWith('node:') && PACKAGES[layer].includes('node:*'));
+const packageAllowed = (layer: string, pkg: string) =>
+  (PACKAGES[layer] ?? []).includes(pkg) || (pkg.startsWith('node:') && (PACKAGES[layer] ?? []).includes('node:*'));
 
 /** 一处引用的问题；没有问题时为 null */
 function problemOf(file: string, from: string, ref: Ref): string | null {
@@ -67,7 +71,7 @@ function problemOf(file: string, from: string, ref: Ref): string | null {
   if ('unresolved' in target) return `${at} 找不到 ${ref.spec}`;
   if ('pkg' in target) return packageAllowed(from, target.pkg) ? null : `${at} ${from} 层不允许使用 ${target.pkg}`;
   const to = layerOf(target.file);
-  return to === from || (to !== null && ALLOWED[from].includes(to)) ? null : `${at} ${from} → ${to ?? target.file}（${ref.spec}）`;
+  return to === from || (to !== null && (ALLOWED[from] ?? []).includes(to)) ? null : `${at} ${from} → ${to ?? target.file}（${ref.spec}）`;
 }
 
 /** 一个文件中违反分层的引用（ARC-011、ARC-012）；只有类型的引用不算（ARC-013） */
@@ -185,14 +189,17 @@ function standardTable() {
   const table = new Map<string, [string[], string[]]>();
   for (const row of rows) {
     if (!row.startsWith('| ')) break;
-    const [layer, , deps, pkgs] = row
+    const cells = row
       .split('|')
       .slice(1, -1)
       .map(cell => cell.trim());
+    const layer = must(cells[0], `层名：${row}`),
+      deps = must(cells[2], `允许依赖的层：${row}`),
+      pkgs = must(cells[3], `允许使用的包：${row}`);
     // “上述全部（除 …）”：表中排在前面的各层
     const layers = deps.startsWith('上述全部') ? [...table.keys()] : deps === '—' || deps.startsWith('无') ? [] : deps.split('、');
     // 包名写在反引号中，括号里的说明不算；“无”即没有
-    table.set(layer, [layers, [...pkgs.matchAll(/`([^`]+)`/g)].map(found => found[1])]);
+    table.set(layer, [layers, [...pkgs.matchAll(/`([^`]+)`/g)].map(found => found[1] ?? '')]);
   }
   return table;
 }
@@ -202,8 +209,8 @@ describe('规则表与规范一致（ARC-014）', () => {
     const table = standardTable();
     expect([...table.keys()].sort()).toEqual(Object.keys(ALLOWED).sort());
     for (const [layer, [deps, pkgs]] of table) {
-      expect([...deps].sort(), `${layer} 允许依赖的层`).toEqual([...ALLOWED[layer]].sort());
-      expect([...pkgs].sort(), `${layer} 允许的第三方包`).toEqual([...PACKAGES[layer]].sort());
+      expect([...deps].sort(), `${layer} 允许依赖的层`).toEqual([...(ALLOWED[layer] ?? [])].sort());
+      expect([...pkgs].sort(), `${layer} 允许的第三方包`).toEqual([...(PACKAGES[layer] ?? [])].sort());
     }
   });
 });

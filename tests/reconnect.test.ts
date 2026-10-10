@@ -5,6 +5,7 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { CLOSE_CODE, GRACE_SECS } from '../src/shared/protocol';
 import { advance, fake, lastSocket, loadClient, logs, pump, resetNet, sockets, startGame, type Peer, type Client, type State } from './fakeNet';
+import { must } from './must';
 
 let net: Client, state: State;
 beforeAll(async () => ({ net, state } = await loadClient()));
@@ -29,7 +30,7 @@ describe('断线重连：完全抖动的指数退避（API-050）', () => {
     fake.netDown = true;
     const first = sockets.length,
       t0 = fake.now;
-    sockets[first - 1].cut();
+    must(sockets[first - 1], '当前连接').cut();
     pump();
     advance(GRACE_SECS, peer);
     const times = sockets.slice(first).map(sock => sock.at - t0);

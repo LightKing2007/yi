@@ -67,7 +67,7 @@ const TS_SUFFIXES = ['', '.ts', '.tsx', '/index.ts', '/index.tsx'];
 /** 包名：`@scope/name/sub` 取 `@scope/name`，`name/sub` 取 `name`，Node.js 内置模块保留 `node:` 前缀 */
 export function packageOf(spec: string) {
   const parts = spec.split('/');
-  return spec.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0];
+  return spec.startsWith('@') ? parts.slice(0, 2).join('/') : (parts[0] ?? spec);
 }
 
 /** 解析一处引用：相对路径找仓库中的文件，其余按包名 */

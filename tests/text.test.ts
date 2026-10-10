@@ -11,6 +11,7 @@ import { TABLE } from '../src/i18n/table';
 import { INFO_PAGES, releasedLog, type InfoLine } from '../src/ui/info';
 // @ts-expect-error 纯 JS 脚本，没有类型声明
 import { changelog } from '../scripts/changelog.mjs';
+import { must } from './must';
 
 const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const han = (s: string) => /[一-鿿]/.test(s);
@@ -29,7 +30,8 @@ export function punctuationIssues(text: string): string[] {
   if (/[,;:!?()"']/.test(text)) issues.push(`半角标点：${text}`);
   const open: string[] = [];
   for (const ch of text) {
-    if (ch in PAIRS) open.push(PAIRS[ch]);
+    const closing = PAIRS[ch];
+    if (closing !== undefined) open.push(closing);
     else if (CLOSING.has(ch) && open.pop() !== ch) return [...issues, `不成对：${text}`];
   }
   return open.length ? [...issues, `不成对：${text}`] : issues;
@@ -40,7 +42,11 @@ const paragraphIssues = (text: string) => [...punctuationIssues(text), ...(han(t
 const cmp = (a: string, b: string) => {
   const x = a.split('.').map(Number),
     y = b.split('.').map(Number);
-  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i];
+  for (let i = 0; i < 3; i++) {
+    const xi = x[i] ?? 0,
+      yi = y[i] ?? 0;
+    if (xi !== yi) return xi - yi;
+  }
   return 0;
 };
 
@@ -59,7 +65,7 @@ describe('说明文字', () => {
 
 /** 安装程序的文字：`!define 名称 "值"`，值中的 `$\r$\n` 为换行；名称以 PAGE_TEXT 结尾的是正文，按空行分段 */
 function installerTexts(source: string) {
-  const defines = [...source.matchAll(/^\s*!define\s+(\w+)\s+"(.*)"\s*$/gm)].map(m => ({ name: m[1], value: m[2].replaceAll('$\\r$\\n', '\n') }));
+  const defines = [...source.matchAll(/^\s*!define\s+(\w+)\s+"(.*)"\s*$/gm)].map(m => ({ name: m[1] ?? '', value: (m[2] ?? '').replaceAll('$\\r$\\n', '\n') }));
   return {
     paragraphs: defines.filter(def => def.name.endsWith('PAGE_TEXT')).flatMap(def => def.value.split('\n\n')),
     labels: defines.filter(def => !def.name.endsWith('PAGE_TEXT')).map(def => def.value),
@@ -74,10 +80,10 @@ function pageTexts(html: string) {
   const body = html.replace(/<style>[\s\S]*?<\/style>/, '');
   const decode = (text: string) => text.replace(/&#(\d+);/g, (_, code: string) => String.fromCharCode(Number(code))).trim();
   const paragraphs = [...body.matchAll(/<(p|li)\b([^>]*)>([\s\S]*?)<\/\1>/g)]
-    .filter(m => !PAGE_TAGLINES.some(cls => m[2].includes(`class="${cls}"`)))
-    .map(m => decode(m[3].replace(/<[^>]+>/g, '')));
+    .filter(m => !PAGE_TAGLINES.some(cls => (m[2] ?? '').includes(`class="${cls}"`)))
+    .map(m => decode((m[3] ?? '').replace(/<[^>]+>/g, '')));
   const segments = body.split(/<[^>]+>/).map(decode);
-  const attributes = [...body.matchAll(/\s(?:content|alt|aria-label|title)="([^"]*)"/g)].map(m => decode(m[1]));
+  const attributes = [...body.matchAll(/\s(?:content|alt|aria-label|title)="([^"]*)"/g)].map(m => decode(m[1] ?? ''));
   return { paragraphs, others: [...segments, ...attributes].filter(han) };
 }
 
@@ -133,10 +139,11 @@ describe('更新日志', () => {
   const log: { version: string; lines: string[] }[] = changelog();
 
   it('版本号从新到旧排列，每一节都有内容', () => {
-    for (let i = 0; i < log.length; i++) {
-      expect(log[i].version).toMatch(/^\d+\.\d+\.\d+$/);
-      expect(log[i].lines.length, log[i].version).toBeGreaterThan(0);
-      if (i) expect(cmp(log[i - 1].version, log[i].version), `${log[i - 1].version} 应在 ${log[i].version} 之后`).toBeGreaterThan(0);
+    for (const [i, section] of log.entries()) {
+      expect(section.version).toMatch(/^\d+\.\d+\.\d+$/);
+      expect(section.lines.length, section.version).toBeGreaterThan(0);
+      const prev = log[i - 1];
+      if (prev) expect(cmp(prev.version, section.version), `${prev.version} 应在 ${section.version} 之后`).toBeGreaterThan(0);
     }
   });
 
@@ -146,7 +153,7 @@ describe('更新日志', () => {
   });
 
   it('最上面一节是当前版本，或者是正在准备的下一个版本', () => {
-    expect(cmp(log[0].version, pkg.version)).toBeGreaterThanOrEqual(0);
+    expect(cmp(must(log[0], '更新日志的第一节').version, pkg.version)).toBeGreaterThanOrEqual(0);
     expect(
       log.some(s => s.version === pkg.version),
       `更新日志里没有当前版本 ${pkg.version}`,

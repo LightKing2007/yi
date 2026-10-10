@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 依据 | [基线审查报告](../audits/2026-10-02-baseline.md)、[工程规范](../standards/00-general.md) |
-| 修订日期 | 2026-10-05 |
+| 修订日期 | 2026-10-10 |
 | 维护方式 | 每完成一项，把状态改为“已完成”并注明 PR 编号；新的审计发现按 [12-audit.md](../standards/12-audit.md) 第 3 节分级后登记 |
 | 最近一次审计 | [2026-10-03 全面审计](../audits/2026-10-03-full-audit.md)：登记 P1-19、P2-15 至 P2-21 |
 
@@ -59,7 +59,7 @@
 | P2-07 | 性能基准脚本与服务端压测 | TST-041 至 TST-046 | 已完成（`scripts/bench.mjs` 测电脑思考、服务端消息处理、下载页面与打包体积；#95 `scripts/loadtest.mjs` 与“服务端压测”工作流以真实连接压测，2026-10-06 首次实测，TST-045 各项达标。10-edge-cases.md 中“服务器重启后重连风暴”的压测未包括在内） |
 | P2-08 | Electron Fuses | SEC-033 | 待实施 |
 | P2-09 | `SECURITY.md` | SEC-063 | 已完成（[SECURITY.md](../../SECURITY.md)：支持的版本、经 GitHub 私下报告提交、范围与测试守则、72 小时内确认、按 SEC-060 的期限修复、修复后 30 日内公开说明；2026-10-06 开启仓库的私下报告漏洞功能） |
-| P2-10 | 开启 `noImplicitOverride`、`noUncheckedIndexedAccess` 并整改 | F-32；COD-050 | 待实施 |
+| P2-10 | 开启 `noImplicitOverride`、`noUncheckedIndexedAccess` 并整改 | F-32；COD-050 | 已完成（两项均在 `tsconfig.json` 中开启。`noImplicitOverride` 随 #100 开启；`noUncheckedIndexedAccess` 分 6 批整改约 667 处，即 #100、#102、#103、#104、#106 与本项的最后一批，过渡用的 `tsconfig.strict.json` 已删除。机械性改动所触及函数的存量违规由 P2-12 整改） |
 | P2-11 | 建立 `docs/adr/`，补录近期决策 | ARC-060 | 待实施 |
 | P2-12 | 存量超长文件与函数拆分（`server/rooms.ts`、`src/online/client.ts`、`src/core/game.ts` 等），含 P2-10 的机械性改动所触及、按总则第 4.3.3 条未一并整改的函数（电脑思考、声音合成、渲染等）；文档注释覆盖率提升至 ≥ 80% | F-30；COD-031、COD-037、COD-040 | 待实施 |
 | P2-13 | `core` 层去除对 `performance.now`、`Math.random` 的直接调用 | ARC-020 | 部分完成（#21：`gomokuAI.ts` 的思考时限改用注入的时钟；`goAI.ts` 待整改） |

@@ -45,7 +45,7 @@ const UNTRANSLATED: Record<string, Record<string, string>> = {
 };
 
 /** 格式占位符的类型序列，与 TF() 的写法一致：%d %s %f 及 %.1f 等精度写法，%% 不计 */
-const placeholders = (text: string) => [...text.matchAll(/%(%|(?:\.\d+)?[dsfiu])/g)].map(m => m[1].slice(-1)).filter(conv => conv !== '%');
+const placeholders = (text: string) => [...text.matchAll(/%(%|(?:\.\d+)?[dsfiu])/g)].map(m => (m[1] ?? '').slice(-1)).filter(conv => conv !== '%');
 
 describe('整数写成汉字 hanInt', () => {
   const cases: [number, string][] = [

@@ -15,7 +15,10 @@ const go9 = gameConfig(GameType.Go, 9);
 
 function posWith(stones: number[], toMove = BLACK): Pos {
   const p = newPos();
-  for (let i = 0; i < stones.length; i += 3) p.b[at(stones[i], stones[i + 1])] = stones[i + 2];
+  for (let i = 0; i < stones.length; i += 3) {
+    const [x = 0, y = 0, color = 0] = stones.slice(i, i + 3);
+    p.b[at(x, y)] = color;
+  }
   p.toMove = toMove;
   return p;
 }

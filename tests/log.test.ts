@@ -1,6 +1,7 @@
 /** 服务端结构化日志：JSON Lines 的字段、级别筛选、单行截断、同一事件码的汇总、journald 级别前缀（OPS-060 至 OPS-063） */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { EVENT_MAX_PER_SEC, LINE_MAX_BYTES, Logger, MSG_MAX_CHARS, parseLogLevel, processLogger, type LoggerOptions } from '../server/log';
+import { must } from './must';
 
 /** 一秒的毫秒数：汇总按秒计 */
 const SEC_MS = 1000;
@@ -36,14 +37,14 @@ describe('行格式', () => {
     log('warn', 'store.write-failed', { err });
     log('error', 'internal.error', { err: 'boom' });
     const [first, second, third] = parsed();
-    expect(first.err).toEqual({ name: 'RangeError', message: '磁盘已满', stack: err.stack });
+    expect(first?.err).toEqual({ name: 'RangeError', message: '磁盘已满', stack: err.stack });
     expect(second).not.toHaveProperty('err');
-    expect(third.err).toEqual({ name: 'NonError', message: 'boom' });
+    expect(third?.err).toEqual({ name: 'NonError', message: 'boom' });
   });
 
   it('msg 超过 200 字符时截断并以省略号结尾，按字符计', () => {
     logger().log('info', 'server.start', { msg: '弈'.repeat(MSG_MAX_CHARS + 50) });
-    const msg = String(parsed()[0].msg);
+    const msg = String(parsed()[0]?.msg);
     expect(Array.from(msg)).toHaveLength(MSG_MAX_CHARS);
     expect(msg.endsWith('…')).toBe(true);
   });
@@ -80,15 +81,15 @@ describe('级别', () => {
     const log = logger({ syslogPrefix: true, level: 'debug' }).log;
     for (const level of ['error', 'warn', 'info', 'debug'] as const) log(level, 'a.b');
     expect(lines.map(line => line.slice(0, 3))).toEqual(['<3>', '<4>', '<6>', '<7>']);
-    expect(JSON.parse(lines[0].slice(3))).toEqual(expect.objectContaining({ level: 'error', event: 'a.b' }));
+    expect(JSON.parse(must(lines[0], '日志行').slice(3))).toEqual(expect.objectContaining({ level: 'error', event: 'a.b' }));
   });
 });
 
 describe('单行截断（OPS-063）', () => {
   it('超过 8 KB 时缩短最长的字符串并加 truncated，整行不超过 8 KB 且仍是 JSON', () => {
     logger().log('error', 'internal.error', { msg: '出错', detail: '棋'.repeat(5000), err: new Error('x'.repeat(3000)) });
-    expect(Buffer.byteLength(lines[0])).toBeLessThanOrEqual(LINE_MAX_BYTES);
-    const row = parsed()[0];
+    expect(Buffer.byteLength(must(lines[0], '日志行'))).toBeLessThanOrEqual(LINE_MAX_BYTES);
+    const row = must(parsed()[0], '日志行');
     expect(row.truncated).toBe(true);
     expect(row.msg).toBe('出错');
     expect(String(row.detail).endsWith('…')).toBe(true);
