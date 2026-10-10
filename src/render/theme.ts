@@ -8,7 +8,7 @@ export interface Theme {
   iconShadow: number;
 }
 
-export const THEMES: Theme[] = [
+export const THEMES: readonly [Theme, Theme] = [
   { bgTop: [0.945, 0.937, 0.922], bgBot: [0.878, 0.868, 0.85], boardShadow: 0.3, iconShadow: 0.7 },
   { bgTop: [0.125, 0.122, 0.13], bgBot: [0.062, 0.06, 0.066], boardShadow: 0.62, iconShadow: 0.9 },
 ];

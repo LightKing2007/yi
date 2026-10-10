@@ -4,7 +4,7 @@
  */
 import { game, boardView } from '../app/state';
 import { sfx } from '../audio';
-import { BLACK, MAXN } from '../core/types';
+import { BLACK } from '../core/types';
 import { layoutForN, pt, type Layout } from '../render/layout';
 import { rotAxis, type Painter } from '../render/painter';
 import { BOWL_SR, bowlPlace } from '../scene/bowls';
@@ -53,7 +53,7 @@ export function startGather(now: number) {
         x,
         y,
         c,
-        seed: boardView.seed[x * MAXN + y],
+        seed: boardView.seedAt(x, y),
         landed: false,
         delay: d,
         tx: Math.cos(a) * r,

@@ -56,7 +56,9 @@ export class Session {
     return this.seats[color];
   }
   private get turn() {
-    return this.seats[this.game.cur.toMove];
+    const seat = this.seats[this.game.cur.toMove];
+    if (!seat) throw new Error('会话尚未配置座位'); // configure 之后两个座位都在
+    return seat;
   }
 
   /** 此刻轮到本机的人落子（联机时还要看能不能落：等对方回应申请时不能） */

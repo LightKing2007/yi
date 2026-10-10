@@ -76,6 +76,20 @@ export class BoardView implements GameListener {
     this.reseed();
   }
 
+  // 下列取值方法按交叉点读取棋子的动画状态：坐标都在棋盘内，取不到时的返回值与清空后的初值相同
+  /** (x, y) 处棋子的纹理种子 */
+  seedAt(x: number, y: number) {
+    return this.seed[at(x, y)] ?? 0;
+  }
+  /** (x, y) 处棋子落下的时刻 */
+  placedAt(x: number, y: number) {
+    return this.placeT[at(x, y)] ?? -10;
+  }
+  /** (x, y) 处棋子重新出现的时刻 */
+  appearAt(x: number, y: number) {
+    return this.appearT[at(x, y)] ?? -10;
+  }
+
   private reseed() {
     for (let i = 0; i < this.seed.length; i++) this.seed[i] = (Math.random() * 256) | 0;
   }
@@ -132,12 +146,12 @@ export class BoardView implements GameListener {
   undone(old: Pos, cur: Pos, wasFinished: boolean, dead: Uint8Array, t: number) {
     const k = animK();
     this.rw = [];
-    for (let i = 0; i < old.b.length; i++) {
+    for (const [i, c] of old.b.entries()) {
       const x = Math.floor(i / MAXN),
         y = i % MAXN;
-      if (old.b[i] && !cur.b[i]) {
-        if (this.rw.length < 8) this.rw.push({ x, y, c: old.b[i], t0: t + (x === old.lastX && y === old.lastY ? 0 : 0.14 * k) });
-      } else if (!old.b[i] && cur.b[i]) this.appearT[i] = t + 0.3 * k;
+      if (c && !cur.b[i]) {
+        if (this.rw.length < 8) this.rw.push({ x, y, c, t0: t + (x === old.lastX && y === old.lastY ? 0 : 0.14 * k) });
+      } else if (!c && cur.b[i]) this.appearT[i] = t + 0.3 * k;
       else if (wasFinished && dead[i]) this.appearT[i] = t;
     }
     this.clearEnd();

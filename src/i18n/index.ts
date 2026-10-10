@@ -39,13 +39,14 @@ export function hanInt(n: number): string {
   for (let m = n; m > 0 && d.length < 6; m = Math.floor(m / 10)) d.push(m % 10);
   let zero = false;
   for (let i = d.length - 1; i >= 0; i--) {
-    if (d[i] === 0) {
+    const digit = d[i] ?? 0; // i 在 d 的范围内
+    if (digit === 0) {
       zero = true;
       continue;
     }
     if (zero && i < d.length - 1) out += DIG[0];
     zero = false;
-    if (!(i === 1 && d[i] === 1 && d.length === 2)) out += DIG[d[i]]; // 十九而非一十九
+    if (!(i === 1 && digit === 1 && d.length === 2)) out += DIG[digit]; // 十九而非一十九
     out += UNIT[Math.min(i, 4)];
   }
   return out;

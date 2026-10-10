@@ -92,8 +92,9 @@ export class Game {
     if (this.events.length < 16) this.events.push(e);
   }
 
+  /** (x, y) 处的棋子；棋盘外为 EMPTY */
   b(x: number, y: number) {
-    return this.cur.b[x * MAXN + y];
+    return this.cur.b[x * MAXN + y] ?? EMPTY;
   }
   inB(x: number, y: number) {
     return x >= 0 && y >= 0 && x < this.N && y < this.N;

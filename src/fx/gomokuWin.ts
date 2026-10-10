@@ -6,7 +6,7 @@ import { easeOut } from '../core/types';
 import { pt, type Layout } from '../render/layout';
 import type { Painter } from '../render/painter';
 import { ensureBlowSim, emitBlowDust } from './blow';
-import { WIN_HIT, WIN_RIPPLE, WIN_STAGGER, drawLightBurst, drawShockwave, emit, rnd, winClock } from './fx';
+import { WIN_HIT, WIN_RIPPLE, WIN_STAGGER, drawLightBurst, drawShockwave, emit, rnd, winClock, winEnds } from './fx';
 export { winIndex } from './fx';
 
 /** 连珠第 i 颗子的点亮时刻：从最后落下的一子向两端扩散 */
@@ -20,9 +20,9 @@ export function winDelay(i: number) {
 }
 
 function winCenter(L: Layout) {
-  const w = game.win,
-    a = pt(L, w[0].x, w[0].y),
-    b = pt(L, w[w.length - 1].x, w[w.length - 1].y);
+  const { first, last } = winEnds(),
+    a = pt(L, first.x, first.y),
+    b = pt(L, last.x, last.y);
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }
 
@@ -89,9 +89,9 @@ export function winUpdate(L: Layout, now: number, dt: number) {
     // 连珠上方持续升起的余烬
     const rate = 34 * (1 - t / 3.2) + 6,
       n = Math.floor(rate * dt + Math.random());
-    const w = g.win,
-      a = pt(L, w[0].x, w[0].y),
-      b = pt(L, w[w.length - 1].x, w[w.length - 1].y);
+    const { first, last } = winEnds(),
+      a = pt(L, first.x, first.y),
+      b = pt(L, last.x, last.y);
     for (let k = 0; k < n; k++) {
       const u = Math.random();
       emit({
@@ -162,8 +162,9 @@ export function drawWinOver(p: Painter, L: Layout, now: number) {
     drawLightBurst(p, L, wc.x, wc.y, t, L.board.w * 0.8);
     if (g.forfeit) return;
     // 贯穿五子的一道光：冲击时最亮，随后化作缓缓呼吸的余光
-    const a = pt(L, g.win[0].x, g.win[0].y),
-      b = pt(L, g.win[g.win.length - 1].x, g.win[g.win.length - 1].y);
+    const { first, last } = winEnds(),
+      a = pt(L, first.x, first.y),
+      b = pt(L, last.x, last.y);
     const len = Math.hypot(b.x - a.x, b.y - a.y) + R * 3;
     const deg = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI,
       grow = easeOut(Math.min(t / 0.3, 1));

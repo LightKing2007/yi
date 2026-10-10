@@ -16,7 +16,7 @@ interface BowlStone {
   ang: number;
   seed: number;
 }
-const piles: BowlStone[][] = [[], []];
+const piles: [BowlStone[], BowlStone[]] = [[], []];
 
 /** 罐里堆起的棋子：分三层，底层铺满罐底，上面两层越往上越集中在中间，按高度排序 */
 function genPiles() {
@@ -25,31 +25,30 @@ function genPiles() {
     rs = (Math.imul(rs, 1664525) + 1013904223) >>> 0;
     return (rs >>> 8) / 16777216;
   };
-  const layerR = [1, 0.78, 0.5],
-    layerZ = [0, 0.55, 1.05];
+  const layers = [
+    { r: 1, z: 0 },
+    { r: 0.78, z: 0.55 },
+    { r: 0.5, z: 1.05 },
+  ]; // 每层的范围（占可用半径的比例）与高度
   for (let b = 0; b < 2; b++) {
     const out: BowlStone[] = [];
     const lim = 0.8 - BOWL_SR * 1.05;
-    for (let layer = 0; layer < 3; layer++) {
-      const first = out.length;
+    for (const layer of layers) {
+      const same: BowlStone[] = []; // 只和同一层比，层与层之间自然叠压
       for (let tries = 0; tries < 5000 && out.length < BOWL_MAX; tries++) {
         const a = lcg() * 6.2832,
-          d = Math.sqrt(lcg()) * lim * layerR[layer];
+          d = Math.sqrt(lcg()) * lim * layer.r;
         const x = Math.cos(a) * d,
           y = Math.sin(a) * d;
-        let ok = true;
-        for (let k = first; k < out.length && ok; k++) {
-          // 只和同一层比，层与层之间自然叠压
-          const dx = x - out[k].x,
-            dy = y - out[k].y;
-          ok = dx * dx + dy * dy >= (BOWL_SR * 1.4) ** 2;
-        }
+        const ok = same.every(o => (x - o.x) * (x - o.x) + (y - o.y) * (y - o.y) >= (BOWL_SR * 1.4) ** 2);
         if (!ok) continue;
         const q = d / lim,
           rz = lcg(),
           rt = lcg(),
           rsd = lcg();
-        out.push({ x, y, z: layerZ[layer] + (1 - q * q) * 0.5 + rz * 0.2, tilt: q * 0.5 + (rt - 0.5) * 0.35, ang: a, seed: Math.floor(rsd * 255) });
+        const stone = { x, y, z: layer.z + (1 - q * q) * 0.5 + rz * 0.2, tilt: q * 0.5 + (rt - 0.5) * 0.35, ang: a, seed: Math.floor(rsd * 255) };
+        out.push(stone);
+        same.push(stone);
       }
     }
     out.sort((p, q) => p.z - q.z);
@@ -96,7 +95,7 @@ export class Bowls {
     g.use(p.bowl);
     g.quad(cx - Rb, cy - Rb, 2 * Rb, 2 * Rb, [0, (b ? 140 : 40) / 255, 0, 1]);
     const color = b ? WHITE : BLACK;
-    for (const o of piles[b]) {
+    for (const o of piles[b] ?? []) {
       const x = cx + o.x * Rb,
         y = cy + o.y * Rb,
         r = Rb * BOWL_SR * (1 + 0.07 * o.z);

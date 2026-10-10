@@ -5,7 +5,7 @@ import { goThink } from '../src/core/goAI';
 import { gomokuMove } from '../src/core/gomokuAI';
 import { renjuForbidden, Renju } from '../src/core/renju';
 import { autoMarkDead, goSnap, gomokuSnap } from '../src/core/snap';
-import { at, BLACK, EMPTY, GameType, WHITE } from '../src/core/types';
+import { at, BLACK, EMPTY, GameType, MAXN, WHITE } from '../src/core/types';
 
 const B = BLACK,
   W = WHITE;
@@ -101,6 +101,20 @@ describe('五子棋规则', () => {
     g.undo();
     expect(g.b(8, 8)).toBe(EMPTY);
     expect(view.rw).toEqual([{ x: 8, y: 8, c: WHITE, t0: expect.any(Number) }]);
+  });
+});
+
+describe('画面层按交叉点读取棋子状态', () => {
+  it('seedAt、placedAt、appearAt 读取 (x, y) 处的值，未设置与超出范围时为初值', () => {
+    const view = new BoardView();
+    view.seed[at(3, 4)] = 200;
+    view.seed[at(4, 3)] = 9;
+    view.placeT[at(3, 4)] = 1.5;
+    view.appearT[at(3, 4)] = 2.5;
+    expect([view.seedAt(3, 4), view.seedAt(4, 3)]).toEqual([200, 9]);
+    expect([view.placedAt(3, 4), view.placedAt(4, 3), view.placedAt(MAXN, MAXN)]).toEqual([1.5, -10, -10]);
+    expect([view.appearAt(3, 4), view.appearAt(4, 3), view.appearAt(MAXN, MAXN)]).toEqual([2.5, -10, -10]);
+    expect(view.seedAt(MAXN, MAXN)).toBe(0);
   });
 });
 

@@ -109,12 +109,17 @@ export class Light {
 
   private blendParams(mode: number, dt: number) {
     const to = MODES[mode > 0 && mode < MODES.length ? mode : 1];
+    if (!to) return; // 下标已限定在表内
     if (!this.cur) {
       this.cur = to.slice();
       return;
     }
     const a = 1 - Math.exp(-dt * this.blendRate);
-    for (let i = 0; i < 32; i++) this.cur[i] += (to[i] - this.cur[i]) * a;
+    const cur = this.cur;
+    for (let i = 0; i < 32; i++) {
+      const c = cur[i] ?? 0; // 两表都是 32 项
+      cur[i] = c + ((to[i] ?? 0) - c) * a;
+    }
   }
 
   /** 在一帧开画之前把光影算进离屏贴图 */
@@ -143,7 +148,7 @@ export class Light {
     g.use(d);
     const gl = g.gl;
     gl.uniform4fv(d.loc('P'), new Float32Array(cur));
-    const on = cur[28] > 0.001,
+    const on = (cur[28] ?? 0) > 0.001,
       bb = on ? buildBamboo(w / h, t) : { nl: 0, nt: 0 };
     gl.uniform4fv(d.loc('LA'), LA);
     gl.uniform4fv(d.loc('LB'), LB);
