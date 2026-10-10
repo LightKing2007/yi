@@ -302,6 +302,7 @@ export const TABLE: [string, string, string][] = [
   ["你已经在一个房间里了", "君已在席", "You are already in a room"],
   ["服务器房间已满，请稍后再试", "枢纽席满，少顷再试", "The server is full, try again later"],
   ["服务器繁忙，请稍后再试", "枢纽繁忙，少顷再试", "The server is busy, please try again later"],
+  ["服务器出现问题，请稍后再试", "枢纽有误，少顷再试", "Server error, please try again later"],
   ["服务器即将维护，暂不开始新的对局", "枢纽将修，暂不开新局", "Server maintenance is coming, no new games for now"],
   ["操作过于频繁，请稍后再试", "所为过频，少顷再试", "Too many requests, please try again later"],
   ["请先等对方回应", "且待彼应", "Wait for the opponent to answer first"],

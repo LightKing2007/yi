@@ -328,6 +328,7 @@ function nextAttempt() {
 function lostText(code?: number): Msg {
   if (code === CLOSE_CODE.version) return ['客户端版本与服务器不一致，请更新游戏'];
   if (code === CLOSE_CODE.policy) return ['操作过于频繁，请稍后再试'];
+  if (code === CLOSE_CODE.internal) return ['服务器出现问题，请稍后再试'];
   return ['网络连接失败，请检查网络后重试'];
 }
 
@@ -634,6 +635,8 @@ const HANDLERS: { [K in S2C['t']]: Handler<K> } = {
     st.askOut = null;
   },
   error: m => {
+    // 服务端内部错误带错误编号：写入本机日志，玩家反馈问题时据此与服务端日志对照（API-023）
+    if (m.errorId) logError('联机', `服务端内部错误，错误编号 ${m.errorId}`);
     note([m.text]);
     st.busy = false;
     if (st.phase >= Phase.Queue && st.phase < Phase.Playing) st.phase = Phase.Lobby;

@@ -12,7 +12,7 @@ import { fileServer } from '../server/files';
 import { withHealth } from '../server/health';
 import { Metrics } from '../server/metrics';
 import type { Log, LogEntry, LogLevel } from '../server/log';
-import { CLOSE_CODE, CONFIRM_SECS, GRACE_SECS, HELLO_SECS, PROTO_VERSION, type C2S, type S2C } from '../src/shared/protocol';
+import { CLOSE_CODE, CONFIRM_SECS, GRACE_SECS, HELLO_SECS, PROTO_VERSION, type C2S, type Ratings, type S2C } from '../src/shared/protocol';
 import { parseS2C } from '../src/shared/parse';
 
 type Msg<T extends S2C['t']> = Extract<S2C, { t: T }>;
@@ -1442,5 +1442,131 @@ describe('/metrics（API-061、OPS-071）', () => {
       await host.close();
       await plain.close();
     }
+  });
+});
+// ---------------- 未预期的异常（API-023、EDGE-002） ----------------
+
+/** 写段位时可以出错的存档（模拟文件系统出错）：broken 为 true 时 set 抛出 */
+class BrokenStore extends MemoryStore {
+  broken = false;
+  override set(key: string, ratings: Ratings) {
+    if (this.broken) throw new Error(`写段位失败：${key}`);
+    super.set(key, ratings);
+  }
+}
+/** 错误编号的格式：UUID v4 */
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const INTERNAL_TEXT = '服务器出现问题，请稍后再试';
+
+/** 存档可以出错、记下日志的服务端；fault() 取出唯一一行 internal.error 日志，行数不是 1 时测试失败 */
+function faulty() {
+  const store = new BrokenStore();
+  const logs: { level: LogLevel; event: string; entry: LogEntry }[] = [];
+  const env = world(store, { log: (level, event, entry = {}) => logs.push({ level, event, entry }) });
+  const fault = () => {
+    const rows = logs.filter(row => row.event === 'internal.error');
+    expect(rows).toHaveLength(1);
+    return { level: rows[0]?.level, entry: rows[0]?.entry ?? {} };
+  };
+  return { ...env, store, fault };
+}
+/** 让这条连接在发送某类消息时抛出（模拟传输层出错）；types 为空时任何消息都抛出 */
+function breakSend(client: Client, ...types: S2C['t'][]) {
+  const send = client.conn.send;
+  client.conn.send = m => {
+    if (!types.length || types.includes(m.t)) throw new Error(`发送失败：${m.t}`);
+    send(m);
+  };
+}
+/** 这位玩家以服务端内部错误被断开，收到的错误编号与日志中的相同 */
+function expectKicked(client: Client, errorId: unknown) {
+  expect(client.expect('error')).toEqual({ t: 'error', text: INTERNAL_TEXT, errorId });
+  expect(client.closeCode).toBe(CLOSE_CODE.internal);
+}
+
+describe('未预期的异常：处理消息与断线（API-023、EDGE-002）', () => {
+  it('处理消息时抛出：只以 1011 断开发消息的连接，日志记下调用栈与错误编号并下发给它，其余房间照常对局', () => {
+    const { srv, store, fault } = faulty();
+    const [jia, yi, bing, ding] = ['甲', '乙', '丙', '丁'].map(name => new Client(srv, name)) as [Client, Client, Client, Client];
+    matchUp(jia, yi, 'ranked');
+    const { sa } = startGame(bing, ding);
+    store.broken = true;
+    expect(() => jia.send({ t: 'resign' })).not.toThrow();
+    const { level, entry } = fault();
+    expect(level).toBe('error');
+    expect(entry).toMatchObject({ msg: '处理消息时出现未预期的异常', playerId: jia.id, errorId: expect.stringMatching(UUID_V4) });
+    expect((entry.err as Error).stack).toContain('写段位失败');
+    expectKicked(jia, entry.errorId);
+    expect(yi.closed).toBe(false);
+    const [blk, wht] = sa.color === 1 ? [bing, ding] : [ding, bing];
+    blk.send({ t: 'move', x: 7, y: 7 });
+    expect(wht.expect('moved')).toEqual({ t: 'moved', x: 7, y: 7 });
+  });
+
+  it('处理断线时抛出：移除断线的玩家并放弃其房间，对手以 1011 断开', () => {
+    const { srv, fault } = faulty();
+    const jia = new Client(srv, '甲'),
+      yi = new Client(srv, '乙');
+    matchUp(jia, yi);
+    breakSend(yi, 'peer');
+    expect(() => jia.drop()).not.toThrow();
+    const { entry } = fault();
+    expect(entry).toMatchObject({ msg: '处理断线时出现未预期的异常', playerId: jia.id });
+    expect((entry.err as Error).message).toBe('发送失败：peer');
+    expectKicked(yi, entry.errorId);
+    expect(srv.health()).toMatchObject({ players: 0, games: 0 });
+    expect(srv.tokenCount()).toBe(0);
+  });
+});
+
+describe('未预期的异常：定时检查（API-023、EDGE-002）', () => {
+  it('检查房间时限时抛出：放弃该房间，座位上的两人以 1011 断开、重连时得知对局已不在；同一次检查中其他房间照常判超时', () => {
+    const { srv, store, fault, advance } = faulty();
+    const [jia, yi, bing, ding] = ['甲', '乙', '丙', '丁'].map(name => new Client(srv, name)) as [Client, Client, Client, Client];
+    matchUp(jia, yi, 'ranked'); // 五子棋排位每步限时 30 秒，先开局的房间先检查
+    startGame(bing, ding, { moveTime: 30 });
+    store.broken = true;
+    advance(31);
+    const { entry } = fault();
+    expect(entry).toMatchObject({ msg: '检查房间时限时出现未预期的异常', roomId: 1 });
+    expectKicked(jia, entry.errorId);
+    expectKicked(yi, entry.errorId);
+    expect(bing.expect('over')).toMatchObject({ reason: 'timeout' });
+    advance(1);
+    fault(); // 出错的房间已移除，不再重复出错
+    expect(new Client(srv, '甲', jia.token, jia.uid).has('resumeFailed')).toBe(true);
+  });
+
+  it('检查玩家时限时抛出：移除该玩家并放弃其房间，对手以 1011 断开，此后不再重复出错', () => {
+    const { srv, store, fault, idle } = faulty();
+    const jia = new Client(srv, '甲'),
+      yi = new Client(srv, '乙');
+    matchUp(jia, yi, 'ranked');
+    yi.drop(); // 掉线保留期满时判负，结算段位时出错
+    store.broken = true;
+    idle(GRACE_SECS + 1, jia);
+    const { entry } = fault();
+    expect(entry).toMatchObject({ msg: '检查玩家时限时出现未预期的异常', playerId: yi.id });
+    expectKicked(jia, entry.errorId);
+    expect(srv.tokenCount()).toBe(0); // 出错的玩家当即移除，连同令牌
+    idle(GRACE_SECS);
+    fault();
+    expect(srv.health()).toMatchObject({ players: 0, games: 0 });
+  });
+
+  it('检查配对确认时抛出：放弃该配对，双方以 1011 断开；连告知错误也发不出去的连接照常断开', () => {
+    const { srv, fault, advance } = faulty();
+    const jia = new Client(srv, '甲'),
+      yi = new Client(srv, '乙');
+    jia.send({ t: 'queue', mode: 'match', type: 0, size: 15 });
+    yi.send({ t: 'queue', mode: 'match', type: 0, size: 15 });
+    jia.send({ t: 'confirm', ok: true });
+    breakSend(jia);
+    advance(CONFIRM_SECS + 1);
+    const { entry } = fault();
+    expect(entry).toMatchObject({ msg: '检查配对确认时出现未预期的异常', playerIds: [jia.id, yi.id] });
+    expect(jia.closeCode).toBe(CLOSE_CODE.internal);
+    expectKicked(yi, entry.errorId);
+    expect(srv.queued('match', 0)).toBe(0);
   });
 });

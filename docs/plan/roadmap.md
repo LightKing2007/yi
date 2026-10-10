@@ -407,7 +407,7 @@ server/
 | `sync` | 改为 `{ record: GameRecord, seq, hash, dead, agreed, ask?, turn, over?, rated? }`，一条消息恢复整局（包括已结束的对局，A4） |
 | `over` | 增加 `gameId` |
 | `rated` | 增加 `provisional`（是否仍在定级期）、`games` |
-| `error`、`info`、`joinNo`、`unmatched` | 文字改为 `code` 加可选参数，如 `{ t: 'error', code: 'ranked-login-required' }`，客户端翻译 |
+| `error`、`info`、`joinNo`、`unmatched` | 文字改为 `code` 加可选参数，如 `{ t: 'error', code: 'ranked-login-required' }`，客户端翻译。服务端内部错误（E5）的 `error` 保留 v3 已有的 `errorId`（P2-15 加入，API-023） |
 | `outdated` | 新：客户端版本过旧，带 `{ min, latest, url }`，客户端显示“请更新到 x.y.z”并给出下载链接 |
 | `kicked` | 新：`{ reason: 'elsewhere' \| 'banned' \| 'server' }` |
 | `restricted` | 新：`{ what: 'ranked', until }`，告诉客户端暂时不能排位及原因 |

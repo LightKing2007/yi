@@ -24,6 +24,7 @@ const ERROR_CODES: Record<string, string> = {
   '服务器繁忙，请稍后再试': 'server.full',
   '服务器房间已满，请稍后再试': 'server.full',
   '服务器即将维护，暂不开始新的对局': 'server.maintenance',
+  '服务器出现问题，请稍后再试': 'server.internal',
   你已经在一个房间里了: 'room.already-in',
   '房号不存在，或房间已经开始': 'room.not-found',
   这是你自己的房间: 'room.own',

@@ -49,6 +49,8 @@ const HOST_COLORS = [0, 1, 2];
 /** 房号与重连令牌的格式（API-013） */
 const ROOM_CODE = /^[0-9]{4}$/;
 const TOKEN_PATTERN = /^[0-9a-f]{32}$/;
+/** 错误编号：UUID v4 的小写形式（API-023） */
+const ERROR_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 /** 服务端下发的提示文字（info、error、joinNo 与 unmatched 的原因）的长度上限（UTF-16 码元数）：现有提示都不超过 30 个字 */
 const TEXT_MAX = 200;
@@ -250,7 +252,7 @@ const S2C_SCHEMA: Schema<S2C, 't'> = {
   left: {},
   sync: { acts: list(ACTS_MAX, ACT) },
   info: { text: TEXT },
-  error: { text: TEXT },
+  error: { text: TEXT, errorId: opt(match(ERROR_ID_PATTERN)) },
 };
 
 /** 校验一条服务端消息（已由 JSON 解析，解析失败时传入 undefined）。不通过时调用方丢弃该消息并写 warn 日志（API-016） */

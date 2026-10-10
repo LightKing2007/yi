@@ -21,12 +21,9 @@ const build = { version: '9.8.7', commit: 'abc"1\\2' };
 
 describe('错误文本对应的错误码（04-api.md 第 8 节）', () => {
   it('表中的文本按表对应；落子被拒的提示为 game.illegal-move；表外的为 other', () => {
-    expect(['服务器繁忙，请稍后再试', '服务器房间已满，请稍后再试', '请先等对方回应', '排位赛不能再来一局'].map(errorCode)).toEqual([
-      'server.full',
-      'server.full',
-      'game.awaiting-reply',
-      'game.rematch-ranked',
-    ]);
+    expect(
+      ['服务器繁忙，请稍后再试', '服务器房间已满，请稍后再试', '服务器出现问题，请稍后再试', '请先等对方回应', '排位赛不能再来一局'].map(errorCode),
+    ).toEqual(['server.full', 'server.full', 'server.internal', 'game.awaiting-reply', 'game.rematch-ranked']);
     expect([rejectText('ko'), rejectText('renju-33')].map(errorCode)).toEqual(['game.illegal-move', 'game.illegal-move']);
     expect([errorCode('别的提示'), errorCode('toString'), errorCode('constructor')]).toEqual(['other', 'other', 'other']);
   });
