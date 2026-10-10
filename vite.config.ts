@@ -50,11 +50,11 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts'],
-    // 测试覆盖率（TST-010）：npm run test:coverage。render、fx、scene、ui、audio 以画面回归覆盖，不计入（TST-012）
+    // 测试覆盖率（TST-010）：npm run test:coverage。render、fx、scene、ui、audio 与场景脚本以画面回归覆盖，不计入（TST-012）
     coverage: {
       provider: 'v8',
       include: ['src/**/*.{ts,tsx}', 'server/**/*.ts'],
-      exclude: ['**/*.d.ts', 'src/render/**', 'src/fx/**', 'src/scene/**', 'src/ui/**', 'src/audio/**'],
+      exclude: ['**/*.d.ts', 'src/render/**', 'src/fx/**', 'src/scene/**', 'src/ui/**', 'src/audio/**', 'src/app/scenarios.ts'],
       reportsDirectory: '.vitest/coverage',
       reporter: ['text-summary', 'json'], // json 即 coverage-final.json，供 scripts/diff-coverage.mjs 计算改动行的覆盖率（TST-011）
       thresholds: {
