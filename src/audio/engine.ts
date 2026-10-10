@@ -45,13 +45,14 @@ function ensureCtx() {
 
 function startMusic(i: number) {
   const b = buffers.get(i === 0 ? 'music-menu' : 'music-game');
-  if (!ctx || !b || music[i].started) return;
+  const m = music[i];
+  if (!ctx || !b || !m || m.started) return;
   const src = ctx.createBufferSource();
   src.buffer = b;
   src.loop = true;
-  src.connect(music[i].gain);
+  src.connect(m.gain);
   src.start();
-  music[i].started = true;
+  m.started = true;
 }
 
 function play(id: SfxId, vol = 1, rate = 1, pan = 0) {
@@ -84,8 +85,7 @@ function updateMusic() {
     inGame = screen.value === Screen.Game,
     s = settings.value,
     at = ctx.currentTime;
-  music[0].gain.gain.setTargetAtTime(inGame ? 0 : 1, at, 1.25);
-  music[1].gain.gain.setTargetAtTime(inGame ? 1 : 0, at, 1.25);
+  for (const [i, m] of music.entries()) m.gain.gain.setTargetAtTime((i === 1) === inGame ? 1 : 0, at, 1.25); // 第 0 段为菜单音乐，第 1 段为对局音乐
   const since = t - duckT;
   const duck = 1 - 0.75 * (since < 0 ? 0 : since < 2 ? 1 : Math.max(0, 1 - (since - 2) / 3));
   musicBus.gain.setTargetAtTime(s.music ? s.musicVol * duck * 0.9 : 0, at, since < 0.1 ? 0.03 : 0.25);

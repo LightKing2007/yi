@@ -16,7 +16,7 @@ import { T, TF } from '../i18n';
 import * as net from '../online/client';
 import { Phase, netTick, ratingOf, st, tr } from '../online/client';
 import { seatPlates } from '../scene/online';
-import { RANKS, clipName, queueRules, rankIndex, rankName, type Opponent } from '../shared/protocol';
+import { RANKS, clipName, queueRules, rankAt, rankIndex, rankName, type AskKind, type Opponent } from '../shared/protocol';
 import { Row, UpdateNote } from './panels';
 import { Button, Field, Fit, Hair, Seg, StoneIcon } from './widgets';
 
@@ -108,7 +108,7 @@ function rankCard(type: number) {
   const games = r.win + r.loss + r.draw;
   return (
     <div class="rank-card">
-      <div class="rank-name">{T(RANKS[i])}</div>
+      <div class="rank-name">{T(rankAt(i))}</div>
       <div style={{ flex: '1 1 auto', minWidth: 0 }}>
         <div style={{ fontSize: '15px' }}>
           <Fit size={15}>{TF('%d 分', r.points)}</Fit>
@@ -120,7 +120,7 @@ function rankCard(type: number) {
           <div style={{ width: prog * 100 + '%' }} />
         </div>
         <div class="faint" style={{ fontSize: '11px', marginTop: '4px' }}>
-          <Fit size={11}>{top ? T('已是最高段位') : TF('距 %s 还差 %d 分', T(RANKS[i + 1]), Math.ceil(840 + (i + 1) * 60 - r.points))}</Fit>
+          <Fit size={11}>{top ? T('已是最高段位') : TF('距 %s 还差 %d 分', T(rankAt(i + 1)), Math.ceil(840 + (i + 1) * 60 - r.points))}</Fit>
         </div>
       </div>
     </div>
@@ -406,8 +406,8 @@ function PlayerRow({ color }: { color: number }) {
   );
 }
 
-const ASK_IN: Record<string, string> = { undo: '对方申请悔棋，%d 秒', draw: '对方申请和棋，%d 秒', rematch: '对方申请再来一局，%d 秒' };
-const ASK_OUT: Record<string, string> = { undo: '已申请悔棋，等待对方回应…', draw: '已申请和棋，等待对方回应…', rematch: '已申请再来一局，等待对方回应…' };
+const ASK_IN: Record<AskKind, string> = { undo: '对方申请悔棋，%d 秒', draw: '对方申请和棋，%d 秒', rematch: '对方申请再来一局，%d 秒' };
+const ASK_OUT: Record<AskKind, string> = { undo: '已申请悔棋，等待对方回应…', draw: '已申请和棋，等待对方回应…', rematch: '已申请再来一局，等待对方回应…' };
 
 export function OnlineGamePanel({ h }: { h: number }) {
   netTick.value;

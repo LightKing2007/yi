@@ -378,10 +378,18 @@ function runOne(name: string, set: string, hold: boolean): Promise<string[]> {
     shots = sc.shots.slice().sort((a, b) => a - b),
     saved: string[] = [];
   const end = Math.max(0, ...shots, ...steps.map(s => s[0]));
+  /** 依次执行时刻满足 due 的步骤 */
+  const runDue = (due: (at: number) => boolean) => {
+    for (let step = steps[0]; step && due(step[0]); step = steps[0]) {
+      steps.shift();
+      step[1]();
+    }
+  };
   return new Promise(resolve => {
     devHooks.afterDraw = () => {
       const t = vt - start;
-      if (!hold && shots.length && t >= shots[0] - 1e-6) {
+      const next = shots[0];
+      if (!hold && next !== undefined && t >= next - 1e-6) {
         const k = shots.shift()!,
           tag = `${name}@${k.toFixed(2)}`;
         saved.push(tag);
@@ -396,9 +404,9 @@ function runOne(name: string, set: string, hold: boolean): Promise<string[]> {
         return;
       }
       vt += STEP;
-      while (steps.length && vt - start >= steps[0][0] - 1e-6) steps.shift()![1]();
+      runDue(at => vt - start >= at - 1e-6);
     };
-    while (steps.length && steps[0][0] <= 0) steps.shift()![1]();
+    runDue(at => at <= 0);
   });
 }
 
