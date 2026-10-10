@@ -8,6 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { hanInt } from '../src/i18n/index';
 import { TABLE } from '../src/i18n/table';
 import { sourceFiles } from './importGraph';
 import { hanTextsOf, type HanText } from './uiText';
@@ -45,6 +46,23 @@ const UNTRANSLATED: Record<string, Record<string, string>> = {
 
 /** 格式占位符的类型序列，与 TF() 的写法一致：%d %s %f 及 %.1f 等精度写法，%% 不计 */
 const placeholders = (text: string) => [...text.matchAll(/%(%|(?:\.\d+)?[dsfiu])/g)].map(m => m[1].slice(-1)).filter(conv => conv !== '%');
+
+describe('整数写成汉字 hanInt', () => {
+  const cases: [number, string][] = [
+    [0, '零'],
+    [7, '七'],
+    [10, '十'],
+    [19, '十九'],
+    [21, '二十一'],
+    [105, '一百零五'],
+    [110, '一百一十'],
+    [1001, '一千零一'],
+    [3200, '三千二百'],
+    [-7, '负七'],
+    [2.9, '二'],
+  ];
+  for (const [n, want] of cases) it(`${n} → ${want}`, () => expect(hanInt(n)).toBe(want));
+});
 
 describe('译文表', () => {
   it('中文原文键没有重复（I18N-013）', () => {

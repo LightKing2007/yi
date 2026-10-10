@@ -4,7 +4,8 @@ import { Gfx, Program, type RenderTarget, type RGBA, WHITE, Z4 } from './gl';
 import { BG_FS, BOWL_FS, DUSKMIX_FS, DUSK_FS, FX_FS, SHADOW_FS, SHAPE_FS, STONE3D_FS, STONE3D_VS, STONE_FS, TEX_FS, WOOD_FS } from './shaders';
 import type { Rect } from './layout';
 
-export type Mat3 = number[]; // 列主序 3×3 旋转矩阵（物体 → 屏幕，y 轴向上）
+/** 列主序 3×3 旋转矩阵（物体 → 屏幕，y 轴向上） */
+export type Mat3 = [number, number, number, number, number, number, number, number, number];
 
 export class Painter {
   readonly shape: Program;
@@ -164,7 +165,7 @@ export const RING_RED: RGBA = [0.78, 0.29, 0.21, 1];
 
 /** 旋转矩阵（列主序）→ 四元数 (x, y, z, w)，取 w ≥ 0 */
 function quat(r: Mat3): RGBA {
-  const M = (i: number, j: number) => r[j * 3 + i];
+  const M = (i: number, j: number) => r[j * 3 + i] ?? 0; // i、j 在 0 至 2 之间，不会取不到
   const tr = M(0, 0) + M(1, 1) + M(2, 2);
   let qx: number, qy: number, qz: number, qw: number;
   if (tr > 0) {
@@ -216,9 +217,10 @@ export function rotAxis(ax: number, ay: number, az: number, a: number): Mat3 {
 }
 
 export function matMul3(a: Mat3, b: Mat3): Mat3 {
-  const r = new Array(9);
-  for (let c = 0; c < 3; c++) for (let i = 0; i < 3; i++) r[c * 3 + i] = a[i] * b[c * 3] + a[3 + i] * b[c * 3 + 1] + a[6 + i] * b[c * 3 + 2];
-  return r;
+  const [a0, a1, a2, a3, a4, a5, a6, a7, a8] = a;
+  /** a 乘以列向量 (x, y, z) */
+  const col = (x: number, y: number, z: number) => [a0 * x + a3 * y + a6 * z, a1 * x + a4 * y + a7 * z, a2 * x + a5 * y + a8 * z] as const;
+  return [...col(b[0], b[1], b[2]), ...col(b[3], b[4], b[5]), ...col(b[6], b[7], b[8])];
 }
 
 export { Z4 };

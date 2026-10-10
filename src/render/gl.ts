@@ -4,6 +4,8 @@
  * 顶点：位置 xy、纹理坐标 uv、颜色 rgba（着色器里常把它当参数用）、额外四个数 ext。
  */
 export type RGBA = readonly [number, number, number, number];
+/** 仿射变换 a b c d e f：x' = a x + c y + e，y' = b x + d y + f */
+type Affine = [number, number, number, number, number, number];
 export type Blend = 'alpha' | 'add' | 'premul' | 'multiply' | 'replace' | 'bake';
 
 const FLOATS = 12; // 每个顶点的浮点数
@@ -86,8 +88,8 @@ export class Gfx {
   private vao: WebGLVertexArrayObject;
   private cur: Program | null = null;
   private blend: Blend | null = null;
-  private m = [1, 0, 0, 1, 0, 0]; // 仿射变换 a b c d e f：x' = a x + c y + e，y' = b x + d y + f
-  private stack: number[][] = [];
+  private m: Affine = [1, 0, 0, 1, 0, 0];
+  private stack: Affine[] = [];
   private target: RenderTarget | null = null;
   private tex: (WebGLTexture | null)[] = [null, null, null, null];
   readonly white: WebGLTexture;
@@ -105,12 +107,14 @@ export class Gfx {
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
     gl.bufferData(gl.ARRAY_BUFFER, this.data.byteLength, gl.DYNAMIC_DRAW);
     const stride = FLOATS * 4;
-    [
-      [0, 2, 0],
-      [1, 2, 8],
-      [2, 4, 16],
-      [3, 4, 32],
-    ].forEach(([loc, size, off]) => {
+    (
+      [
+        [0, 2, 0],
+        [1, 2, 8],
+        [2, 4, 16],
+        [3, 4, 32],
+      ] as const
+    ).forEach(([loc, size, off]) => {
       gl.enableVertexAttribArray(loc);
       gl.vertexAttribPointer(loc, size, gl.FLOAT, false, stride, off);
     });
@@ -234,7 +238,7 @@ export class Gfx {
 
   // ---------------- 变换 ----------------
   push() {
-    this.stack.push(this.m.slice());
+    this.stack.push([...this.m]);
   }
   pop() {
     const m = this.stack.pop();
@@ -280,12 +284,14 @@ export class Gfx {
       return;
     }
     const m = this.m,
-      pts = [
-        [r.x, r.y],
-        [r.x + r.w, r.y],
-        [r.x, r.y + r.h],
-        [r.x + r.w, r.y + r.h],
-      ].map(([x, y]) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]]);
+      pts = (
+        [
+          [r.x, r.y],
+          [r.x + r.w, r.y],
+          [r.x, r.y + r.h],
+          [r.x + r.w, r.y + r.h],
+        ] as const
+      ).map(([x, y]) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]] as const);
     const x0 = Math.min(...pts.map(p => p[0])),
       x1 = Math.max(...pts.map(p => p[0]));
     const y0 = Math.min(...pts.map(p => p[1])),
@@ -344,7 +350,7 @@ export class Gfx {
     let o = this.n * 4 * FLOATS,
       k = 0;
     const put = (x: number, y: number, u: number, v: number) => {
-      const cc = cs ? cs[k++] : c;
+      const cc = cs?.[k++] ?? c; // cs 为四个顶点各自的颜色
       d[o] = m[0] * x + m[2] * y + m[4];
       d[o + 1] = m[1] * x + m[3] * y + m[5];
       d[o + 2] = u;

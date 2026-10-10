@@ -8,7 +8,7 @@ import { settings } from '../app/settings';
 import { GameType, MAXN } from '../core/types';
 import { pt, type Layout } from '../render/layout';
 import { matMul3, rotAxis, type Mat3, type Painter } from '../render/painter';
-import { emit, rnd, waveArrival, winClock, winIndex } from './fx';
+import { emit, rnd, waveArrival, winClock, winEnds, winIndex } from './fx';
 
 const BLOW_END = 1.15; // 起飞后多久完全消失（这时差不多刚停下）
 const BLOW_FADE = 0.2; // 起飞多久后开始淡出：在飞散的过程中慢慢消失
@@ -63,13 +63,13 @@ export function blowing() {
 
 /** 由棋子自身的随机种子派生的确定性随机数，保证倒放时轨迹一致 */
 function seedRnd(x: number, y: number, k: number) {
-  const v = Math.sin((boardView.seed[x * MAXN + y] + 1) * 12.9898 + (x * 19 + y) * 4.1414 + k * 78.233) * 43758.5453;
+  const v = Math.sin((boardView.seedAt(x, y) + 1) * 12.9898 + (x * 19 + y) * 4.1414 + k * 78.233) * 43758.5453;
   return v - Math.floor(v);
 }
 
 function winMid() {
-  const w = game.win;
-  return { x: (w[0].x + w[w.length - 1].x) / 2, y: (w[0].y + w[w.length - 1].y) / 2 };
+  const { first, last } = winEnds();
+  return { x: (first.x + last.x) / 2, y: (first.y + last.y) / 2 };
 }
 
 /** 冲击波（从连珠中心出发）扫到交叉点的时刻 */
@@ -80,15 +80,20 @@ function blowStart(gx: number, gy: number) {
 
 /** 起飞方向：远离连珠线段，带一点随机偏角 */
 function blowAngle(x: number, y: number) {
-  const w = game.win,
-    ax = w[0].x,
-    ay = w[0].y,
-    bx = w[w.length - 1].x - ax,
-    by = w[w.length - 1].y - ay;
+  const { first, last } = winEnds(),
+    ax = first.x,
+    ay = first.y,
+    bx = last.x - ax,
+    by = last.y - ay;
   const L2 = bx * bx + by * by;
   const h = L2 > 0 ? Math.min(Math.max(((x - ax) * bx + (y - ay) * by) / L2, 0), 1) : 0;
   return Math.atan2(y - (ay + by * h), x - (ax + bx * h)) + (seedRnd(x, y, 1) - 0.5) * 0.6;
 }
+
+/** (x, y) 处棋子的起飞时刻（相对连珠时刻）；坐标在棋盘内，取不到时的 0 只为满足类型检查 */
+const launchAt = (x: number, y: number) => sim.t0[x * MAXN + y] ?? 0;
+/** 录像中 base 起第 k 帧的坐标分量（axis 为 0 取 x，为 1 取 y）；帧号小于录像长度 */
+const recorded = (base: number, k: number, axis: number) => sim.path[(base + k) * 2 + axis] ?? 0;
 
 /** 飞行轨迹：胜利时一次性做带碰撞的物理模拟并录下来，绘制与“查看棋局”的倒放都按录像回放 */
 const sim = {
@@ -132,11 +137,10 @@ function simulate() {
       const hs = hops(x, y);
       o.lands = hs.map(hh => hh.t + hh.T);
       o.air = o.lands[o.lands.length - 1] ?? 0;
-      tend = Math.max(tend, sim.t0[x * MAXN + y] + BLOW_END);
+      tend = Math.max(tend, launchAt(x, y) + BLOW_END);
     }
   sim.samples = Math.floor(Math.min(BLOW_MAXS, tend * BLOW_HZ + 2));
-  const n = b.length,
-    ord = b.map((_, i) => i);
+  const ord = b.slice(); // 按 x 排序的棋子
   const sub = 4,
     h = 1 / (BLOW_HZ * sub),
     D = 2 * 0.482 + 0.04,
@@ -151,14 +155,14 @@ function simulate() {
       const t = (s * sub + k) * h;
       for (const o of b) {
         if (o.fixed) continue;
-        if (!o.launched && t >= sim.t0[o.x * MAXN + o.y]) {
+        if (!o.launched && t >= launchAt(o.x, o.y)) {
           o.vx += o.lx;
           o.vy += o.ly;
           o.launched = true;
         }
         if (o.launched) {
-          const tau = t - sim.t0[o.x * MAXN + o.y];
-          while (o.landed < o.lands.length && tau >= o.lands[o.landed]) {
+          const tau = t - launchAt(o.x, o.y);
+          while (o.landed < o.lands.length && tau >= (o.lands[o.landed] ?? Infinity)) {
             o.vx *= LAND_KEEP;
             o.vy *= LAND_KEEP;
             o.landed++;
@@ -181,19 +185,9 @@ function simulate() {
         o.py += o.vy * h;
       }
       // 圆与圆的碰撞：推开重叠，按恢复系数交换法向速度。按 x 排序后只比较 x 相距不到一个直径的对
-      for (let a = 1; a < n; a++) {
-        const v = ord[a];
-        let c = a;
-        while (c > 0 && b[ord[c - 1]].px > b[v].px) {
-          ord[c] = ord[c - 1];
-          c--;
-        }
-        ord[c] = v;
-      }
-      for (let a = 0; a < n; a++)
-        for (let e = a + 1; e < n && b[ord[e]].px - b[ord[a]].px < D; e++) {
-          const bi = b[ord[a]],
-            bj = b[ord[e]];
+      ord.sort((p, q) => p.px - q.px); // 稳定排序，与上一步的次序几乎相同
+      for (const [a, bi] of ord.entries())
+        for (let e = a + 1, bj = ord[e]; bj && bj.px - bi.px < D; bj = ord[++e]) {
           if (bi.fixed && bj.fixed) continue;
           const dx = bj.px - bi.px,
             dy = bj.py - bi.py,
@@ -260,11 +254,11 @@ function debrisAt(L: Layout, now: number, x: number, y: number): Debris | null {
     i1 = i0 + 1 < sim.samples ? i0 + 1 : i0,
     u = f - i0;
   const base = (x * MAXN + y) * BLOW_MAXS;
-  const gx = sim.path[(base + i0) * 2] + (sim.path[(base + i1) * 2] - sim.path[(base + i0) * 2]) * u;
-  const gy = sim.path[(base + i0) * 2 + 1] + (sim.path[(base + i1) * 2 + 1] - sim.path[(base + i0) * 2 + 1]) * u;
+  const gx = recorded(base, i0, 0) + (recorded(base, i1, 0) - recorded(base, i0, 0)) * u;
+  const gy = recorded(base, i0, 1) + (recorded(base, i1, 1) - recorded(base, i0, 1)) * u;
   o.cx = L.ox + gx * L.cell;
   o.cy = L.oy + gy * L.cell;
-  const tau = T - sim.t0[x * MAXN + y];
+  const tau = T - launchAt(x, y);
   if (tau <= 0) return o;
   o.up = true; // 起飞以后就画在上层（盖在界面之上）
   const ang = blowAngle(x, y),
@@ -316,7 +310,7 @@ export function drawDebris(p: Painter, L: Layout, shadows: boolean, flying: bool
   for (const d of debris) {
     if (d.up !== flying) continue;
     const c = g.b(d.x, d.y),
-      seed = boardView.seed[d.x * MAXN + d.y];
+      seed = boardView.seedAt(d.x, d.y);
     if (shadows) {
       // 影子是椭球在盘面上的投影
       const ct = Math.cos(d.tilt),

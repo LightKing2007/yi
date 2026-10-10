@@ -17,7 +17,7 @@ const rwLift = () => 0.38 * animK();
 const rewindLift = (r: RewindStone, now: number) => (now - r.t0 - rwRing() + 0.08) / rwLift();
 
 /** 重新出现的棋子的淡入进度 0..1 */
-export const appearK = (x: number, y: number, now: number) => Math.min(Math.max((now - boardView.appearT[x * MAXN + y]) / (0.3 * animK()), 0), 1);
+export const appearK = (x: number, y: number, now: number) => Math.min(Math.max((now - boardView.appearAt(x, y)) / (0.3 * animK()), 0), 1);
 
 export function drawRewindStones(p: Painter, L: Layout, now: number, shadows: boolean) {
   for (const r of boardView.rw) {
@@ -28,7 +28,7 @@ export function drawRewindStones(p: Painter, L: Layout, now: number, shadows: bo
       a = 1 - b * b * (3 - 2 * b),
       q = pt(L, r.x, r.y);
     if (shadows) p.stoneShadow(q.x + L.R * (0.1 + 0.5 * e), q.y + L.R * (0.16 + 0.8 * e), L.R, a / (1 + 2 * e));
-    else p.stone(q.x, q.y - L.R * 0.9 * e, L.R * (1 + 0.12 * e), r.c, boardView.seed[r.x * MAXN + r.y], a);
+    else p.stone(q.x, q.y - L.R * 0.9 * e, L.R * (1 + 0.12 * e), r.c, boardView.seedAt(r.x, r.y), a);
   }
 }
 
@@ -51,7 +51,7 @@ export function drawSwitchStones(p: Painter, L: Layout, now: number, shadows: bo
         a = 1 - smooth01(b),
         q = pt(Lo, x, y);
       if (shadows) p.stoneShadow(q.x + Lo.R * (0.1 + 0.5 * e), q.y + Lo.R * (0.16 + 0.8 * e), Lo.R, a / (1 + 2 * e));
-      else p.stone(q.x, q.y - Lo.R * 0.8 * e, Lo.R * (1 + 0.14 * e), s, sw.seed[x * MAXN + y], a);
+      else p.stone(q.x, q.y - Lo.R * 0.8 * e, Lo.R * (1 + 0.14 * e), s, sw.seed[x * MAXN + y] ?? 0, a); // 换棋盘前的纹理种子，坐标在棋盘内
     }
 }
 
@@ -76,7 +76,7 @@ export function drawRewindOver(p: Painter, L: Layout, now: number) {
   }
   for (let x = 0; x < g.N; x++)
     for (let y = 0; y < g.N; y++) {
-      const at = boardView.appearT[x * MAXN + y];
+      const at = boardView.appearAt(x, y);
       if (g.b(x, y) && at > now - 1) {
         const q = pt(L, x, y);
         rewindRing(p, q.x, q.y, L.R, (now - at + 0.25) / 0.25, 0.6);

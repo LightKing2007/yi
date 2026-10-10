@@ -420,7 +420,7 @@ function onStart(m: Extract<S2C, { t: 'start' }>) {
   bump();
 }
 
-const WHY: Record<string, [string, string]> = {
+const WHY: Record<string, [string, string]> & { five: [string, string] } = {
   resign: ['对方认输', '你认输了'],
   timeout: ['对方超时', '你超时了'],
   disconnect: ['对方掉线未归', '你掉线太久，对局已判负'],

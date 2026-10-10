@@ -37,10 +37,10 @@ function drawGrid(p: Painter, L: Layout, N: number, alpha: number) {
   const v = STARS[N];
   if (!v) return;
   const r = Math.max(2.4 * L.u, L.cell * 0.085);
-  for (let i = 0; i < 3; i++)
-    for (let j = 0; j < 3; j++) {
+  for (const [i, sx] of v.entries())
+    for (const [j, sy] of v.entries()) {
       if (N !== 19 && (i === 1) !== (j === 1)) continue; // 9、13、15 路只有四角与天元
-      const q = pt(L, v[i], v[j]);
+      const q = pt(L, sx, sy);
       p.circle(q.x, q.y, r, line);
     }
 }
@@ -95,7 +95,7 @@ export function drawBoard(p: Painter, L: Layout, now: number) {
       const st = g.b(x, y),
         i = x * MAXN + y;
       if (!st || (blow && !staysOnBoard(x, y))) continue;
-      const k = easeOut((now - boardView.placeT[i]) / (0.22 * AK));
+      const k = easeOut((now - boardView.placedAt(x, y)) / (0.22 * AK));
       let alive = (g.dead[i] ? 0.35 : 1) * appearK(x, y, now);
       const dk = goDeadFade(x, y, now);
       if (dk >= 1) continue;
@@ -123,7 +123,7 @@ export function drawBoard(p: Painter, L: Layout, now: number) {
       const st = g.b(x, y),
         i = x * MAXN + y;
       if (!st || (blow && !staysOnBoard(x, y))) continue;
-      const k = easeOut((now - boardView.placeT[i]) / (0.22 * AK));
+      const k = easeOut((now - boardView.placedAt(x, y)) / (0.22 * AK));
       const q = pt(L, x, y);
       let sc = 1 + (1 - k) * 0.1;
       const wi = wt >= 0 && s.fx >= 1 ? winIndex(x, y) : -1;
@@ -144,7 +144,7 @@ export function drawBoard(p: Painter, L: Layout, now: number) {
       } // 死子升起化去
       sc *= goWinPop(x, y, now) * (0.94 + 0.06 * easeOut(ap));
       const mark = s.lastMark && x === g.cur.lastX && y === g.cur.lastY && k > 0.6;
-      p.stone(q.x, q.y - up, R * sc, st, boardView.seed[i], alpha, mark);
+      p.stone(q.x, q.y - up, R * sc, st, boardView.seedAt(x, y), alpha, mark);
     }
   for (const f of boardView.fades) {
     let k = (now - f.t0) / (0.32 * AK);

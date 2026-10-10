@@ -34,6 +34,13 @@ export function winIndex(x: number, y: number) {
 }
 
 /** 胜利动画进行时间（以冲击时刻为 0）；无胜利动画时返回很小的负数 */
+/** 连珠两端的交叉点。终局特效只在有连珠时出现：连成五子，或认输等结束时为胜方最后一手（Game.forfeitEnd）；取不到时退回天元 */
+export function winEnds() {
+  const w = game.win,
+    mid = { x: game.N >> 1, y: game.N >> 1 };
+  return { first: w[0] ?? mid, last: w.at(-1) ?? mid };
+}
+
 export function winClock(now: number) {
   const g = game;
   if (g.type !== GameType.Gomoku || boardView.winT <= 0 || (g.win.length < 5 && !g.forfeit)) return -1e9;
