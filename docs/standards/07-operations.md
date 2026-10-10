@@ -3,8 +3,8 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.7 |
-| 修订日期 | 2026-10-05 |
+| 文件版本 | 1.1.8 |
+| 修订日期 | 2026-10-10 |
 | 规则前缀 | `OPS` |
 
 参考：ISO/IEC/IEEE 12207:2017 第 6.4.10 节至第 6.4.13 节；ISO/IEC 20000-1:2018；ISO/IEC 27035-1:2023；GB/T 20986—2023；RFC 3339；RFC 5424；SLSA v1.0。
@@ -149,7 +149,7 @@
 | `deploy.done` | info | 上线完成（写入 `deploy.log`） | `version`、`commit` |
 | `deploy.rolled-back` | error | 上线后健康检查不通过，已自动回滚（OPS-046）；由上线脚本以 `systemd-cat -t yi-deploy` 写入 journald，可被 `journalctl -p warning` 筛出 | `version`、`target`、`reason` |
 | `metrics.snapshot` | info | 每 60 秒的指标快照 | 本文件第 9 节的全部指标 |
-| `internal.error` | error | 未预期的异常 | `errorId`、`err` |
+| `internal.error` | error | 未预期的异常 | `errorId`、`err`；出错时所处理的玩家、房间或配对：`playerId`、`roomId`、`gameId`、`playerIds` |
 
 ## 9 监控指标
 
