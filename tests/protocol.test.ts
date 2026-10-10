@@ -154,6 +154,7 @@ const LEGAL_S2C: S2C[] = [
   { t: 'sync', acts: [{ k: 'M', x: 3, y: 3 }, { k: 'P' }, { k: 'U', n: 1 }, { k: 'K', x: 3, y: 3 }, { k: 'R' }] },
   { t: 'info', text: '还没轮到你' },
   { t: 'error', text: '服务器繁忙，请稍后再试' },
+  { t: 'error', text: '服务器出现问题，请稍后再试', errorId: '0b6f1c52-9d4e-4f3a-8c21-5e7d9a0b1c2d' },
 ];
 
 /** 期望服务端消息校验不通过，返回失败的种类 */
@@ -273,7 +274,7 @@ describe('服务端消息校验：枚举、文字与下载地址', () => {
     for (const m of bad) expect(kindS2C(m), JSON.stringify(m)).toBe('format');
   });
 
-  it('提示文字、昵称、版本号与下载地址过长或格式不对时不通过：下载地址只接受 http(s)', () => {
+  it('提示文字、昵称、版本号、下载地址与错误编号过长或格式不对时不通过：下载地址只接受 http(s)，错误编号只接受小写的 UUID v4', () => {
     const welcome = LEGAL_S2C[0];
     const long = '字'.repeat(10000);
     const bad: unknown[] = [
@@ -291,6 +292,9 @@ describe('服务端消息校验：枚举、文字与下载地址', () => {
       { ...welcome, latest: '<b>9.9.9</b>' },
       { ...welcome, latest: '9'.repeat(33) },
       { ...welcome, latest: 3 },
+      { t: 'error', text: '服务器出现问题，请稍后再试', errorId: '0B6F1C52-9D4E-4F3A-8C21-5E7D9A0B1C2D' },
+      { t: 'error', text: '服务器出现问题，请稍后再试', errorId: '0b6f1c52-9d4e-1f3a-8c21-5e7d9a0b1c2d' },
+      { t: 'error', text: '服务器出现问题，请稍后再试', errorId: '<script>' },
     ];
     for (const m of bad) expect(kindS2C(m), JSON.stringify(m).slice(0, 80)).toBe('format');
     expect(kindS2C({ ...welcome, url: 'https://yi.lightking.com.cn/' })).toBe('ok');

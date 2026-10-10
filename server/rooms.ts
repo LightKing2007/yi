@@ -4,12 +4,12 @@
  * 对局规则直接复用 src/core/game.ts：每个房间一份 Game，客户端发来的每一手都在这里校验，
  * 所以服务端与客户端的判定完全一致。协议见 src/shared/protocol.ts。
  */
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { Game } from '../src/core/game';
 import { rejectText } from '../src/shared/reject';
 import { BLACK, GameType, WHITE, other } from '../src/core/types';
 import { isInvalid, parseC2S, type Invalid } from '../src/shared/parse';
-import type { Log } from './log';
+import type { Log, LogEntry } from './log';
 import type { Metrics } from './metrics';
 import { errorCode } from './metrics';
 import { BAN_SECS, ConnLimits, type LimitedOp } from './ratelimit';
@@ -87,6 +87,8 @@ const UID_HASH_CHARS = 32;
 const LIMITED_TEXT = '操作过于频繁，请稍后再试';
 /** 维护模式中拒绝开始新的对局时的提示，也是进入维护模式时下发给在线玩家的通知（OPS-045，错误码 server.maintenance） */
 const MAINTENANCE_TEXT = '服务器即将维护，暂不开始新的对局';
+/** 服务端出现未预期的异常时的提示（v3 以文本下发，附错误编号；协议 v4 起为错误码 server.internal，E5） */
+const INTERNAL_TEXT = '服务器出现问题，请稍后再试';
 
 /** 房间的对局设置：棋类、路数、禁手、每步限时（与 queueRules 的结果同形） */
 type RoomRules = ReturnType<typeof queueRules>;
@@ -262,9 +264,19 @@ export class RoomServer {
 
   /**
    * 收到一条消息：raw 为 JSON 解析的结果，不是 JSON 时为 undefined。先按令牌桶限速（API-043），
-   * 再经 parseC2S 校验（API-010），非法的回复错误后丢弃（API-015）。返回此后该连接对应的会话（带令牌重连时换成原来的玩家）
+   * 再经 parseC2S 校验（API-010），非法的回复错误后丢弃（API-015）。返回此后该连接对应的会话（带令牌重连时换成原来的玩家）。
+   * 处理中出现未预期的异常时，只以 1011 断开这条连接，对局照常保留席位，其余连接不受影响（API-023、EDGE-002）
    */
   message(p: Session, raw: unknown, conn?: Conn): Session {
+    try {
+      return this.receive(p, raw, conn);
+    } catch (err) {
+      this.kick(p, this.report(err, { msg: '处理消息时出现未预期的异常', playerId: p.id || undefined }));
+      return p;
+    }
+  }
+
+  private receive(p: Player, raw: unknown, conn?: Conn): Player {
     if (!this.players.has(p) || !p.conn || (conn && p.conn !== conn)) return p;
     if (!p.limits.message(this.now())) {
       this.limited(p);
@@ -289,9 +301,17 @@ export class RoomServer {
 
   /**
    * 连接断开：对局中保留席位等待重连，其余情况直接离开。conn：断开的是哪条连接（已被新连接接管的旧连接断开时什么也不做）；
-   * code：关闭码，只用于日志
+   * code：关闭码，只用于日志。处理中出现未预期的异常时，移除这位玩家并结束其所在的房间（API-023、EDGE-002）
    */
   disconnect(p: Session, conn?: Conn, code?: number) {
+    try {
+      this.goOffline(p, conn, code);
+    } catch (err) {
+      this.evict(p, this.report(err, { msg: '处理断线时出现未预期的异常', playerId: p.id || undefined }));
+    }
+  }
+
+  private goOffline(p: Player, conn?: Conn, code?: number) {
     if (!this.players.has(p) || !p.conn || (conn && p.conn !== conn)) return;
     p.conn = null;
     p.offAt = this.now();
@@ -317,21 +337,49 @@ export class RoomServer {
     this.forget(p);
   }
 
-  /** 定时调用（建议每 0.25 秒）：检查各种超时 */
+  /**
+   * 定时调用（建议每 0.25 秒）：检查各种超时。某个配对、房间或玩家的检查出现未预期的异常时，
+   * 只清理出错的那一项（否则每次检查都会再出错），其余照常检查（API-023、EDGE-002）
+   */
   tick() {
     const now = this.now();
     for (const m of [...this.matches]) {
-      // 确认超时：没点接受的一方作罢
-      if (now > m.deadline)
-        this.dropMatch(
-          m,
-          m.side.filter((_, i) => !m.ok[i]).map(side => side.p),
-          '对方未确认',
-        );
+      const fault = { msg: '检查配对确认时出现未预期的异常', playerIds: m.side.map(side => side.p.id) };
+      this.guard(
+        () => this.tickMatch(m, now),
+        fault,
+        errorId => this.scrapMatch(m, errorId),
+      );
     }
-    for (const r of [...this.rooms.values()]) if (this.rooms.has(r.id)) this.tickRoom(r, now);
+    for (const r of [...this.rooms.values()]) {
+      if (!this.rooms.has(r.id)) continue;
+      const fault = { msg: '检查房间时限时出现未预期的异常', roomId: r.id, gameId: r.gameId };
+      this.guard(
+        () => this.tickRoom(r, now),
+        fault,
+        errorId => this.scrapRoom(r, errorId),
+      );
+    }
     for (const [key, until] of this.banned) if (now >= until) this.banned.delete(key);
-    for (const p of [...this.players]) if (this.players.has(p)) this.tickPlayer(p, now);
+    for (const p of [...this.players]) {
+      if (!this.players.has(p)) continue;
+      const fault = { msg: '检查玩家时限时出现未预期的异常', playerId: p.id || undefined };
+      this.guard(
+        () => this.tickPlayer(p, now),
+        fault,
+        errorId => this.evict(p, errorId),
+      );
+    }
+  }
+
+  /** 配对的时限：确认超时，没点接受的一方作罢 */
+  private tickMatch(m: Match, now: number) {
+    if (now > m.deadline)
+      this.dropMatch(
+        m,
+        m.side.filter((_, i) => !m.ok[i]).map(side => side.p),
+        '对方未确认',
+      );
   }
 
   /** 房间的时限：申请无人回应，视为拒绝；本手超时，判负 */
@@ -478,6 +526,57 @@ export class RoomServer {
       if (r && r.kind === 'ranked' && r.state === RoomState.Play) return true;
     }
     return false;
+  }
+
+  // ---------------- 未预期的异常（API-023、EDGE-002） ----------------
+
+  /** 记录一次未预期的异常：完整调用栈与新的错误编号（UUID v4）写入 internal.error 日志；返回错误编号，供下发给客户端对照 */
+  private report(err: unknown, entry: LogEntry): string {
+    const errorId = randomUUID();
+    this.log('error', 'internal.error', { ...entry, errorId, err });
+    return errorId;
+  }
+
+  /** 执行一项定时检查；出现未预期的异常时按 fault 记录，再以 clean 清理出错的那一项 */
+  private guard(work: () => void, fault: LogEntry, clean: (errorId: string) => void) {
+    try {
+      work();
+    } catch (err) {
+      clean(this.report(err, fault));
+    }
+  }
+
+  /** 以服务端内部错误（E5）断开一位玩家：先下发提示与错误编号（不含异常的内容），再按断线处理并以 1011 关闭 */
+  private kick(p: Player, errorId: string) {
+    try {
+      this.send(p, { t: 'error', text: INTERNAL_TEXT, errorId });
+    } catch {
+      // 发送本身抛出说明连接已经出错：异常已记录，不再告知，照常断开
+    }
+    this.drop(p, CLOSE_CODE.internal);
+  }
+
+  /** 放弃出错的配对：双方不再等待确认，以 1011 断开 */
+  private scrapMatch(m: Match, errorId: string) {
+    this.matches.delete(m); // 出错时可能尚未移除；断开时便不会再处理这个配对
+    for (const side of m.side) this.kick(side.p, errorId);
+  }
+
+  /** 放弃出错的房间：先移除房间（对局不再继续，也不结算段位），再以 1011 断开座位上的玩家；他们重连时收到 resumeFailed */
+  private scrapRoom(r: Room, errorId: string) {
+    this.freeRoom(r);
+    for (const color of [BLACK, WHITE]) {
+      const p = this.seat(r, color);
+      if (p) this.kick(p, errorId);
+    }
+  }
+
+  /** 移除出错的玩家：放弃其所在的房间，以 1011 断开（已断开的直接移除）；不再保留席位，免得每次检查都再出错 */
+  private evict(p: Player, errorId: string) {
+    const r = this.rooms.get(p.room);
+    if (r) this.scrapRoom(r, errorId);
+    this.kick(p, errorId);
+    this.forget(p);
   }
 
   // ---------------- 限流与违规（API-042 至 API-045） ----------------

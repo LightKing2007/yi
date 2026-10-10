@@ -178,7 +178,7 @@ export type S2C =
   | { t: 'left' } // 对方离开房间（终局后）
   | { t: 'sync'; acts: Act[] } // 重连时回放整局
   | { t: 'info'; text: string }
-  | { t: 'error'; text: string };
+  | { t: 'error'; text: string; errorId?: string }; // errorId：服务端内部错误（E5）的错误编号，与服务端日志对照（API-023）
 
 /** 昵称中删除的字符：控制符、格式符（含双向控制符、零宽字符）、代理项、私用区、行与段分隔符（API-014） */
 const NAME_STRIP = /[\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Zl}\p{Zp}]/gu;

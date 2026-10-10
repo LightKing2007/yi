@@ -42,6 +42,13 @@ const UNTRANSLATED: Record<string, Record<string, string>> = {
   'src/main.tsx': {
     '`无法启动：${(e as Error).message}`': '启动失败时显示的诊断信息，此时界面与设置可能都未建立',
   },
+  'server/rooms.ts': {
+    处理消息时出现未预期的异常: '未预期的异常的说明，经 report() 只写入服务端日志的 internal.error 事件，不下发',
+    处理断线时出现未预期的异常: '未预期的异常的说明，经 report() 只写入服务端日志的 internal.error 事件，不下发',
+    检查配对确认时出现未预期的异常: '未预期的异常的说明，经 report() 只写入服务端日志的 internal.error 事件，不下发',
+    检查房间时限时出现未预期的异常: '未预期的异常的说明，经 report() 只写入服务端日志的 internal.error 事件，不下发',
+    检查玩家时限时出现未预期的异常: '未预期的异常的说明，经 report() 只写入服务端日志的 internal.error 事件，不下发',
+  },
 };
 
 /** 格式占位符的类型序列，与 TF() 的写法一致：%d %s %f 及 %.1f 等精度写法，%% 不计 */
