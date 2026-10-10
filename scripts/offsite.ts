@@ -102,7 +102,7 @@ export function signV4(input: SignInput): Record<string, string> {
     .filter(name => name.startsWith('x-oss-') || name === 'content-type' || name === 'content-md5')
     .sort();
   const query = Object.entries(input.query ?? {})
-    .map(([name, value]) => [uriEncode(name), uriEncode(value)])
+    .map(([name, value]) => [uriEncode(name), uriEncode(value)] as const)
     .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
     .map(([name, value]) => (value ? `${name}=${value}` : name))
     .join('&');
@@ -110,7 +110,7 @@ export function signV4(input: SignInput): Record<string, string> {
     input.method,
     uriEncode(`/${input.bucket}/${input.key}`, false),
     query,
-    signed.map(name => `${name}:${headers[name].trim()}\n`).join(''),
+    signed.map(name => `${name}:${(headers[name] ?? '').trim()}\n`).join(''), // signed 都是 headers 的键
     '',
     'UNSIGNED-PAYLOAD',
   ].join('\n');
@@ -230,18 +230,19 @@ export function checkOutside(file: string, projectRoot: string) {
 /** 命令行入口 */
 async function main(argv: string[]) {
   const [cmd, ...args] = argv;
-  const projectRoot = path.resolve(path.dirname(process.argv[1]), '..');
+  const projectRoot = path.resolve(path.dirname(process.argv[1] ?? '.'), '..'); // argv[1] 为本脚本的路径
+  const [first, second, third] = args;
   if (cmd === 'upload') {
     console.log(await upload(process.env, { fetch: globalThis.fetch as unknown as Fetch, now: () => new Date() }));
-  } else if (cmd === 'keygen' && args.length === 1) {
-    checkOutside(args[0], projectRoot);
-    const recipient = await keygen(args[0]);
-    console.log(`私钥已写入 ${args[0]}，请妥善保存在本机或密码管理器中，严禁放到服务器上（DAT-063）。\n公钥（安装异地备份时填写）：${recipient}`);
-  } else if (cmd === 'decrypt' && args.length === DECRYPT_ARGS) {
-    checkOutside(args[2], projectRoot);
-    const text = await decrypt(fs.readFileSync(args[0]), fs.readFileSync(args[1], 'utf8').trim());
-    fs.writeFileSync(args[2], text, { flag: 'wx', mode: 0o600 });
-    console.log(`已解密为 ${args[2]}（${Object.keys(JSON.parse(text)).length} 条记录）`);
+  } else if (cmd === 'keygen' && args.length === 1 && first !== undefined) {
+    checkOutside(first, projectRoot);
+    const recipient = await keygen(first);
+    console.log(`私钥已写入 ${first}，请妥善保存在本机或密码管理器中，严禁放到服务器上（DAT-063）。\n公钥（安装异地备份时填写）：${recipient}`);
+  } else if (cmd === 'decrypt' && args.length === DECRYPT_ARGS && first !== undefined && second !== undefined && third !== undefined) {
+    checkOutside(third, projectRoot);
+    const text = await decrypt(fs.readFileSync(first), fs.readFileSync(second, 'utf8').trim());
+    fs.writeFileSync(third, text, { flag: 'wx', mode: 0o600 });
+    console.log(`已解密为 ${third}（${Object.keys(JSON.parse(text)).length} 条记录）`);
   } else {
     throw new Error('用法：upload | keygen 私钥文件 | decrypt 备份.age 私钥文件 输出文件');
   }

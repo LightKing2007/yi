@@ -91,7 +91,7 @@ export function GamePanel({ h }: { h: number }) {
         : g.scoring
           ? T('点击棋块可以标记或取消死子')
           : TF('第 %d 手', g.cur.moves + 1);
-  const capText = (c: number) => (g.cur.cap[c] || s.lang !== Lang.WY ? TF('提子 %d', g.cur.cap[c]) : '未有所提');
+  const capText = (c: number) => (g.cur.cap[c] || s.lang !== Lang.WY ? TF('提子 %d', g.cur.cap[c] ?? 0) : '未有所提');
   const msgAge = boardView.msg ? now() - boardView.msgAt : 99;
   const foot =
     g.type === GameType.Go
@@ -234,7 +234,7 @@ export function SettingsPanel({ h }: { h: number }) {
   const [tab, setTab] = useState(0);
   const s = settings.value;
   const lw = s.lang === Lang.EN ? 118 : 80;
-  const scaleIdx = SCALES.reduce((b, v, i) => (Math.abs(v - s.uiScale) < Math.abs(SCALES[b] - s.uiScale) ? i : b), 1);
+  const scaleIdx = SCALES.reduce((b, v, i) => (Math.abs(v - s.uiScale) < Math.abs((SCALES[b] ?? v) - s.uiScale) ? i : b), 1);
   return (
     <div style={{ height: h + 'px', position: 'relative', paddingTop: '4px', ['--lw' as any]: lw + 'px' }}>
       <h1 class="title" style={{ height: '56px' }}>
@@ -371,11 +371,11 @@ export function MorePanel({ h }: { h: number }) {
       </div>
       <Seg items={INFO_PAGES.map(p => T(p.title))} sel={tab} onChange={setTab} />
       <div class="info" key={tab} style={{ position: 'absolute', left: 0, right: 0, top: top + 'px', height: Math.max(80, bottom - top) + 'px' }}>
-        <InfoView lines={INFO_PAGES[tab].lines} />
+        <InfoView lines={INFO_PAGES[tab]?.lines ?? []} />
       </div>
       <div style={{ position: 'absolute', left: 0, right: 0, top: Math.max(80, bottom - top) + top + 12 + 'px' }}>
         <Hair />
-        {INFO_PAGES[tab].title === '关于' && isDesktop() ? (
+        {INFO_PAGES[tab]?.title === '关于' && isDesktop() ? (
           <div class="btns" style={{ marginTop: '12px' }}>
             <Button label={T('打开日志文件夹')} height={44} onClick={() => native()?.openLogs()} />
             <Button label={T('返回')} height={44} onClick={() => goScreen(Screen.Menu)} />

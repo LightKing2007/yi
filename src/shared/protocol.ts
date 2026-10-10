@@ -99,7 +99,9 @@ export const RANKS = [
 ];
 /** 段位分 → 段位序号（每 60 分一档，起始 1200 分为四级） */
 export const rankIndex = (points: number) => Math.max(0, Math.min(RANKS.length - 1, Math.floor((points - 840) / 60)));
-export const rankName = (points: number) => RANKS[rankIndex(points)];
+/** 第 i 段的名称；i 由 rankIndex 限定在表内，取不到时为空 */
+export const rankAt = (i: number) => RANKS[i] ?? '';
+export const rankName = (points: number) => rankAt(rankIndex(points));
 
 export interface Rating {
   points: number;

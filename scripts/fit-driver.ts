@@ -107,7 +107,7 @@ async function sweepStatic() {
   await press('返回');
   await press('更多');
   const tabs = INFO_PAGES.map(p => p.title);
-  for (const zh of [...tabs.slice(1), tabs[0]]) await pick(zh);
+  for (const zh of [...tabs.slice(1), ...tabs.slice(0, 1)]) await pick(zh);
   await press('返回');
 }
 

@@ -71,7 +71,7 @@ const UID_DIGITS = 8;
 function percentile(sorted: number[], p: number) {
   if (!sorted.length) return 0;
   const rank = Math.min(sorted.length - 1, Math.ceil((p / PERCENT) * sorted.length) - 1);
-  return sorted[Math.max(0, rank)];
+  return sorted[Math.max(0, rank)] ?? 0; // rank 在 0 至 length - 1 之间
 }
 
 /** 汇总一组耗时 */
@@ -126,12 +126,14 @@ function goPosition(size: number, moves: number, seed: number) {
 
 /** 围棋：按时间思考的耗时（TST-041），以及固定模拟次数下的搜索速度（每秒模拟次数） */
 function benchGo(size: number, level: number, moves: number) {
+  const warmup = GO_WARMUP_MOVES[size];
+  if (warmup === undefined) throw new Error(`没有 ${size} 路的预热手数`);
   const times: number[] = [];
   for (let i = 0; i < moves; i++) {
-    const board = goPosition(size, GO_WARMUP_MOVES[size], i * MS_PER_SEC);
+    const board = goPosition(size, warmup, i * MS_PER_SEC);
     times.push(timed(() => goThink(goSnap(board), level))[1]);
   }
-  const board = goPosition(size, GO_WARMUP_MOVES[size], 1);
+  const board = goPosition(size, warmup, 1);
   const [, ms] = timed(() => goThink(goSnap(board), level, { iterations: GO_THROUGHPUT_ITERATIONS, seed: 1 }));
   return { think: stats(times), simsPerSec: Math.round((GO_THROUGHPUT_ITERATIONS / ms) * MS_PER_SEC) };
 }
@@ -199,6 +201,7 @@ function benchServer(connections: number, rounds: number) {
   }
   for (let i = 0; i + 1 < connections; i += 2) {
     const [host, guest] = [players[i], players[i + 1]];
+    if (!host || !guest) break; // i + 1 < connections，两者都在
     send(srv, host, { t: 'create', type: (i / 2) % 2, size: (i / 2) % 2 ? MAXN : GOMOKU_N, hostColor: 0, renju: true, moveTime: 0 }, times);
     const created = host.inbox.find(msg => msg.t === 'created');
     if (created && created.t === 'created') send(srv, guest, { t: 'join', code: created.code }, times);

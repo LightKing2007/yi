@@ -44,8 +44,9 @@ export function drawOnlineScene(p: Painter, L: Layout, now: number, k: number) {
 
 /** 名牌的位置：两只棋罐外侧（黑罐在上方，白罐在下方） */
 export function seatPlates(L: Layout) {
-  return [BLACK - 1, WHITE - 1].map(b => {
+  const plate = (b: number) => {
     const c = bowlPlace(L, b, 1);
     return { x: c.x, y: b === 0 ? c.y - c.r - 20 * L.u : c.y + c.r + 20 * L.u };
-  });
+  };
+  return [plate(BLACK - 1), plate(WHITE - 1)] as const;
 }
