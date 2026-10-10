@@ -8,6 +8,7 @@ import { BoardView } from '../src/presentation/boardView';
 import type { WorkerLike } from '../src/session/seats';
 import { Session } from '../src/session/session';
 import { think, type ThinkReply, type ThinkRequest } from '../src/session/think';
+import { must } from './must';
 
 let T = 100;
 
@@ -75,7 +76,7 @@ describe('人机对弈', () => {
     T += 0.4;
     s.tick(T);
     expect(s.thinking).toBe(true);
-    expect(FakeWorker.all[0].queue[0].kind).toBe('gomoku');
+    expect(FakeWorker.all[0]?.queue[0]?.kind).toBe('gomoku');
     flushAll();
     s.tick(T);
     expect(g.cur.moves).toBe(2);
@@ -106,7 +107,7 @@ describe('人机对弈', () => {
     s.play(7, 7);
     T += 0.4;
     s.tick(T);
-    const w = FakeWorker.all[0];
+    const w = must(FakeWorker.all[0], '电脑思考的 Worker');
     expect(w.queue.length).toBe(1);
     g.undo(1);
     s.cancel(); // 电脑还在想时悔棋
@@ -190,7 +191,7 @@ describe('困难电脑的时限', () => {
   it('时间到了就用已经算完的那一层，不会一直想下去', () => {
     // 七手之后轮到白棋：不限时的完整搜索要检查时限 6 次（每 1024 个节点检查一次）
     const b = new Uint8Array(MAXN * MAXN);
-    const stones = [
+    const stones: [number, number, number][] = [
       [7, 7, BLACK],
       [8, 7, WHITE],
       [8, 6, BLACK],

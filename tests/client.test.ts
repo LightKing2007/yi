@@ -41,7 +41,7 @@ describe('联机客户端', () => {
     expect(net.st.reconnecting).toBe(true);
     advance(3);
     expect(net.st.phase).toBe(net.Phase.Lobby);
-    expect(net.st.notice[0][0]).toBe('这一局已经无法继续，可能是服务器重启过或掉线太久');
+    expect(net.st.notice[0]?.[0]).toBe('这一局已经无法继续，可能是服务器重启过或掉线太久');
     expect(state.screen.value).toBe(state.Screen.Online);
   });
 

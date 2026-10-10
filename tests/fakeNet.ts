@@ -5,6 +5,7 @@
 import { expect } from 'vitest';
 import { RoomServer, type Conn, type Session } from '../server/rooms';
 import { PROTO_VERSION, type C2S, type S2C } from '../src/shared/protocol';
+import { must } from './must';
 
 // ---------------- 浏览器环境 ----------------
 
@@ -134,7 +135,7 @@ export const sockets: FakeWS[] = [];
 Object.assign(globalThis, { WebSocket: FakeWS });
 
 /** 客户端当前的连接 */
-export const lastSocket = () => sockets[sockets.length - 1];
+export const lastSocket = () => must(sockets.at(-1), '最近一次建立的连接');
 
 /** 冒充服务端：不经服务端，直接往客户端当前的连接里送一帧（文本帧之外的取值模拟二进制帧） */
 export function inject(data: unknown) {

@@ -27,7 +27,7 @@ const shots = (): Plugin => ({
         }
         const dir = new URL(`./.shots/${set}/`, import.meta.url);
         mkdirSync(dir, { recursive: true });
-        writeFileSync(new URL(`${name}.png`, dir), Buffer.from(m[1], 'base64'));
+        writeFileSync(new URL(`${name}.png`, dir), Buffer.from(m[1] ?? '', 'base64'));
         res.end('ok');
       });
     });

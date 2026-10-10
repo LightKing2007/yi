@@ -50,7 +50,7 @@ describe('Prometheus 文本格式', () => {
     expect(lines).toContain('yi_event_loop_lag_seconds 0.012');
     expect(lines).toContain('process_resident_memory_bytes 80000000');
     // 每个样本都在其指标族的 HELP、TYPE 之后
-    const families = lines.filter(line => line.startsWith('# TYPE ')).map(line => line.split(' ')[2]);
+    const families = lines.filter(line => line.startsWith('# TYPE ')).map(line => line.split(' ')[2] ?? '');
     expect(new Set(families).size).toBe(families.length);
     for (const line of lines.filter(item => !item.startsWith('#'))) expect(families.some(family => line.startsWith(family))).toBe(true);
   });

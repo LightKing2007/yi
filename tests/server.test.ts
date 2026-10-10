@@ -295,7 +295,7 @@ describe('好友房间', () => {
     expect(new Set(codes).size).toBe(3);
     for (const c of codes) expect(c).toMatch(/^\d{4}$/);
     const guest = new Client(srv, '客');
-    guest.send({ t: 'join', code: codes[2] });
+    guest.send({ t: 'join', code: codes[2] ?? '' });
     expect(guest.expect('start')?.white.name).toBe('客');
   });
 });
@@ -583,13 +583,14 @@ describe('WebSocket 传输', () => {
         ws.on('message', d => {
           const m = JSON.parse(String(d)) as S2C;
           const w = waiters.findIndex(([t]) => t === m.t);
-          if (w >= 0) waiters.splice(w, 1)[0][1](m);
+          if (w >= 0) waiters.splice(w, 1)[0]?.[1](m);
           else inbox.push(m);
         });
         const next = (t: S2C['t']) =>
           new Promise<S2C>(r => {
             const i = inbox.findIndex(m => m.t === t);
-            if (i >= 0) r(inbox.splice(i, 1)[0]);
+            const found = i >= 0 ? inbox.splice(i, 1)[0] : undefined;
+            if (found) r(found);
             else waiters.push([t, r]);
           });
         ws.on('open', () => {
@@ -1210,7 +1211,16 @@ const MAINT = '服务器即将维护，暂不开始新的对局';
 function busyWorld() {
   const logs: { event: string; entry: LogEntry }[] = [];
   const env = world(new MemoryStore(), { log: (_level, event, entry = {}) => logs.push({ event, entry }) });
-  const [black, white, queuer, pairA, pairB, host, idler] = ['甲', '乙', '丙', '丁', '戊', '己', '庚'].map(name => new Client(env.srv, name));
+  const client = (name: string) => new Client(env.srv, name);
+  const [black, white, queuer, pairA, pairB, host, idler] = [
+    client('甲'),
+    client('乙'),
+    client('丙'),
+    client('丁'),
+    client('戊'),
+    client('己'),
+    client('庚'),
+  ] as const;
   startGame(black, white);
   queuer.send({ t: 'queue', mode: 'match', type: 1, size: 19 });
   expect(queuer.expect('queued')).toBeTruthy();
@@ -1390,7 +1400,8 @@ describe('监控指标的统计点（OPS-071）', () => {
 
   it('房间按种类与状态统计（含点目），排队按模式与棋类统计', () => {
     const { srv } = counted();
-    const [black, white, host, queuer] = ['甲', '乙', '丙', '丁'].map(name => new Client(srv, name));
+    const client = (name: string) => new Client(srv, name);
+    const [black, white, host, queuer] = [client('甲'), client('乙'), client('丙'), client('丁')] as const;
     startGame(black, white, { type: 1, size: 9 });
     black.send({ t: 'pass' });
     white.send({ t: 'pass' }); // 双方停一手，进入点目

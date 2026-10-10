@@ -3,8 +3,8 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.2 |
-| 修订日期 | 2026-10-04 |
+| 文件版本 | 1.1.3 |
+| 修订日期 | 2026-10-10 |
 | 规则前缀 | `COD` |
 
 参考：ISO/IEC 5055:2021（可靠性、安全性、性能效率、可维护性四类源码度量）；ISO/IEC 25010:2023 维护性子特性；GB/T 8567—2006 第 5 章。
@@ -76,7 +76,7 @@
 
 | 编号 | 等级 | 规定 | 现状 |
 |---|---|---|---|
-| COD-050 | A | `tsconfig.json` 必须开启 `strict`、`noUnusedLocals`、`noUnusedParameters`、`noFallthroughCasesInSwitch`、`noImplicitOverride`、`noUncheckedIndexedAccess`；后两项按整改项 P2-10 分阶段开启 | 部分满足 |
+| COD-050 | A | `tsconfig.json` 必须开启 `strict`、`noUnusedLocals`、`noUnusedParameters`、`noFallthroughCasesInSwitch`、`noImplicitOverride`、`noUncheckedIndexedAccess`；后两项按整改项 P2-10 分阶段开启 | 满足 |
 | COD-051 | B | 严禁 `any`。外部库缺少类型定义时，允许在边界处使用一次，必须带 [00-general.md](00-general.md) 第 4.4 节格式的例外声明 | 未满足（6 处） |
 | COD-052 | B | 非空断言 `!` 每处必须在同一行或上一行注释说明为何非空 | 未满足（23 处中多数无说明） |
 | COD-053 | A | 严禁对外部输入使用 `as` 类型断言。外部输入必须经过返回类型谓词或解析结果的校验函数，见 API-010 至 API-016 | 未满足（服务端以 `as C2S` 处理入站消息） |

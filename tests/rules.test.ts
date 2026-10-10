@@ -11,7 +11,10 @@ const B = BLACK,
   W = WHITE;
 
 function setStones(g: Game, stones: number[]) {
-  for (let i = 0; i < stones.length; i += 3) g.cur.b[at(stones[i], stones[i + 1])] = stones[i + 2];
+  for (let i = 0; i < stones.length; i += 3) {
+    const [x = 0, y = 0, color = 0] = stones.slice(i, i + 3);
+    g.cur.b[at(x, y)] = color;
+  }
 }
 function go9() {
   const g = new Game();
@@ -24,7 +27,7 @@ function gomoku15(stones: number[] = []) {
   setStones(g, stones);
   return g;
 }
-const playAll = (g: Game, mv: number[][]) => mv.forEach(([x, y]) => g.play(x, y));
+const playAll = (g: Game, mv: [number, number][]) => mv.forEach(([x, y]) => g.play(x, y));
 
 describe('围棋规则', () => {
   it('角上提一子', () => {

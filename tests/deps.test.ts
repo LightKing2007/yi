@@ -78,7 +78,7 @@ describe('工作流（OPS-010）', () => {
     for (const file of fs.readdirSync(dir)) {
       for (const line of fs.readFileSync(new URL(file, dir), 'utf8').split('\n')) {
         const used = /^\s*-?\s*uses:\s*(\S+)(.*)$/.exec(line);
-        if (used && !(/^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/.test(used[1]) && /^\s+# v\d/.test(used[2]))) bad.push(`${file}：${line.trim()}`);
+        if (used && !(/^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/.test(used[1] ?? '') && /^\s+# v\d/.test(used[2] ?? ''))) bad.push(`${file}：${line.trim()}`);
       }
     }
     expect(bad).toEqual([]);
