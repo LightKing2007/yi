@@ -55,9 +55,9 @@
 | P2-03 | 协议 v4 错误码体系，`src/shared/errors.ts` | F-17；API-020 至 API-024、[04-api.md](../standards/04-api.md) 第 8 节 | 随阶段 7 |
 | P2-04 | `server/config.ts` 集中解析与校验配置 | ARC-042 | 随阶段 5 |
 | P2-05 | TLS 与 CSP 收紧 | F-08；SEC-010 至 SEC-013 | 随阶段 4 |
-| P2-06 | 指标与告警 | OPS-071 至 OPS-075 | 进行中（#92 `/metrics` 与每分钟的指标快照，随下一个版本上线；D-4 决定暂不建立告警通知；上线后 60 分钟内的自动检查与回滚（OPS-047）待实施） |
+| P2-06 | 指标与告警 | OPS-071 至 OPS-075 | 已完成（#92 `/metrics` 与每分钟的指标快照，随下一个版本上线；D-4 决定暂不建立告警通知；#94 上线后 60 分钟内每分钟自动检查，异常时回滚（OPS-047）） |
 | P2-07 | 性能基准脚本与服务端压测 | TST-041 至 TST-046 | 已完成（`scripts/bench.mjs` 测电脑思考、服务端消息处理、下载页面与打包体积；#95 `scripts/loadtest.mjs` 与“服务端压测”工作流以真实连接压测，2026-10-06 首次实测，TST-045 各项达标。10-edge-cases.md 中“服务器重启后重连风暴”的压测未包括在内） |
-| P2-08 | Electron Fuses | SEC-033 | 待实施 |
+| P2-08 | Electron Fuses | SEC-033 | 已完成（#98：`package.json` 的 `build.electronFuses` 在打包时关闭 `runAsNode`、`NODE_OPTIONS` 与调试参数，开启 `app.asar` 完整性校验与只从 `app.asar` 载入；`scripts/check-fuses.mjs` 在 CI 中核对打包产物，并以未改动的 Electron 为探针。随下一个版本发布生效） |
 | P2-09 | `SECURITY.md` | SEC-063 | 已完成（[SECURITY.md](../../SECURITY.md)：支持的版本、经 GitHub 私下报告提交、范围与测试守则、72 小时内确认、按 SEC-060 的期限修复、修复后 30 日内公开说明；2026-10-06 开启仓库的私下报告漏洞功能） |
 | P2-10 | 开启 `noImplicitOverride`、`noUncheckedIndexedAccess` 并整改 | F-32；COD-050 | 已完成（两项均在 `tsconfig.json` 中开启。`noImplicitOverride` 随 #100 开启；`noUncheckedIndexedAccess` 分 6 批整改约 667 处，即 #100、#102、#103、#104、#106 与本项的最后一批，过渡用的 `tsconfig.strict.json` 已删除。机械性改动所触及函数的存量违规由 P2-12 整改） |
 | P2-11 | 建立 `docs/adr/`，补录近期决策 | ARC-060 | 待实施 |
