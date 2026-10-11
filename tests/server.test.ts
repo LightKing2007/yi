@@ -12,7 +12,7 @@ import { fileServer } from '../server/files';
 import { withHealth } from '../server/health';
 import { Metrics } from '../server/metrics';
 import type { Log, LogEntry, LogLevel } from '../server/log';
-import { CLOSE_CODE, CONFIRM_SECS, GRACE_SECS, HELLO_SECS, PROTO_VERSION, type C2S, type Ratings, type S2C } from '../src/shared/protocol';
+import { ACTS_MAX, CLOSE_CODE, CONFIRM_SECS, GRACE_SECS, HELLO_SECS, MOVES_MAX, PROTO_VERSION, type C2S, type Ratings, type S2C } from '../src/shared/protocol';
 import { parseS2C } from '../src/shared/parse';
 
 type Msg<T extends S2C['t']> = Extract<S2C, { t: T }>;
@@ -1593,5 +1593,107 @@ describe('未预期的异常：定时检查（API-023、EDGE-002）', () => {
     expect(jia.closeCode).toBe(CLOSE_CODE.internal);
     expectKicked(yi, entry.errorId);
     expect(srv.queued('match', 0)).toBe(0);
+  });
+});
+
+// ---------------- 对局上限（API-046，P2-16） ----------------
+
+/** 说明中的数字须与协议中的上限一致 */
+const MOVES_LIMIT_TEXT = `本局已达到 ${MOVES_MAX} 手的上限，按和棋结束`;
+const ACTS_LIMIT_TEXT = `本局的动作记录已达到 ${ACTS_MAX} 条的上限，按和棋结束`;
+
+/** 带日志的服务端，并开好一局 19 路围棋：返回执黑、执白的两人；send 每发一条消息时钟前进 0.05 秒，不触发限流（每秒 20 条） */
+function goGame(mode: 'friend' | 'ranked') {
+  const logs: { level: LogLevel; event: string; entry: LogEntry }[] = [];
+  const env = world(new MemoryStore(), { log: (level, event, entry = {}) => logs.push({ level, event, entry }) });
+  const jia = new Client(env.srv, '甲'),
+    yi = new Client(env.srv, '乙');
+  const sa = mode === 'ranked' ? matchUp(jia, yi, 'ranked', 1).sa : startGame(jia, yi, { type: 1, size: 19, moveTime: 0 }).sa;
+  const [blk, wht] = sa.color === 1 ? [jia, yi] : [yi, jia];
+  const send = (who: Client, m: C2S) => {
+    env.advance(0.05);
+    who.send(m);
+  };
+  /** 双方轮流停一手，进入点目后由黑方恢复对局，直到下满 plies 手（从开局算起，plies 为偶数） */
+  const passTo = (plies: number) => {
+    for (let n = 0; n < plies; n += 2) {
+      if (n) send(blk, { t: 'resume' });
+      send(blk, { t: 'pass' });
+      send(wht, { t: 'pass' });
+    }
+  };
+  return { ...env, logs, blk, wht, send, passTo };
+}
+
+describe('对局上限（API-046，P2-16）', () => {
+  it('停一手也计入手数：第 1024 手后按和棋结束，说明达到的是手数上限，此后的请求不再处理', () => {
+    const { blk, wht, send, passTo, logs } = goGame('friend');
+    passTo(MOVES_MAX - 2);
+    send(blk, { t: 'resume' });
+    send(blk, { t: 'pass' });
+    expect(blk.has('over')).toBe(false);
+    send(wht, { t: 'pass' });
+    for (const c of [blk, wht]) {
+      const at = c.inbox.findIndex(m => m.t === 'over');
+      expect(c.inbox.slice(at)).toEqual([
+        { t: 'over', winner: 3, reason: 'draw' },
+        { t: 'info', text: MOVES_LIMIT_TEXT },
+      ]);
+      c.drain();
+    }
+    expect(logs.filter(row => row.event === 'game.limit')).toEqual([
+      { level: 'warn', event: 'game.limit', entry: expect.objectContaining({ moves: MOVES_MAX, acts: MOVES_MAX + MOVES_MAX / 2 - 1 }) },
+    ]);
+    send(blk, { t: 'resume' });
+    send(blk, { t: 'pass' });
+    expect(blk.has('passed') || blk.has('resumed')).toBe(false);
+  });
+
+  it('动作记录记满 4096 条时按和棋结束；掉线的一方重连后补收终局结果与说明', () => {
+    const { blk, wht, send, srv } = goGame('friend');
+    send(blk, { t: 'move', x: 0, y: 0 });
+    send(wht, { t: 'move', x: 18, y: 18 });
+    send(blk, { t: 'pass' });
+    send(wht, { t: 'pass' }); // 进入点目，此时 4 条动作记录
+    for (let n = 4; n < ACTS_MAX - 1; n++) {
+      send(blk, { t: 'mark', x: 0, y: 0 });
+      if (n % 100 === 0) send(wht, { t: 'ping' }); // 白方照常发心跳，免得被当作空闲断线
+    }
+    expect(blk.has('over')).toBe(false);
+    wht.drop();
+    send(blk, { t: 'mark', x: 0, y: 0 });
+    expect(blk.expect('over')).toEqual({ t: 'over', winner: 3, reason: 'draw' });
+    expect(blk.expect('info')).toEqual({ t: 'info', text: ACTS_LIMIT_TEXT });
+    const back = new Client(srv, '乙', wht.token, wht.uid);
+    expect(back.expect('sync')?.acts).toHaveLength(ACTS_MAX);
+    expect(back.expect('over')).toEqual({ t: 'over', winner: 3, reason: 'draw' });
+    expect(back.expect('info')).toEqual({ t: 'info', text: ACTS_LIMIT_TEXT });
+  });
+
+  it('达到上限后再来一局：新的一局结束时，重连补发的结果不再附带上一局的上限说明', () => {
+    const { blk, wht, send, passTo, srv } = goGame('friend');
+    passTo(MOVES_MAX);
+    expect(blk.expect('info')).toEqual({ t: 'info', text: MOVES_LIMIT_TEXT });
+    send(blk, { t: 'rematch' });
+    send(wht, { t: 'reply', kind: 'rematch', ok: true });
+    expect(blk.expect('start')).toBeTruthy();
+    blk.drop();
+    send(wht, { t: 'resign' });
+    const back = new Client(srv, blk.name, blk.token, blk.uid);
+    expect(back.expect('over')?.reason).toBe('resign');
+    expect(back.has('info')).toBe(false);
+  });
+
+  it('排位对局达到上限时按和棋结束，但不结算段位', () => {
+    const { blk, wht, send, passTo, logs } = goGame('ranked');
+    passTo(MOVES_MAX - 2);
+    send(blk, { t: 'resume' });
+    send(blk, { t: 'pass' });
+    send(wht, { t: 'pass' });
+    for (const c of [blk, wht]) {
+      expect(c.expect('over')).toEqual({ t: 'over', winner: 3, reason: 'draw' });
+      expect(c.has('rated')).toBe(false);
+    }
+    expect(logs.filter(row => row.event === 'rating.changed')).toEqual([]);
   });
 });

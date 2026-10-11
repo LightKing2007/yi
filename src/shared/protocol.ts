@@ -39,8 +39,13 @@ export const RETRY_RESET_SECS = 60;
 export const POLICY_RETRY_SECS = 30;
 /** 因服务端过载被断开（CLOSE_CODE.overload）后，首次重连至少等这么久（04-api.md 第 4.2 条） */
 export const OVERLOAD_RETRY_MIN_SECS = 5;
-/** 每局记录的对局动作（重连时以 sync 回放）最多几条；服务端超出后不再记录，客户端收到更长的 sync 按非法消息丢弃 */
+/**
+ * 每局记录的对局动作（重连时以 sync 回放）最多几条：服务端在记满时按和棋结束对局（API-046），回放因此总是完整的；
+ * 客户端收到更长的 sync 按非法消息丢弃
+ */
 export const ACTS_MAX = 4096;
+/** 联机对局每局最多几手，停一手也计入：服务端达到时按和棋结束对局，防止单个房间的历史局面无限增长（API-046） */
+export const MOVES_MAX = 1024;
 /** over.winner 与对局胜方取这个值时表示和棋（1 黑胜，2 白胜） */
 export const DRAWN = 3;
 

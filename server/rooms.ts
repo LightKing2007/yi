@@ -15,6 +15,7 @@ import { errorCode } from './metrics';
 import { BAN_SECS, ConnLimits, type LimitedOp } from './ratelimit';
 import {
   ACTS_MAX,
+  MOVES_MAX,
   ASK_SECS,
   CLOSE_CODE,
   CONFIRM_SECS,
@@ -92,6 +93,9 @@ const UID_HASH_CHARS = 32;
 const LIMITED_TEXT = '操作过于频繁，请稍后再试';
 /** 维护模式中拒绝开始新的对局时的提示，也是进入维护模式时下发给在线玩家的通知（OPS-045，错误码 server.maintenance） */
 const MAINTENANCE_TEXT = '服务器即将维护，暂不开始新的对局';
+/** 对局达到手数上限（MOVES_MAX）、动作记录上限（ACTS_MAX）而按和棋结束时的说明（API-046） */
+const MOVES_LIMIT_TEXT = '本局已达到 1024 手的上限，按和棋结束';
+const ACTS_LIMIT_TEXT = '本局的动作记录已达到 4096 条的上限，按和棋结束';
 /** 服务端出现未预期的异常时的提示（v3 以文本下发，附错误编号；协议 v4 起为错误码 server.internal，E5） */
 const INTERNAL_TEXT = '服务器出现问题，请稍后再试';
 /** 玩家数或未握手的连接数达到上限时的提示（错误码 server.full，E2） */
@@ -174,6 +178,7 @@ interface Room {
   deadline: number; // 本手限时截止时刻；0 表示不计时
   paused: number; // 有人掉线时暂停计时，保存本手剩余秒数
   result: { winner: number; reason: OverReason } | null; // 终局结果（掉线期间结束的，重连时补发）
+  limitNote: string | null; // 因达到上限而结束时的说明（重连时随终局结果补发）
   rated: ({ type: number; rating: Rating; delta: number } | null)[]; // 排位结算，按执子颜色
 }
 
@@ -754,6 +759,7 @@ export class RoomServer {
       deadline: 0,
       paused: 0,
       result: null,
+      limitNote: null,
       rated: [null, null, null],
     };
     this.rooms.set(r.id, r);
@@ -806,7 +812,8 @@ export class RoomServer {
     return !!(this.seat(r, BLACK)?.conn && this.seat(r, WHITE)?.conn);
   }
 
-  private finish(r: Room, winner: number, reason: OverReason) {
+  /** 结束对局；rated 为 false 时排位赛也不结算段位 */
+  private finish(r: Room, winner: number, reason: OverReason, rated = true) {
     if (r.state !== RoomState.Play) return;
     r.state = RoomState.Over;
     r.ask = null;
@@ -816,7 +823,22 @@ export class RoomServer {
     this.broadcast(r, { t: 'over', winner, reason });
     this.log('info', 'game.over', { msg: `房间 ${r.id} 结束`, roomId: r.id, gameId: r.gameId, winner, reason, moves: r.g.moves.length });
     this.metrics?.inc('yi_games_finished_total', { kind: r.kind, reason });
-    if (r.kind === 'ranked') this.rate(r, winner);
+    if (r.kind === 'ranked' && rated) this.rate(r, winner);
+  }
+
+  /**
+   * 对局达到手数上限（MOVES_MAX，停一手也计入）或动作记录上限（ACTS_MAX）时按和棋结束（API-046）：
+   * 终局原因沿用 draw，现有客户端都能识别；随后说明达到的是哪一项上限。排位赛这一局不结算段位
+   */
+  private endAtLimit(r: Room) {
+    const moves = r.g.hist.length,
+      acts = r.acts.length;
+    const note = moves >= MOVES_MAX ? MOVES_LIMIT_TEXT : acts >= ACTS_MAX ? ACTS_LIMIT_TEXT : null;
+    if (!note || r.state !== RoomState.Play) return;
+    this.finish(r, DRAWN, 'draw', false);
+    r.limitNote = note;
+    this.broadcast(r, { t: 'info', text: note });
+    this.log('warn', 'game.limit', { msg: `房间 ${r.id} 达到上限，按和棋结束`, roomId: r.id, gameId: r.gameId, moves, acts });
   }
 
   /** 排位结算（Elo）：胜方至少加 1 分 */
@@ -881,6 +903,7 @@ export class RoomServer {
     r.state = RoomState.Play;
     r.paused = 0;
     r.result = null;
+    r.limitNote = null;
     r.rated = [null, null, null];
   }
 
@@ -941,6 +964,7 @@ export class RoomServer {
     if (r.state === RoomState.Over) {
       // 掉线期间对局已经结束：补发结果与排位结算
       if (r.result) this.send(p, { t: 'over', ...r.result });
+      if (r.limitNote) this.send(p, { t: 'info', text: r.limitNote });
       const rt = r.rated[this.colorOf(r, p)];
       if (rt) this.send(p, { t: 'rated', ...rt });
       return;
@@ -1075,7 +1099,10 @@ export class RoomServer {
       me = r ? this.colorOf(r, p) : 0;
     if (!r || !me) return;
     if (r.state === RoomState.Over) this.afterGame(r, p, me, m);
-    else if (r.state === RoomState.Play) this.inGame(r, p, me, m);
+    else if (r.state === RoomState.Play) {
+      this.inGame(r, p, me, m);
+      this.endAtLimit(r); // 落子、停一手、同意悔棋、标记死子、恢复对局之后都在此检查
+    }
   }
 
   /** 不在对局中也能发的消息（匹配、房间、改名、心跳）；处理了返回 true */

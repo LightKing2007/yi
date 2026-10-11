@@ -304,6 +304,8 @@ export const TABLE: [string, string, string][] = [
   ["服务器繁忙，请稍后再试", "枢纽繁忙，少顷再试", "The server is busy, please try again later"],
   ["服务器出现问题，请稍后再试", "枢纽有误，少顷再试", "Server error, please try again later"],
   ["服务器即将维护，暂不开始新的对局", "枢纽将修，暂不开新局", "Server maintenance is coming, no new games for now"],
+  ["本局已达到 1024 手的上限，按和棋结束", "已满一千零二十四手，以和局论", "Move limit (1024) reached, the game is a draw"],
+  ["本局的动作记录已达到 4096 条的上限，按和棋结束", "所录已满四千零九十六条，以和局论", "Record limit (4096) reached, the game is a draw"],
   ["操作过于频繁，请稍后再试", "所为过频，少顷再试", "Too many requests, please try again later"],
   ["请先等对方回应", "且待彼应", "Wait for the opponent to answer first"],
   ["对方已离开，无法再来一局", "彼已去，不能再弈", "The opponent left, no rematch"],
