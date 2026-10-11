@@ -62,6 +62,11 @@ export class MemoryStore implements RatingStore {
 }
 
 const MAX_PLAYERS = 2048;
+/**
+ * 尚未握手的连接最多几条（API-046）：玩家数上限在握手时才检查，满员时带令牌的重连仍能回到原来的对局；
+ * 未握手的连接另设上限，使服务端保存的连接总数仍然有界。它们须在 HELLO_SECS 内握手，同一 IP 的连接数与新建频率另有限制
+ */
+export const PENDING_MAX = 256;
 const MAX_ROOMS = 1024;
 const ELO_K = 32;
 /** Elo 期望得分公式 1 / (1 + 10^(分差 / 400)) 中的底数与分差尺度 */
@@ -89,6 +94,8 @@ const LIMITED_TEXT = '操作过于频繁，请稍后再试';
 const MAINTENANCE_TEXT = '服务器即将维护，暂不开始新的对局';
 /** 服务端出现未预期的异常时的提示（v3 以文本下发，附错误编号；协议 v4 起为错误码 server.internal，E5） */
 const INTERNAL_TEXT = '服务器出现问题，请稍后再试';
+/** 玩家数或未握手的连接数达到上限时的提示（错误码 server.full，E2） */
+const BUSY_TEXT = '服务器繁忙，请稍后再试';
 
 /** 房间的对局设置：棋类、路数、禁手、每步限时（与 queueRules 的结果同形） */
 type RoomRules = ReturnType<typeof queueRules>;
@@ -233,10 +240,13 @@ export class RoomServer {
 
   // ---------------- 对外接口 ----------------
 
-  /** 新连接；满员时告知“服务器繁忙”后返回 null，调用方应以 CLOSE_CODE.overload 关闭连接（API-046） */
+  /**
+   * 新连接；尚未握手的连接已达 PENDING_MAX 时告知“服务器繁忙”后返回 null，调用方应以 CLOSE_CODE.overload 关闭连接（API-046）。
+   * 玩家数上限在握手时检查（hello）
+   */
   connect(conn: Conn): Session | null {
-    if (this.players.size >= MAX_PLAYERS) {
-      conn.send({ t: 'error', text: '服务器繁忙，请稍后再试' });
+    if (this.pending() >= PENDING_MAX) {
+      conn.send({ t: 'error', text: BUSY_TEXT });
       return null;
     }
     const now = this.now();
@@ -398,6 +408,13 @@ export class RoomServer {
       this.leaveRoom(p);
       this.forget(p);
     }
+  }
+
+  /** 尚未握手的连接数 */
+  private pending() {
+    let n = 0;
+    for (const p of this.players) if (!p.id) n++;
+    return n;
   }
 
   online() {
@@ -963,6 +980,12 @@ export class RoomServer {
     p.lastSeen = this.now();
     const found = m.token === undefined ? null : this.findByToken(m.token);
     if (found) return this.resume(p, found.player, found.hash); // p 还没握手，不会是 found.player
+    if (this.players.size - this.pending() >= MAX_PLAYERS) {
+      // 满员（API-046）：只拒绝新来的玩家；带令牌重连的已在上一行回到原来的会话，不占新的名额
+      this.send(p, { t: 'error', text: BUSY_TEXT });
+      this.drop(p, CLOSE_CODE.overload);
+      return p;
+    }
     p.name = cleanName(m.name, '棋手');
     p.id = this.nextPlayer++;
     const token = this.issueToken(p);

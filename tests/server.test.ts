@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
-import { MemoryStore, RoomServer, type Conn, type RoomServerOptions, type Session } from '../server/rooms';
+import { MemoryStore, PENDING_MAX, RoomServer, type Conn, type RoomServerOptions, type Session } from '../server/rooms';
 import { HTTP_LIMITS, hardenHttp, startHost } from '../server/host';
 import { fileServer } from '../server/files';
 import { withHealth } from '../server/health';
@@ -1010,9 +1010,34 @@ describe('限流与违规（API-042 至 API-046）', () => {
     expect(srv.queued('match', 0)).toBe(1);
   });
 
-  it('玩家数达到上限时告知服务器繁忙，不再静默拒绝（API-046）', () => {
+  it('满员时对局中掉线的玩家带令牌重连，仍能回到原来的对局，不被告知服务器繁忙', () => {
     const { srv } = world();
-    for (let i = 0; i < 2048; i++) srv.connect({ send: () => {}, close: () => {} });
+    const jia = new Client(srv, '甲'),
+      yi = new Client(srv, '乙');
+    startGame(jia, yi);
+    for (let i = 2; i < 2048; i++) new Client(srv, '丙');
+    expect(srv.health().players).toBe(2048);
+    yi.drop();
+    const back = new Client(srv, '乙', yi.token, yi.uid);
+    expect(back.has('error')).toBe(false);
+    expect(back.welcome?.id).toBe(yi.id);
+    expect(back.expect('sync')).toBeTruthy();
+    expect(jia.expect('peer', m => m.online)).toBeTruthy();
+  });
+
+  it('满员时新玩家握手被告知服务器繁忙，并以 1013 断开（API-046）', () => {
+    const { srv } = world();
+    for (let i = 0; i < 2048; i++) new Client(srv, '丙');
+    const late = new Client(srv, '丁');
+    expect(late.welcome).toBeUndefined();
+    expect(late.inbox).toEqual([{ t: 'error', text: '服务器繁忙，请稍后再试' }]);
+    expect(late.closeCode).toBe(CLOSE_CODE.overload);
+    expect(srv.health().players).toBe(2048);
+  });
+
+  it('尚未握手的连接达到上限时，新连接直接被告知服务器繁忙（API-046）', () => {
+    const { srv } = world();
+    for (let i = 0; i < PENDING_MAX; i++) expect(srv.connect({ send: () => {}, close: () => {} })).not.toBeNull();
     const inbox: S2C[] = [];
     expect(srv.connect({ send: m => inbox.push(expectClientAccepts(m)), close: () => {} })).toBeNull();
     expect(inbox).toEqual([{ t: 'error', text: '服务器繁忙，请稍后再试' }]);
