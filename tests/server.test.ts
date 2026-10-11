@@ -1602,16 +1602,17 @@ describe('未预期的异常：定时检查（API-023、EDGE-002）', () => {
 const MOVES_LIMIT_TEXT = `本局已达到 ${MOVES_MAX} 手的上限，按和棋结束`;
 const ACTS_LIMIT_TEXT = `本局的动作记录已达到 ${ACTS_MAX} 条的上限，按和棋结束`;
 
-/** 带日志的服务端，并开好一局 19 路围棋：返回执黑、执白的两人；send 每发一条消息时钟前进 0.05 秒，不触发限流（每秒 20 条） */
-function goGame(mode: 'friend' | 'ranked') {
+/** 带日志的服务端，并开好一局围棋（好友房间为 size 路，排位为 19 路）：返回执黑、执白的两人；send 每发 20 条消息时钟前进 1 秒，不触发限流（每秒 20 条，可积攒 40 条） */
+function goGame(mode: 'friend' | 'ranked', size = 19) {
   const logs: { level: LogLevel; event: string; entry: LogEntry }[] = [];
   const env = world(new MemoryStore(), { log: (level, event, entry = {}) => logs.push({ level, event, entry }) });
   const jia = new Client(env.srv, '甲'),
     yi = new Client(env.srv, '乙');
-  const sa = mode === 'ranked' ? matchUp(jia, yi, 'ranked', 1).sa : startGame(jia, yi, { type: 1, size: 19, moveTime: 0 }).sa;
+  const sa = mode === 'ranked' ? matchUp(jia, yi, 'ranked', 1).sa : startGame(jia, yi, { type: 1, size, moveTime: 0 }).sa;
   const [blk, wht] = sa.color === 1 ? [jia, yi] : [yi, jia];
+  let sent = 0;
   const send = (who: Client, m: C2S) => {
-    env.advance(0.05);
+    if (++sent % 20 === 0) env.advance(1);
     who.send(m);
   };
   /** 双方轮流停一手，进入点目后由黑方恢复对局，直到下满 plies 手（从开局算起，plies 为偶数） */
@@ -1625,7 +1626,7 @@ function goGame(mode: 'friend' | 'ranked') {
   return { ...env, logs, blk, wht, send, passTo };
 }
 
-describe('对局上限（API-046，P2-16）', () => {
+describe('对局上限：手数（API-046，P2-16）', () => {
   it('停一手也计入手数：第 1024 手后按和棋结束，说明达到的是手数上限，此后的请求不再处理', () => {
     const { blk, wht, send, passTo, logs } = goGame('friend');
     passTo(MOVES_MAX - 2);
@@ -1633,13 +1634,13 @@ describe('对局上限（API-046，P2-16）', () => {
     send(blk, { t: 'pass' });
     expect(blk.has('over')).toBe(false);
     send(wht, { t: 'pass' });
-    for (const c of [blk, wht]) {
-      const at = c.inbox.findIndex(m => m.t === 'over');
-      expect(c.inbox.slice(at)).toEqual([
+    for (const client of [blk, wht]) {
+      const at = client.inbox.findIndex(m => m.t === 'over');
+      expect(client.inbox.slice(at)).toEqual([
         { t: 'over', winner: 3, reason: 'draw' },
         { t: 'info', text: MOVES_LIMIT_TEXT },
       ]);
-      c.drain();
+      client.drain();
     }
     expect(logs.filter(row => row.event === 'game.limit')).toEqual([
       { level: 'warn', event: 'game.limit', entry: expect.objectContaining({ moves: MOVES_MAX, acts: MOVES_MAX + MOVES_MAX / 2 - 1 }) },
@@ -1647,27 +1648,6 @@ describe('对局上限（API-046，P2-16）', () => {
     send(blk, { t: 'resume' });
     send(blk, { t: 'pass' });
     expect(blk.has('passed') || blk.has('resumed')).toBe(false);
-  });
-
-  it('动作记录记满 4096 条时按和棋结束；掉线的一方重连后补收终局结果与说明', () => {
-    const { blk, wht, send, srv } = goGame('friend');
-    send(blk, { t: 'move', x: 0, y: 0 });
-    send(wht, { t: 'move', x: 18, y: 18 });
-    send(blk, { t: 'pass' });
-    send(wht, { t: 'pass' }); // 进入点目，此时 4 条动作记录
-    for (let n = 4; n < ACTS_MAX - 1; n++) {
-      send(blk, { t: 'mark', x: 0, y: 0 });
-      if (n % 100 === 0) send(wht, { t: 'ping' }); // 白方照常发心跳，免得被当作空闲断线
-    }
-    expect(blk.has('over')).toBe(false);
-    wht.drop();
-    send(blk, { t: 'mark', x: 0, y: 0 });
-    expect(blk.expect('over')).toEqual({ t: 'over', winner: 3, reason: 'draw' });
-    expect(blk.expect('info')).toEqual({ t: 'info', text: ACTS_LIMIT_TEXT });
-    const back = new Client(srv, '乙', wht.token, wht.uid);
-    expect(back.expect('sync')?.acts).toHaveLength(ACTS_MAX);
-    expect(back.expect('over')).toEqual({ t: 'over', winner: 3, reason: 'draw' });
-    expect(back.expect('info')).toEqual({ t: 'info', text: ACTS_LIMIT_TEXT });
   });
 
   it('达到上限后再来一局：新的一局结束时，重连补发的结果不再附带上一局的上限说明', () => {
@@ -1690,10 +1670,39 @@ describe('对局上限（API-046，P2-16）', () => {
     send(blk, { t: 'resume' });
     send(blk, { t: 'pass' });
     send(wht, { t: 'pass' });
-    for (const c of [blk, wht]) {
-      expect(c.expect('over')).toEqual({ t: 'over', winner: 3, reason: 'draw' });
-      expect(c.has('rated')).toBe(false);
+    for (const client of [blk, wht]) {
+      expect(client.expect('over')).toEqual({ t: 'over', winner: 3, reason: 'draw' });
+      expect(client.has('rated')).toBe(false);
     }
     expect(logs.filter(row => row.event === 'rating.changed')).toEqual([]);
+  });
+});
+
+describe('对局上限：动作记录（API-046，P2-16）', () => {
+  it('动作记录记满 4096 条时按和棋结束；掉线的一方重连后补收终局结果与说明', () => {
+    const { blk, wht, send, srv } = goGame('friend', 9);
+    send(blk, { t: 'move', x: 0, y: 0 });
+    send(wht, { t: 'move', x: 8, y: 8 });
+    send(blk, { t: 'pass' });
+    send(wht, { t: 'pass' }); // 进入点目，此时 4 条动作记录
+    // 批量标记期间两人的连接只记下消息类型，不再逐条经客户端校验，免得测试过慢；记满前后的消息照常校验
+    const [blkSend, whtSend] = [blk.conn.send, wht.conn.send];
+    const seen: S2C['t'][] = [];
+    blk.conn.send = wht.conn.send = m => seen.push(m.t);
+    for (let n = 4; n < ACTS_MAX - 1; n++) {
+      send(blk, { t: 'mark', x: 0, y: 0 });
+      if (n % 100 === 0) send(wht, { t: 'ping' }); // 白方照常发心跳，免得被当作空闲断线
+    }
+    [blk.conn.send, wht.conn.send] = [blkSend, whtSend];
+    expect(seen).not.toContain('over');
+    expect(seen.filter(type => type === 'marked')).toHaveLength(2 * (ACTS_MAX - 5));
+    wht.drop();
+    send(blk, { t: 'mark', x: 0, y: 0 });
+    expect(blk.expect('over')).toEqual({ t: 'over', winner: 3, reason: 'draw' });
+    expect(blk.expect('info')).toEqual({ t: 'info', text: ACTS_LIMIT_TEXT });
+    const back = new Client(srv, '乙', wht.token, wht.uid);
+    expect(back.expect('sync')?.acts).toHaveLength(ACTS_MAX);
+    expect(back.expect('over')).toEqual({ t: 'over', winner: 3, reason: 'draw' });
+    expect(back.expect('info')).toEqual({ t: 'info', text: ACTS_LIMIT_TEXT });
   });
 });
