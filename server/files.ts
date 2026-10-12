@@ -4,12 +4,13 @@
  *   GET /<文件名>     下载这个文件，支持断点续传；目录里只认 Yi-版本-平台 这样命名的文件，其他文件与子目录一概不给
  *   GET /SHA256SUMS   各安装程序的 SHA-256（SEC-070）
  *   GET /assets/<名>  下载页面的标题图、图标与字体：名单见 ASSET_TYPES，内容在构建时嵌入，运行时不读取磁盘
- * 每个 IP 同时最多 2 个下载、全服最多 8 个，免得下载把带宽占满影响对局；下载速率持续过低的连接被断开（API-047）。
+ * 每个 IP（经反向代理时按真实地址，clientIp.ts）同时最多 2 个下载、全服最多 8 个，免得下载把带宽占满影响对局；下载速率持续过低的连接被断开（API-047）。
  */
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { clientIp } from './clientIp';
 import { PLATFORMS, downloadPage, type PagePkg } from './page';
 
 const PER_IP = 2,
@@ -211,7 +212,7 @@ export function fileServer(dir: string, stall: StallLimit = STALL) {
       return;
     }
 
-    const ip = req.socket.remoteAddress ?? '';
+    const ip = clientIp(req);
     if ((perIp.get(ip) ?? 0) >= PER_IP || total >= TOTAL) {
       res
         .writeHead(503, { ...BASE_HEADERS, 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': String(RETRY_AFTER_SECS) })

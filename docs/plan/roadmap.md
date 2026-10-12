@@ -305,7 +305,7 @@ server/
 | 服务端只监听本机 | 3.0 服务端设 `HOST=127.0.0.1`；安全组开放 80、443。过渡期若还要服务 2.x 老客户端，可另开一个对外端口，直到强制更新完成 |
 | 客户端地址 | `.env.production`：`VITE_YI_SERVER=wss://yi.lightking.com.cn/ws`，HTTP 接口为 `https://yi.lightking.com.cn/api` |
 | CSP | `index.html` 的 `connect-src` 现在是 `'self' ws: wss:`，改为只允许 `wss://yi.lightking.com.cn https://yi.lightking.com.cn`；开发时由 Vite 注入本机地址 |
-| 真实 IP | 服务端取客户端 IP 时读 `X-Forwarded-For`（只信任来自 127.0.0.1 的这个头），限流和反作弊要用 |
+| 真实 IP | 服务端取客户端 IP 时读 `X-Forwarded-For`（只信任来自 127.0.0.1 的这个头），限流和反作弊要用。**已实施**（#115，`server/clientIp.ts`）：取该头的最后一项；带这个头的请求不算本机请求，`/healthz`、`/metrics` 不回应 |
 
 **验收**：`curl -I https://yi.lightking.com.cn` 证书有效；桌面版用新地址可以联机；`ss -lnt` 看到 8443 只监听 127.0.0.1。
 
