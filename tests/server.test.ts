@@ -716,6 +716,35 @@ describe('安装包下载', () => {
     }
   });
 
+  it('经本机反向代理的下载按真实地址计数：同一地址同时至多 2 个，其他地址照常下载', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-files-'));
+    fs.writeFileSync(path.join(dir, 'Yi-2.0.9-linux-x86_64.AppImage'), Buffer.alloc(16 * 1024 * 1024)); // 足够大，暂停读取时下载一直进行
+    const host = await startHost(0, { host: '127.0.0.1', files: dir });
+    const pending: http.ClientRequest[] = [];
+    /** 以代理转来的方式开始下载，收到响应头后暂停读取，返回状态码 */
+    const download = (ip: string) =>
+      new Promise<number>((res, rej) => {
+        const req = http.get(
+          { host: '127.0.0.1', port: host.port, path: '/Yi-2.0.9-linux-x86_64.AppImage', agent: false, headers: { 'X-Forwarded-For': ip } },
+          r => {
+            r.pause();
+            res(r.statusCode ?? 0);
+          },
+        );
+        req.on('error', rej);
+        pending.push(req);
+      });
+    try {
+      expect([await download('198.51.100.1'), await download('198.51.100.1')]).toEqual([200, 200]);
+      expect(await download('198.51.100.1')).toBe(503);
+      expect(await download('198.51.100.2')).toBe(200);
+    } finally {
+      for (const req of pending) req.destroy();
+      await host.close();
+      fs.rmSync(dir, { recursive: true });
+    }
+  });
+
   it('没设安装包目录时网页请求一律 404', async () => {
     const host = await startHost(0, { host: '127.0.0.1' });
     try {
@@ -1080,6 +1109,30 @@ describe('连接层的限制（API-041、API-042、API-047）', () => {
     }
   });
 
+  it('经本机反向代理的连接按真实地址计数：同一地址的第 9 条连接以 1013 关闭，其他地址照常连上（API-040）', async () => {
+    const host = await startHost(0, { host: '127.0.0.1' });
+    const url = `ws://127.0.0.1:${host.port}`;
+    const opened: WebSocket[] = [];
+    /** 以代理转来的方式连上并握手，连接保持不断：收到 welcome 时返回 'welcome'，连接被关闭时返回关闭码 */
+    const viaProxy = (ip: string) =>
+      new Promise<number | 'welcome'>((res, rej) => {
+        const ws = new WebSocket(url, { headers: { 'X-Forwarded-For': ip } });
+        opened.push(ws);
+        ws.on('open', () => ws.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, name: '甲', uid: newUid() })));
+        ws.once('message', () => res('welcome'));
+        ws.on('close', code => res(code));
+        ws.on('error', rej);
+      });
+    try {
+      for (let i = 0; i < 8; i++) expect(await viaProxy('198.51.100.1')).toBe('welcome');
+      expect(await viaProxy('198.51.100.1')).toBe(CLOSE_CODE.overload);
+      expect(await viaProxy('198.51.100.2')).toBe('welcome');
+    } finally {
+      for (const ws of opened) ws.terminate();
+      await host.close();
+    }
+  });
+
   it('真实连接上握手超时以 4008 关闭', async () => {
     let t = 1000;
     const host = await startHost(0, { host: '127.0.0.1', now: () => t });
@@ -1344,7 +1397,7 @@ describe('健康检查（API-061）', () => {
     }
   });
 
-  it('不是来自本机的请求交给下一个处理者（下载页对其返回 404），/healthz 与 /metrics 都是', () => {
+  it('不是由本机直接发出的请求交给下一个处理者（下载页对其返回 404）：外部请求与经反向代理转来的请求都是，/healthz 与 /metrics 都是', () => {
     const health = () => ({ players: 1, games: 0, maintenance: false });
     const handled: string[] = [];
     const web = withHealth(
@@ -1353,17 +1406,25 @@ describe('健康检查（API-061）', () => {
       req => handled.push(`${req.url} ${req.socket.remoteAddress}`),
       () => 'yi_connections 0\n',
     );
-    const call = (url: string, remoteAddress: string) => {
+    const call = (url: string, remoteAddress: string, headers: http.IncomingHttpHeaders = {}) => {
       let status = 0;
       const res = { writeHead: (code: number) => (status = code), end: () => {} };
-      web({ method: 'GET', url, socket: { remoteAddress } } as unknown as http.IncomingMessage, res as unknown as http.ServerResponse);
+      web({ method: 'GET', url, headers, socket: { remoteAddress } } as unknown as http.IncomingMessage, res as unknown as http.ServerResponse);
       return status;
     };
+    const proxied = { 'x-forwarded-for': '203.0.113.7' };
     for (const url of ['/healthz', '/metrics']) {
-      expect([call(url, '203.0.113.7'), call(url, '::ffff:10.0.0.2')]).toEqual([0, 0]);
+      expect([call(url, '203.0.113.7'), call(url, '::ffff:10.0.0.2'), call(url, '127.0.0.1', proxied)]).toEqual([0, 0, 0]);
       expect([call(url, '::1'), call(url, '::ffff:127.0.0.1')]).toEqual([200, 200]);
     }
-    expect(handled).toEqual(['/healthz 203.0.113.7', '/healthz ::ffff:10.0.0.2', '/metrics 203.0.113.7', '/metrics ::ffff:10.0.0.2']);
+    expect(handled).toEqual([
+      '/healthz 203.0.113.7',
+      '/healthz ::ffff:10.0.0.2',
+      '/healthz 127.0.0.1',
+      '/metrics 203.0.113.7',
+      '/metrics ::ffff:10.0.0.2',
+      '/metrics 127.0.0.1',
+    ]);
   });
 });
 

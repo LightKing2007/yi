@@ -8,6 +8,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { CLOSE_CODE } from '../src/shared/protocol';
+import { clientIp } from './clientIp';
 import { fileServer } from './files';
 import { withHealth, type Build, type Web } from './health';
 import type { Gauges } from './metrics';
@@ -222,7 +223,7 @@ export async function startHost(ports: number | number[], opt: HostOptions = {})
   for (const item of listening) item.http.on('error', onError);
   for (const wss of servers) {
     wss.on('error', onError);
-    wss.on('connection', (ws: WebSocket, req) => accept(ws, req.socket.remoteAddress ?? '', server, { limits, timed }));
+    wss.on('connection', (ws: WebSocket, req) => accept(ws, clientIp(req), server, { limits, timed }));
   }
 
   const timer = setInterval(() => server.tick(), TICK_MS);
