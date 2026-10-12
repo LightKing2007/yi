@@ -21,8 +21,10 @@ Restart=always
 RestartSec=3
 RestartPreventExitStatus=65 74
 
-# 资源上限（SEC-045）：常驻内存约 85 MB（docs/audits/perf-2.0.5.md）
-MemoryMax=512M
+# 资源上限（SEC-045）：平常常驻内存约 85 MB（docs/audits/perf-2.0.5.md）。768M 按 2026-10-12 的满载实测确定：
+# 1023 个房间同时下正常的棋（每局 300 手）峰值约 449 MB；房间被刷到对局上限（API-046）时，480 个房间峰值约 760 MB。
+# 服务器内存 1.6 GB、无交换分区，其他进程约占 500 MB，给系统留约 350 MB；Node 默认的堆上限 903 MB 高于本服务可能用到的堆
+MemoryMax=768M
 TasksMax=64
 LimitNOFILE=65536
 UMask=0077
