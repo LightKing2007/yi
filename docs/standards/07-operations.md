@@ -3,8 +3,8 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.8 |
-| 修订日期 | 2026-10-10 |
+| 文件版本 | 1.1.9 |
+| 修订日期 | 2026-10-12 |
 | 规则前缀 | `OPS` |
 
 参考：ISO/IEC/IEEE 12207:2017 第 6.4.10 节至第 6.4.13 节；ISO/IEC 20000-1:2018；ISO/IEC 27035-1:2023；GB/T 20986—2023；RFC 3339；RFC 5424；SLSA v1.0。
@@ -141,6 +141,7 @@
 | `room.created` | info | 开房 | `roomId`、`playerId` |
 | `game.start` | info | 开局 | `roomId`、`gameId`、`kind` |
 | `game.over` | info | 终局 | `roomId`、`gameId`、`winner`、`reason`、`moves` |
+| `game.limit` | warn | 对局达到手数或动作记录的上限，按和棋结束（API-046） | `roomId`、`gameId`、`moves`（含停一手）、`acts` |
 | `rating.changed` | info | 段位变化 | `playerId`、`before`、`after` |
 | `proto.invalid` | warn | 非法消息 | `playerId`、`reason` |
 | `rate.limited` | warn | 触发限流；同一连接每秒至多一行 | `playerId`、`count`（60 秒内累计的违规次数，API-045） |
