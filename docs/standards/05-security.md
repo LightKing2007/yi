@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.7 |
+| 文件版本 | 1.1.8 |
 | 修订日期 | 2026-10-13 |
 | 规则前缀 | `SEC` |
 
@@ -51,7 +51,7 @@
 | SEC-030 | A | 所有 `BrowserWindow` 必须设置 `contextIsolation: true`、`sandbox: true`、`nodeIntegration: false`、`webSecurity: true` | 满足 |
 | SEC-031 | A | 必须拦截 `will-navigate` 与新窗口，只允许应用自身协议与开发服务器地址；外部链接只允许 `https:` 与 `http:`，统一交由系统浏览器打开 | 满足 |
 | SEC-032 | A | 预加载脚本暴露的函数 ≤ 10 个，每个函数的参数必须在主进程中校验类型与长度；严禁暴露 `ipcRenderer` 本身 | 满足 |
-| SEC-033 | A | 必须启用 Electron Fuses：`RunAsNode` 关闭、`EnableNodeOptionsEnvironmentVariable` 关闭、`EnableNodeCliInspectArguments` 关闭、`EnableEmbeddedAsarIntegrityValidation` 开启、`OnlyLoadAppFromAsar` 开启 | 未满足 |
+| SEC-033 | A | 必须启用 Electron Fuses：`RunAsNode` 关闭、`EnableNodeOptionsEnvironmentVariable` 关闭、`EnableNodeCliInspectArguments` 关闭、`EnableEmbeddedAsarIntegrityValidation` 开启、`OnlyLoadAppFromAsar` 开启 | 满足（整改项 P2-08，#98：`package.json` 的 `build.electronFuses` 在打包时写入；“平台冒烟检查”在三个平台上以 `scripts/check-fuses.mjs` 核对打包产物；随 2.0.7 发布） |
 | SEC-034 | A | 页面的 CSP 严禁含 `unsafe-eval`；`script-src` 统一为 `'self'` | 满足 |
 | SEC-035 | A | 严禁加载远程代码；页面上的全部脚本与样式必须打包在 asar 中 | 满足 |
 | SEC-036 | A | 只允许单实例运行（现有）；第二个实例传入的命令行参数严禁被执行 | 满足 |
