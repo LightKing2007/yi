@@ -141,7 +141,7 @@ npm run dist:win     # release/Yi-<版本>-win-x64-setup.exe（宜在 Windows �
 npm run dist:linux   # release/Yi-<版本>-linux-x86_64.AppImage（宜在 Linux 上打包）
 ```
 
-正式发行不在本机打包，而是按 [开发与发布规程](docs/procedures/release.md) 由 GitHub Actions 自动完成。面向玩家的下载地址统一为下载页面 <http://47.108.181.240:8443/>；本仓库公开，GitHub Release 中的附件与下载页面上的安装程序相同。
+正式发行不在本机打包，而是按 [开发与发布规程](docs/procedures/release.md) 由 GitHub Actions 自动完成。面向玩家的下载地址统一为下载页面 <http://yi.lightking.com.cn:8443/>；本仓库公开，GitHub Release 中的附件与下载页面上的安装程序相同。
 
 ### 4.2 版本号
 
@@ -219,7 +219,7 @@ node dist-server/server.cjs --version
 
 ### 5.3 线上部署
 
-线上服务器为 47.108.181.240（Ubuntu 24.04），部署结构如下。服务端与安装程序按版本存放，为执行 `npm run deploy -- migrate-layout`（整改项 P1-09，只需一次）之后的结构：
+线上服务器为 47.108.181.240（域名 `yi.lightking.com.cn`，Ubuntu 24.04），部署结构如下。服务端与安装程序按版本存放，为执行 `npm run deploy -- migrate-layout`（整改项 P1-09，只需一次）之后的结构：
 
 | 位置 | 内容 |
 |---|---|
