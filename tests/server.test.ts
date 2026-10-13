@@ -1069,6 +1069,15 @@ describe('限流与违规（API-042 至 API-046）', () => {
     expect(srv.health().players).toBe(2048);
   });
 
+  it('同时建立 500 条尚未握手的连接（服务端压测的情形）时全部接受，随后都能握手', () => {
+    const { srv } = world();
+    const conns = Array.from({ length: 500 }, () => ({ send: () => {}, close: () => {} }));
+    const sessions = conns.map(conn => srv.connect(conn));
+    expect(sessions.filter(sess => sess === null)).toHaveLength(0);
+    sessions.forEach((sess, i) => sess && srv.message(sess, { t: 'hello', v: PROTO_VERSION, name: '丙', uid: newUid() }, conns[i]));
+    expect(srv.health().players).toBe(500);
+  });
+
   it('尚未握手的连接达到上限时，新连接直接被告知服务器繁忙（API-046）', () => {
     const { srv } = world();
     for (let i = 0; i < PENDING_MAX; i++) expect(srv.connect({ send: () => {}, close: () => {} })).not.toBeNull();

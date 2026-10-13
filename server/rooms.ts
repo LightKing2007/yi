@@ -65,9 +65,10 @@ export class MemoryStore implements RatingStore {
 const MAX_PLAYERS = 2048;
 /**
  * 尚未握手的连接最多几条（API-046）：玩家数上限在握手时才检查，满员时带令牌的重连仍能回到原来的对局；
- * 未握手的连接另设上限，使服务端保存的连接总数仍然有界。它们须在 HELLO_SECS 内握手，同一 IP 的连接数与新建频率另有限制
+ * 未握手的连接另设上限，使服务端保存的连接总数仍然有界。它们须在 HELLO_SECS 内握手，同一 IP 的连接数与新建频率另有限制。
+ * 取与玩家上限相同的值：满员服务器的全部玩家同时重连（如服务器重启、网络抖动后）也不会被拒；每条未握手的连接约占 1 KB
  */
-export const PENDING_MAX = 256;
+export const PENDING_MAX = MAX_PLAYERS;
 const MAX_ROOMS = 1024;
 const ELO_K = 32;
 /** Elo 期望得分公式 1 / (1 + 10^(分差 / 400)) 中的底数与分差尺度 */
