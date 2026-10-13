@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 性质 | 规程，强制执行；依据 [07-operations.md](../standards/07-operations.md)、[03-data.md](../standards/03-data.md)、[05-security.md](../standards/05-security.md) |
-| 文件版本 | 1.1.4 |
+| 文件版本 | 1.1.5 |
 | 修订日期 | 2026-10-13 |
 | 适用范围 | 线上服务器 47.108.181.240 的日常检查、备份与恢复、回滚、应急处置 |
 | 相关文档 | [release.md](release.md)（发版与上线）、[README.md](../../README.md) 第 5.3、5.4 节（部署结构） |
@@ -39,6 +39,7 @@
 | 异地备份 | `ssh deploy journalctl -u yi-offsite --since yesterday --no-pager -o cat` | 有一行“异地备份已上传……”，无“异地备份失败” |
 | 上线过程的错误 | `ssh deploy journalctl -t yi-deploy --since yesterday --no-pager -o cat` | 无输出；有 `deploy.rolled-back` 时按第 5.3 条处理 |
 | 磁盘 | `ssh deploy df -h /` | 使用率 < 80%（OPS-074） |
+| 待重启的更新 | `ssh deploy 'ls -l --time-style=long-iso /var/run/reboot-required && cat /var/run/reboot-required.pkgs'` | 文件不存在。存在时自文件的时间起 7 日内，于 23:00 至 05:00 之间、以 `npm run deploy -- status` 确认没有对局后，以 root 执行 `reboot`，随后核对服务、健康检查与站点，并按第 6.1 条追加部署日志（SEC-043、OPS-050） |
 
 2.2 发现异常时，按第 5 章判定事件级别并处置。
 
