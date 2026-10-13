@@ -229,7 +229,7 @@ node dist-server/server.cjs --version
 | `/var/lib/yi/` | 段位数据，属主为系统用户 `yi`（`useradd --system --no-create-home --shell /usr/sbin/nologin yi`） |
 | `/etc/systemd/system/yi.service` | 常驻服务，开机自启，异常退出后 3 秒自动重启；因段位存档损坏退出（退出码 65、74）时不重启；源文件为仓库中的 `scripts/server/yi.service` |
 | `/etc/ssh/sshd_config.d/00-yi-hardening.conf` | SSH 仅允许 Ed25519 密钥登录，禁止口令登录（SEC-040）；原配置备份为 `/etc/ssh/sshd_config.bak-20261002` |
-| UFW | 主机防火墙，默认拒绝入站，仅放行 TCP 22、8443（SEC-041） |
+| UFW | 主机防火墙，默认拒绝入站，仅放行 TCP 22、80、443、8443，与阿里云安全组一致（SEC-041）；80、443 供 Caddy 使用（2026-10-13 起），8443 供 2.x 客户端直连，3.0 起关闭 |
 | `/etc/fail2ban/jail.local` | SSH 10 分钟内失败 5 次封禁 1 小时（SEC-042）。Ubuntu 24.04 的 SSH 单元名为 `ssh.service`，须以 `journalmatch = _SYSTEMD_UNIT=ssh.service + _COMM=sshd` 指明，否则 fail2ban 读不到任何日志 |
 | `/var/lib/yi/deploy.log` | 上线、回滚及配置修改的记录，每次操作追加一行（OPS-048）；最近一次上线的完整输出在 `deploy-last.log` |
 | `/opt/yi/backup.sh`、`/etc/systemd/system/yi-backup.{service,timer}` | 每日本地备份，每天北京时间 04:30 前后运行（DAT-060、DAT-061），源文件为仓库中的 `scripts/server/`，由 `npm run deploy -- install-backup` 安装 |
