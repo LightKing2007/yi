@@ -14,11 +14,19 @@
 #   npm run deploy -- install-journald         安装或更新 journald 的保留策略（scripts/server/journald-yi.conf），重启 journald；不重启服务端
 #   npm run deploy -- install-caddy            安装或更新 Caddy 中弈的站点配置（scripts/server/yi.caddy），校验后平滑重载，经 HTTPS 检查，
 #                                              不通过即恢复原文件；不重启服务端。须先按 LightsWeb 仓库装好 Caddy 与主配置
+#   npm run deploy -- install-deploy-user      建立或更新部署用户 deploy、/usr/local/sbin/yi-deploy 与 sudo 白名单（SEC-044）；
+#                                              scripts/server/deploy-remote.sh 改动后须重新执行，否则日常上线会因版本不一致而中止
+# 身份（SEC-044）：上线、restart、rollback、status 以部署用户 deploy 登录，经 sudo 执行服务器上 root 所有的 yi-deploy；
+# 各 install-* 与 migrate-layout 安装以 root 身份运行的配置，以 root 登录执行，每次须经项目所有者同意
 # 安装程序和服务端都取自同一个 Release 的附件，与标签上的代码一一对应；下载后与传到服务器后各按 Release 的 SHA256SUMS 核对一次（OPS-031）。
 # 服务器上的步骤在 scripts/server/deploy-remote.sh：加锁、版本目录、维护模式、健康检查与自动回滚、部署日志（OPS-041 至 OPS-048）。
 set -eu
 # SSH 用 IP 而不用域名：维护者本机的代理软件可能把域名解析为虚拟地址，SSH 会连到代理上而登录失败
 SERVER=${YI_SERVER_SSH:-root@47.108.181.240}
+# 日常上线所用的部署用户；设为 root@… 时按以 root 执行的方式上线（部署用户建立之前）
+DEPLOY=${YI_DEPLOY_SSH:-deploy@47.108.181.240}
+# 服务器上 root 所有的 deploy-remote.sh 副本，部署用户只能经 sudo 执行它
+BIN=${YI_BIN:-/usr/local/sbin/yi-deploy}
 DIR=/opt/yi
 fail() { echo "✗ $1" >&2; exit 1; }
 
@@ -56,6 +64,29 @@ remote() {
   ssh "$SERVER" "YI_OPERATOR=$WHO nohup sh $in/deploy-remote.sh $cmd 2>&1"
 }
 
+# 日常上线的命令 $1（含参数），文件为 $2 起：以部署用户经 sudo 执行服务器上的 yi-deploy（SEC-044）。
+# 文件先传到部署用户主目录下的 incoming/run.XXXXXX，由 yi-deploy 以部署用户的身份读出后使用。
+# yi-deploy 须与本机的 deploy-remote.sh 一致，否则中止：它只能以 root 更新，过时的副本会按旧的步骤上线
+daily() {
+  case "$DEPLOY" in root@*)
+    remote "$@"
+    return
+    ;;
+  esac
+  cmd=$1
+  shift
+  want=$(sha256 "$HERE/deploy-remote.sh")
+  got=$(ssh "$DEPLOY" "sha256sum $BIN" | cut -d' ' -f1) || fail "连不上部署用户 ${DEPLOY}，或服务器上没有 ${BIN}：先以 root 执行 npm run deploy -- install-deploy-user"
+  [ "$got" = "$want" ] || fail "服务器上的 $BIN 与本机的 scripts/server/deploy-remote.sh 不一致：先以 root 执行 npm run deploy -- install-deploy-user"
+  from=
+  if [ $# -gt 0 ]; then
+    in=$(ssh "$DEPLOY" 'mkdir -p -m 700 incoming && mktemp -d "$PWD/incoming/run.XXXXXX"')
+    scp -q "$@" "$DEPLOY:$in/"
+    from=" --from=$in"
+  fi
+  ssh "$DEPLOY" "YI_OPERATOR=$WHO nohup sudo -n $BIN $cmd$from 2>&1"
+}
+
 # 询问异地备份的配置，写入 $1（权限 600）；访问密钥的输入不回显
 ask_config() {
   (umask 077 && : >"$1")
@@ -72,7 +103,7 @@ ask_config() {
 
 case "${1:-}" in
   rollback | restart | status)
-    remote "$1"
+    daily "$1"
     exit 0
     ;;
   migrate-layout)
@@ -85,6 +116,10 @@ case "${1:-}" in
     ;;
   install-caddy)
     remote caddy "$HERE/yi.caddy"
+    exit 0
+    ;;
+  install-deploy-user)
+    remote deploy-user "$HERE/sudoers-yi-deploy"
     exit 0
     ;;
   install-offsite)
@@ -148,7 +183,7 @@ if [ "${1:-}" = install-journald ]; then
 fi
 
 V=${1:-}
-echo "$V" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || fail '用法：npm run deploy -- 版本号 [--restart] [--allow-downgrade]，或 npm run deploy -- restart、rollback、status、migrate-layout、install-service、install-caddy、install-offsite、install-backup、install-journald'
+echo "$V" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || fail '用法：npm run deploy -- 版本号 [--restart] [--allow-downgrade]，或 npm run deploy -- restart、rollback、status、migrate-layout、install-service、install-caddy、install-deploy-user、install-offsite、install-backup、install-journald'
 shift
 ALLOW=
 RESTART=
@@ -172,10 +207,10 @@ verify_sums "$TMP" || fail '下载的文件与 SHA256SUMS 不符，已中止，�
 echo "✓ 下载的文件与 SHA256SUMS 一致"
 
 # 上传前先检查：目录结构、版本（OPS-042）、磁盘空间，并看线上有没有人在下棋
-remote "preflight $V $(du -sk "$TMP" | cut -f1) $ALLOW"
+daily "preflight $V $(du -sk "$TMP" | cut -f1) $ALLOW"
 if [ -z "$RESTART" ]; then
   printf '上线后立即重启吗？有对局时先进入维护模式，等对局结束（至多 30 分钟）再重启 (y/N) '
   read -r answer || answer=n
   case "$answer" in y | Y) RESTART=y ;; esac
 fi
-remote "install $V $ALLOW $([ "$RESTART" = y ] || echo --no-restart)" "$TMP"/Yi-* "$TMP/SHA256SUMS" "$TMP/yi-server-$V.cjs"
+daily "install $V $ALLOW $([ "$RESTART" = y ] || echo --no-restart)" "$TMP"/Yi-* "$TMP/SHA256SUMS" "$TMP/yi-server-$V.cjs"

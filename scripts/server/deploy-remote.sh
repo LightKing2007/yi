@@ -10,6 +10,10 @@
 #   sh deploy-remote.sh offsite                                         安装异地加密备份（P1-13）：程序、单元文件与配置，并立即上传一次
 #   sh deploy-remote.sh watch                                           上线后的检查（OPS-047），由上线成功后建立的定时器 yi-watch 每分钟运行
 #   sh deploy-remote.sh caddy                                           安装同目录下的 yi.caddy（Caddy 中弈的站点配置），校验后平滑重载并检查，不通过即恢复原文件
+#   sh deploy-remote.sh deploy-user                                     建立部署用户 deploy，安装本脚本为 /usr/local/sbin/yi-deploy 与 sudo 白名单（SEC-044）
+# 部署用户 deploy 经 sudo 执行 /usr/local/sbin/yi-deploy（本脚本的 root 所有的副本）时，只允许 preflight、install、restart、rollback、
+# status；install 以 --from=目录 指定 deploy 上传文件的目录，文件以 deploy 的身份读出、复制到 root 所有的临时目录后才使用。
+# 其余命令安装以 root 身份运行的配置，仍须以 root 执行（SEC-044）
 # 目录（OPS-043）：/opt/yi/releases/版本号/ 下为 server.cjs、download/（安装程序）、env（YI_LATEST）；
 # /opt/yi/current、/opt/yi/previous 为指向版本目录的符号链接，yi.service 经 current 读取三者。
 # 规则：加锁 OPS-041；降级确认 OPS-042；整体回滚 OPS-044；维护模式 OPS-045；健康检查与自动回滚 OPS-046；部署日志 OPS-048
@@ -27,7 +31,15 @@ ETC=${YI_ETC:-/etc/yi}
 CADDYFILE=${YI_CADDYFILE:-/etc/caddy/Caddyfile}
 CADDY_SITES=${YI_CADDY_SITES:-/etc/caddy/sites}
 SITE=yi.lightking.com.cn
-WHO=${YI_OPERATOR:-unknown}
+# 经 sudo 执行时发起的用户（sudo 设置，不能伪造）；以 root 直接执行时为空
+UPLOADER=${SUDO_USER:-}
+[ "$UPLOADER" != root ] || UPLOADER=
+# 部署日志中的操作者：只留字母、数字与 ._-（经 sudo 时 YI_OPERATOR 由白名单放行，同样不可信）
+WHO=$(printf %s "${YI_OPERATOR:-${UPLOADER:-unknown}}" | tr -c 'A-Za-z0-9._-' _)
+DEPLOY_USER=deploy
+BIN=${YI_BIN:-/usr/local/sbin/yi-deploy}
+SUDOERS=${YI_SUDOERS:-/etc/sudoers.d/yi-deploy}
+ROOT_KEYS=${YI_ROOT_KEYS:-/root/.ssh/authorized_keys}
 WAIT_STEP=10     # 维护模式中每 10 秒查一次活跃对局数
 WAIT_POLLS=${YI_WAIT_POLLS:-180} # 至多 180 次，即 30 分钟（OPS-045；测试时改小）
 HEALTH_POLLS=30  # 重启后每秒查一次健康检查，至多 30 秒（OPS-046）
@@ -398,6 +410,65 @@ locked() {
   exit "$rc"
 }
 
+# ---------------- 部署用户（SEC-044） ----------------
+
+# 以发起 sudo 的用户的身份执行命令：读上传目录时只能读到该用户本来就能读的文件，符号链接与硬链接都无从借用 root 的权限
+as_uploader() { runuser -u "$UPLOADER" -- "$@"; }
+
+# 部署用户上传文件的目录：其主目录下的 incoming/
+upload_root() { printf '%s/incoming' "${YI_UPLOAD_ROOT_HOME:-$(getent passwd "$UPLOADER" | cut -d: -f6)}"; }
+
+# 收取部署用户上传到 $1（须为 upload_root 下的 run.XXXXXX）的安装程序、服务端与 SHA256SUMS：以其身份逐个读出，
+# 写入 root 所有的临时目录，此后只用这份副本（HERE 改指向它，做完即删）；随后删除上传目录
+receive() {
+  [ -n "$UPLOADER" ] || fail '--from= 只用于部署用户经 sudo 上线'
+  up=$(upload_root)
+  case "$1" in "$up"/run.*) ;; *) fail "上传目录须在 $up/ 下：$1" ;; esac
+  case "${1#"$up"/}" in *[!A-Za-z0-9.]*) fail "上传目录的名称不合规：$1" ;; esac
+  mkdir -p "$ROOT/.incoming"
+  chmod 700 "$ROOT/.incoming"
+  HERE=$(mktemp -d "$ROOT/.incoming/recv.XXXXXX")
+  trap 'rm -rf "$HERE"' EXIT
+  for f in $(as_uploader ls -A -- "$1"); do
+    case "$f" in Yi-* | yi-server-*.cjs | SHA256SUMS) ;; *) continue ;; esac
+    case "$f" in *[!A-Za-z0-9._-]*) fail "文件名不合规：$f" ;; esac
+    as_uploader cat -- "$1/$f" >"$HERE/$f" || fail "读不出上传的 $f"
+  done
+  as_uploader rm -rf -- "$1"
+}
+
+# 经 sudo 由部署用户执行时，只允许日常的上线命令；其余命令安装以 root 身份运行的配置，须以 root 执行（SEC-044）
+restrict() {
+  [ -n "$UPLOADER" ] || return 0
+  case "$1" in preflight | install | restart | rollback | status) ;; *) fail "部署用户不能执行 ${1}：须以 root 执行（SEC-044）" ;; esac
+}
+
+# 建立部署用户 deploy（SEC-044）：不设口令，只放入 root 的 Ed25519 公钥，加入 systemd-journal 组以查看日志；
+# 本脚本安装为 root 所有的 ${BIN}，sudo 白名单以 visudo 校验通过后才放入 ${SUDOERS}。重复执行即更新为仓库中的版本
+cmd_deploy_user() {
+  [ -f "$HERE/sudoers-yi-deploy" ] || fail "没有 $HERE/sudoers-yi-deploy"
+  keys=$(grep '^ssh-ed25519 ' "$ROOT_KEYS") || fail "$ROOT_KEYS 中没有 Ed25519 公钥"
+  getent passwd "$DEPLOY_USER" >/dev/null || useradd --create-home --shell /bin/bash "$DEPLOY_USER"
+  usermod -a -G systemd-journal "$DEPLOY_USER"
+  home=${YI_UPLOAD_ROOT_HOME:-$(getent passwd "$DEPLOY_USER" | cut -d: -f6)}
+  mkdir -p "$home/.ssh" "$home/incoming"
+  printf '%s\n' "$keys" >"$home/.ssh/authorized_keys"
+  chown -R "$DEPLOY_USER:$DEPLOY_USER" "$home/.ssh" "$home/incoming"
+  chmod 700 "$home/.ssh" "$home/incoming"
+  chmod 600 "$home/.ssh/authorized_keys"
+  cp "$HERE/deploy-remote.sh" "$BIN.new"
+  chown root:root "$BIN.new"
+  chmod 755 "$BIN.new"
+  mv -f "$BIN.new" "$BIN"
+  cp "$HERE/sudoers-yi-deploy" "$SUDOERS.new"
+  chown root:root "$SUDOERS.new"
+  chmod 440 "$SUDOERS.new"
+  visudo -c -q -f "$SUDOERS.new" || { rm -f "$SUDOERS.new"; record config 'P2-14 install-deploy-user' fail; fail 'sudo 白名单校验不通过，未安装'; }
+  mv -f "$SUDOERS.new" "$SUDOERS"
+  record config 'P2-14 install-deploy-user' ok
+  say "✓ 部署用户 $DEPLOY_USER 已建立：${BIN}、${SUDOERS}；以 ssh ${DEPLOY_USER}@服务器 sudo -l 查看白名单"
+}
+
 # 经本机的 Caddy 以 HTTPS 访问弈的站点：下载页面 200、/healthz 被屏蔽为 404 即为正常（API-061）
 site_ok() {
   page=$(curl -s -o /dev/null -w '%{http_code}' --resolve "$SITE:443:127.0.0.1" "https://$SITE/" || true)
@@ -452,17 +523,21 @@ restore_site() {
 
 cmd=${1:-}
 [ $# -gt 0 ] && shift
-allow=0 restart=1
+restrict "$cmd"
+allow=0 restart=1 from=
 for a in "$@"; do
   case "$a" in
     --allow-downgrade) allow=1 ;;
     --no-restart) restart=0 ;;
+    --from=*) from=${a#--from=} ;;
   esac
 done
+# 部署用户上线时，文件来自其上传目录（不能用与本脚本同目录的文件）
+if [ "$cmd" = install ] && [ -n "$UPLOADER" ] && [ -z "$from" ]; then fail '部署用户上线须以 --from= 指定上传目录'; fi
 case "$cmd" in
   preflight) cmd_preflight "$1" "$2" "$allow" ;;
   status) cmd_status ;;
-  install) locked install "$@" && cmd_install "$1" "$allow" "$restart" ;;
+  install) locked install "$@" && { [ -z "$from" ] || receive "$from"; } && cmd_install "$1" "$allow" "$restart" ;;
   restart) locked restart "$@" && finish restart ;;
   rollback) locked rollback "$@" && cmd_rollback ;;
   migrate) locked migrate "$@" && cmd_migrate ;;
@@ -470,5 +545,6 @@ case "$cmd" in
   offsite) locked offsite "$@" && cmd_offsite ;;
   watch) locked watch "$@" && cmd_watch ;;
   caddy) locked caddy "$@" && cmd_caddy ;;
-  *) fail "用法：sh deploy-remote.sh preflight|install|restart|rollback|migrate|status|service|offsite|watch|caddy" ;;
+  deploy-user) locked deploy-user "$@" && cmd_deploy_user ;;
+  *) fail "用法：sh deploy-remote.sh preflight|install|restart|rollback|migrate|status|service|offsite|watch|caddy|deploy-user" ;;
 esac

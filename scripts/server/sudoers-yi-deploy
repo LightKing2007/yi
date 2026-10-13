@@ -1,0 +1,6 @@
+# 部署用户 deploy 的 sudo 白名单（SEC-044）。由 npm run deploy -- install-deploy-user 以 root 安装为 /etc/sudoers.d/yi-deploy，
+# 安装前以 visudo 校验，严禁在服务器上直接改动。
+# 只允许执行 root 所有的 /usr/local/sbin/yi-deploy（scripts/server/deploy-remote.sh 的副本）：它只接受 preflight、install、restart、
+# rollback、status，其余命令须以 root 执行。sudo 清空环境变量，只放行部署日志中的操作者名称（脚本中另行过滤）
+Defaults!/usr/local/sbin/yi-deploy env_keep += "YI_OPERATOR"
+deploy ALL=(root) NOPASSWD: /usr/local/sbin/yi-deploy
