@@ -3,8 +3,8 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.6 |
-| 修订日期 | 2026-10-12 |
+| 文件版本 | 1.1.7 |
+| 修订日期 | 2026-10-13 |
 | 规则前缀 | `SEC` |
 
 参考：ISO/IEC 27001:2022、ISO/IEC 27002:2022；GB/T 22239—2019（第二级）；GB/T 20984—2022；OWASP ASVS 5.0；Electron Security Checklist；CIS Ubuntu Linux 24.04 LTS Benchmark；ISO/IEC 29147:2018、ISO/IEC 30111:2019。
@@ -61,7 +61,7 @@
 | 编号 | 等级 | 规定 | 现状 |
 |---|---|---|---|
 | SEC-040 | A | SSH 统一为 `PasswordAuthentication no`、`PermitRootLogin prohibit-password`、`KbdInteractiveAuthentication no`、`MaxAuthTries 3`；只允许 Ed25519 密钥 | 未满足（F-04） |
-| SEC-041 | A | 主机防火墙（UFW）必须启用，默认拒绝入站，只放行 22、8443（启用 TLS 后改为 22、80、443）；放行清单必须与云安全组一致 | 未满足 |
+| SEC-041 | A | 主机防火墙（UFW）必须启用，默认拒绝入站，只放行 22、8443（启用 TLS 后改为 22、80、443）；放行清单必须与云安全组一致 | 部分满足（2026-10-13 起放行 22、80、443、8443，与安全组一致；8443 在过渡期内保留，3.0 起关闭） |
 | SEC-042 | A | 必须安装 fail2ban，SSH 10 分钟内失败 5 次封禁 1 小时 | 未满足 |
 | SEC-043 | A | 必须启用 `unattended-upgrades` 自动安装安全更新；需要重启的内核更新，必须在 7 日内择无对局时重启 | 未知 |
 | SEC-044 | C | 日常运维统一使用非 root 的部署用户 `deploy`，以 `sudo` 白名单执行 `systemctl restart yi` 等命令；root 登录只允许用于应急 | 未满足 |

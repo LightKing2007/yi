@@ -141,7 +141,7 @@ npm run dist:win     # release/Yi-<版本>-win-x64-setup.exe（宜在 Windows �
 npm run dist:linux   # release/Yi-<版本>-linux-x86_64.AppImage（宜在 Linux 上打包）
 ```
 
-正式发行不在本机打包，而是按 [开发与发布规程](docs/procedures/release.md) 由 GitHub Actions 自动完成。面向玩家的下载地址统一为下载页面 <http://yi.lightking.com.cn:8443/>；本仓库公开，GitHub Release 中的附件与下载页面上的安装程序相同。
+正式发行不在本机打包，而是按 [开发与发布规程](docs/procedures/release.md) 由 GitHub Actions 自动完成。面向玩家的下载地址统一为下载页面 <https://yi.lightking.com.cn/>；本仓库公开，GitHub Release 中的附件与下载页面上的安装程序相同。
 
 ### 4.2 版本号
 
@@ -260,7 +260,7 @@ node dist-server/server.cjs --version
 
 ### 5.5 域名与 TLS
 
-域名 `lightking.com.cn` 的 ICP 备案已于 2026-10-12 通过（渝ICP备2025066996号-2），`yi.lightking.com.cn` 已解析至该服务器。按项目所有者的决定，域名与 TLS 提前于 3.0 启用（路线图第 6 章），过渡期内新旧地址并行：
+域名 `lightking.com.cn` 的 ICP 备案已于 2026-10-12 通过（渝ICP备2025066996号-2），`yi.lightking.com.cn` 已解析至该服务器。按项目所有者的决定，域名与 TLS 提前于 3.0 启用（路线图第 6 章），过渡期内新旧地址并行。2026-10-13 已完成第 1、2、4 项及第 5 项中的 `YI_DOWNLOAD`；Caddy 为 v2.11.7：
 
 1. Caddy 作为整台服务器的反向代理，监听 80、443 端口并自动申请、续期证书（SEC-010）。Caddy 本身、主配置 `/etc/caddy/Caddyfile`（以 `import /etc/caddy/sites/*.caddy` 引入各站点）、默认拒绝以 IP 或未登记的域名访问、公共响应头由 LightsWeb 仓库管理；
 2. 弈的站点配置为仓库中的 `scripts/server/yi.caddy`，以 `npm run deploy -- install-caddy` 安装：先以整套配置校验，再平滑重载（不中断其他网站与已建立的联机），经 HTTPS 检查下载页面可以访问、`/healthz` 已屏蔽，不通过即恢复原文件；

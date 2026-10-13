@@ -16,7 +16,7 @@ EnvironmentFile=/opt/yi/current/env
 Environment=NODE_ENV=production
 Environment=YI_DATA=/var/lib/yi/yi-ratings.json
 Environment=YI_FILES=/opt/yi/current/download
-Environment=YI_DOWNLOAD=http://yi.lightking.com.cn:8443/
+Environment=YI_DOWNLOAD=https://yi.lightking.com.cn/
 Restart=always
 RestartSec=3
 RestartPreventExitStatus=65 74

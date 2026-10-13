@@ -301,7 +301,7 @@ server/
 | 改动 | 说明 |
 |---|---|
 | 域名 | `yi.lightking.com.cn`，A 记录指向服务器 |
-| Caddy | 安装 Caddy，自动申请并续期证书：`yi.lightking.com.cn { reverse_proxy 127.0.0.1:8443 }`。**站点配置已就绪**：`scripts/server/yi.caddy`，以 `npm run deploy -- install-caddy` 安装；Caddy 与主配置由 LightsWeb 仓库管理（2026-10-13 项目所有者决定），以便同一台服务器承载多个网站 |
+| Caddy | 安装 Caddy，自动申请并续期证书：`yi.lightking.com.cn { reverse_proxy 127.0.0.1:8443 }`。**已实施**（2026-10-13，Caddy v2.11.7）：站点配置为 `scripts/server/yi.caddy`，以 `npm run deploy -- install-caddy` 安装；安全组与 UFW 已放行 80、443；Caddy 与主配置由 LightsWeb 仓库管理（2026-10-13 项目所有者决定），以便同一台服务器承载多个网站 |
 | 服务端只监听本机 | 3.0 服务端设 `HOST=127.0.0.1`；安全组开放 80、443。过渡期若还要服务 2.x 老客户端，可另开一个对外端口，直到强制更新完成 |
 | 客户端地址 | `.env.production`：`VITE_YI_SERVER=wss://yi.lightking.com.cn/ws`，HTTP 接口为 `https://yi.lightking.com.cn/api` |
 | CSP | `index.html` 的 `connect-src` 现在是 `'self' ws: wss:`，改为只允许 `wss://yi.lightking.com.cn https://yi.lightking.com.cn`；开发时由 Vite 注入本机地址 |
