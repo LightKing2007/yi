@@ -237,6 +237,7 @@ node dist-server/server.cjs --version
 | `/opt/yi/offsite.cjs`、`/etc/systemd/system/yi-offsite.service`、`/etc/yi/offsite.env` | 异地加密备份（DAT-061 第二层、DAT-063）：每日本地备份成功后，以 age 加密最新的一份并上传到阿里云 OSS；`offsite.env` 内含 OSS 的存储桶与只能写入的访问密钥（属主 root:yi，权限 640），解密用的私钥只在维护者本机。源文件为仓库中的 `scripts/offsite.ts` 与 `scripts/server/yi-offsite.service`，由 `npm run deploy -- install-offsite` 安装 |
 | `/etc/systemd/journald.conf.d/yi.conf` | journald 的保留策略：日志总量至多 1 GB，保留 90 日（OPS-065），源文件为仓库中的 `scripts/server/journald-yi.conf`，由 `npm run deploy -- install-journald` 安装 |
 | `/etc/caddy/sites/yi.caddy` | Caddy 中弈的站点配置：`yi.lightking.com.cn` 以 HTTPS 转发到本机 8443，屏蔽 `/healthz` 与 `/metrics`（API-061），不开访问日志（DAT-073）；源文件为仓库中的 `scripts/server/yi.caddy`，由 `npm run deploy -- install-caddy` 安装。Caddy 本身与主配置 `/etc/caddy/Caddyfile` 由 LightsWeb 仓库管理 |
+| 部署用户 `deploy`、`/usr/local/sbin/yi-deploy`、`/etc/sudoers.d/yi-deploy` | 日常运维的身份（SEC-044）：`npm run deploy` 的上线、`restart`、`rollback`、`status` 以 `deploy` 登录，只能经 sudo 执行 root 所有的 `yi-deploy`（`scripts/server/deploy-remote.sh` 的副本，只接受这几个命令），上传的文件由它以 `deploy` 的身份读出后使用；`deploy` 属 `systemd-journal` 组，可直接查看日志。白名单的源文件为 `scripts/server/sudoers-yi-deploy`，三者由 `npm run deploy -- install-deploy-user` 以 root 安装；其余 `install-*` 以 root 执行 |
 
 `yi.service` 的内容见仓库中的 [scripts/server/yi.service](scripts/server/yi.service)，由 `npm run deploy -- install-service` 安装：服务端、安装程序与 `YI_LATEST` 均经 `/opt/yi/current` 读取；加固选项按 SEC-045，安装前检查 `systemd-analyze security` 的评分不高于 4.0，装好后重启并做健康检查，不通过即恢复原文件。
 
@@ -244,8 +245,8 @@ node dist-server/server.cjs --version
 
 - **更新**：服务端随发版一同更新，由 `npm run deploy -- 版本号` 部署对应 Release 中的安装程序与 `yi-server-版本.cjs`：有对局时先进入维护模式，等对局结束后重启，重启后以健康检查核对版本，不通过即自动回滚；`npm run deploy -- rollback` 立即回退至上一版本。详见 [开发与发布规程](docs/procedures/release.md) 第 6 章。
 - **健康检查**：`npm run deploy -- status` 经服务器本机读取 `/healthz`，打出版本号、提交号、活跃对局数、是否处于维护模式与连接数；`/healthz` 只回应来自本机的请求（API-061）。
-- **监控指标**：同一端口上的 `/metrics`（只回应来自本机的请求，API-061）以 Prometheus 文本格式输出 [07-operations.md](docs/standards/07-operations.md) 第 9 节的指标（连接数、在线玩家、房间、排队、消息与错误码计数、处理耗时、事件循环延迟、内存等）；服务端另每 60 秒在日志中写一条 `metrics.snapshot`（OPS-071）。查看：`ssh root@47.108.181.240 /opt/node/bin/node -e "fetch('http://127.0.0.1:8443/metrics').then(r=>r.text()).then(console.log)"`。
-- **查看日志**：`ssh root@47.108.181.240 journalctl -u yi -f`。日志为 JSON Lines，每行一个事件，`ver` 字段为服务端的版本号及提交号（格式与事件码见 [07-operations.md](docs/standards/07-operations.md) 第 5 节、第 8 节）；只看警告及以上：`journalctl -u yi -p warning`；临时输出 debug 级别：以 `systemctl edit yi` 在附加配置中设 `Environment=YI_LOG_LEVEL=debug`（OPS-062），不改动 `yi.service` 本身，用完以 `systemctl revert yi` 删除。
+- **监控指标**：同一端口上的 `/metrics`（只回应来自本机的请求，API-061）以 Prometheus 文本格式输出 [07-operations.md](docs/standards/07-operations.md) 第 9 节的指标（连接数、在线玩家、房间、排队、消息与错误码计数、处理耗时、事件循环延迟、内存等）；服务端另每 60 秒在日志中写一条 `metrics.snapshot`（OPS-071）。查看：`ssh deploy@47.108.181.240 /opt/node/bin/node -e "fetch('http://127.0.0.1:8443/metrics').then(r=>r.text()).then(console.log)"`。
+- **查看日志**：`ssh deploy@47.108.181.240 journalctl -u yi -f`。日志为 JSON Lines，每行一个事件，`ver` 字段为服务端的版本号及提交号（格式与事件码见 [07-operations.md](docs/standards/07-operations.md) 第 5 节、第 8 节）；只看警告及以上：`journalctl -u yi -p warning`；临时输出 debug 级别：以 root 执行 `systemctl edit yi` 在附加配置中设 `Environment=YI_LOG_LEVEL=debug`（OPS-062），不改动 `yi.service` 本身，用完以 `systemctl revert yi` 删除。
 - **修改服务配置**：修改仓库中的 `scripts/server/yi.service`，经 PR 合并后执行 `npm run deploy -- install-service`；严禁在服务器上直接改动该文件。
 - **防火墙**：阿里云安全组与主机防火墙 UFW 均仅放行 TCP 22、8443 端口，两者须保持一致（SEC-041）。
 - **重启**：以 `npm run deploy -- restart` 进行：有对局时先进入维护模式，等对局结束后重启，并以健康检查核对；严禁直接执行 `systemctl restart yi`。
