@@ -35,7 +35,7 @@ describe('HTTP 请求', () => {
     }
   });
 
-  it('目录未变时不再读取目录；新增安装程序后页面随即列出；原地改写的安装程序按新的内容下载（P2-17）', async () => {
+  it('目录未变时不再读取目录；新增安装程序后页面随即列出；原地改写的安装程序按新的内容下载，已删掉的返回 404（P2-17）', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-files-'));
     const exe = path.join(dir, 'Yi-2.0.1-win-x64-setup.exe');
     fs.writeFileSync(exe, '0123456789');
@@ -53,10 +53,29 @@ describe('HTTP 请求', () => {
       fs.writeFileSync(exe, 'abc'); // 原地改写不改变目录
       const changed = await fetch(base + '/Yi-2.0.1-win-x64-setup.exe');
       expect([changed.headers.get('content-length'), await changed.text()]).toEqual(['3', 'abc']);
+      fs.rmSync(exe); // 列出之后被删掉：下载前核对时发现，按不存在处理
+      expect((await fetch(base + '/Yi-2.0.1-win-x64-setup.exe')).status).toBe(404);
     } finally {
       readdir.mockRestore();
       await host.close();
       fs.rmSync(dir, { recursive: true });
+    }
+  });
+
+  it('安装包目录在列出之后消失（例如切换版本的瞬间）时，页面照常显示，只是不再列出原来的安装程序', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-files-'));
+    fs.writeFileSync(path.join(dir, 'Yi-2.0.1-win-x64-setup.exe'), 'win');
+    const host = await startHost(0, { host: '127.0.0.1', files: dir });
+    const base = `http://127.0.0.1:${host.port}`;
+    try {
+      expect(await (await fetch(base + '/')).text()).toContain('Yi-2.0.1-win-x64-setup.exe');
+      fs.rmSync(dir, { recursive: true });
+      const page = await fetch(base + '/');
+      expect(page.status).toBe(200);
+      expect(await page.text()).not.toContain('Yi-2.0.1-win-x64-setup.exe');
+    } finally {
+      await host.close();
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 });
