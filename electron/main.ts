@@ -2,13 +2,21 @@
  * 弈 · 桌面版主进程：窗口与少量系统功能（退出、匹配成功时提醒、错误日志）。只允许运行一个实例。
  * 页面由自定义协议 app://yi/ 提供（模块脚本、Worker、本地存储都按普通网站的规则工作）。
  */
-import { app, BrowserWindow, ipcMain, Menu, net, protocol, screen, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, net, protocol, screen, shell, type IpcMainEvent } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { devOrigin, isAppUrl, MIN_HEIGHT_PX, MIN_WIDTH_PX, pageLog, parseBounds, type Bounds } from './guard';
 
 const DIST = path.join(__dirname, '..', 'dist');
-const DEV_URL = process.env.YI_DEV_URL; // 开发时：YI_DEV_URL=http://localhost:5173 npm run app:dev
+/** 开发服务器的源：只有未打包时读取，开发时 YI_DEV_URL=http://localhost:5173 npm run app:dev（A-11） */
+const DEV_ORIGIN = devOrigin(process.env.YI_DEV_URL, app.isPackaged);
+/** 游戏页面的入口 */
+const APP_ENTRY = 'app://yi/index.html';
+/** 第一次启动时的窗口大小：界面的设计尺寸，但不超过工作区的这个比例 */
+const DESIGN_WIDTH_PX = 1320;
+const DESIGN_HEIGHT_PX = 900;
+const FIRST_SIZE_RATIO = 0.9;
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, codeCache: true } }]);
 
@@ -49,15 +57,23 @@ process.on('unhandledRejection', e => writeLog('main', e instanceof Error ? (e.s
 
 const boundsFile = () => path.join(app.getPath('userData'), 'window.json');
 
-function loadBounds() {
+/** 上次关闭时的窗口位置与大小（逐项校验，A-12）；第一次启动或文件损坏时按设计尺寸，由系统居中 */
+function loadBounds(): Bounds {
   try {
-    const b = JSON.parse(fs.readFileSync(boundsFile(), 'utf8'));
-    if (typeof b.width === 'number' && typeof b.height === 'number') return b as { x?: number; y?: number; width: number; height: number; max?: boolean };
+    const saved = parseBounds(
+      JSON.parse(fs.readFileSync(boundsFile(), 'utf8')),
+      screen.getAllDisplays().map(display => display.workArea),
+    );
+    if (saved) return saved;
   } catch {
-    /* 第一次启动 */
+    /* 第一次启动还没有这个文件，或文件损坏：都按设计尺寸打开 */
   }
   const wa = screen.getPrimaryDisplay().workAreaSize;
-  return { width: Math.min(1320, Math.round(wa.width * 0.9)), height: Math.min(900, Math.round(wa.height * 0.9)) };
+  return {
+    width: Math.min(DESIGN_WIDTH_PX, Math.round(wa.width * FIRST_SIZE_RATIO)),
+    height: Math.min(DESIGN_HEIGHT_PX, Math.round(wa.height * FIRST_SIZE_RATIO)),
+    max: false,
+  };
 }
 
 function saveBounds() {
@@ -70,11 +86,11 @@ function saveBounds() {
 }
 
 function createWindow() {
-  const b = loadBounds();
+  const { max, ...b } = loadBounds();
   win = new BrowserWindow({
     ...b,
-    minWidth: 800,
-    minHeight: 600,
+    minWidth: MIN_WIDTH_PX,
+    minHeight: MIN_HEIGHT_PX,
     show: false,
     title: '弈',
     backgroundColor: '#e0ddd9',
@@ -84,44 +100,54 @@ function createWindow() {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      webSecurity: true, // 默认即为 true，按 SEC-030 显式写明（A-13）
       spellcheck: false,
       autoplayPolicy: 'no-user-gesture-required',
     },
   });
-  if (b.max) win.maximize();
+  if (max) win.maximize();
   win.once('ready-to-show', () => win?.show());
   win.on('close', saveBounds);
   win.on('closed', () => {
     win = null;
   });
-  win.webContents.on('render-process-gone', (_e, d) => writeLog('main', `页面进程退出：${d.reason}（${d.exitCode}）`));
+  win.webContents.on('render-process-gone', (_event, details) => writeLog('main', `页面进程退出：${details.reason}（${details.exitCode}）`));
   win.on('focus', () => win?.flashFrame(false));
   // 外部链接用系统浏览器打开，页面本身不跳转
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//.test(url)) shell.openExternal(url);
+    if (/^https?:\/\//.test(url)) shell.openExternal(url).catch((err: unknown) => writeLog('main', `无法打开外部链接：${String(err)}`));
     return { action: 'deny' };
   });
-  win.webContents.on('will-navigate', (e, url) => {
-    if (!url.startsWith('app://') && !(DEV_URL && url.startsWith(DEV_URL))) e.preventDefault();
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!isAppUrl(url, DEV_ORIGIN)) event.preventDefault();
   });
   // F11 全屏
   win.webContents.on('before-input-event', (_e, input) => {
     if (input.type === 'keyDown' && input.key === 'F11' && win) win.setFullScreen(!win.isFullScreen());
   });
-  win.loadURL(DEV_URL ?? 'app://yi/index.html');
+  win.loadURL(DEV_ORIGIN ?? APP_ENTRY).catch((err: unknown) => writeLog('main', `页面加载失败：${String(err)}`));
 }
 
 // ---------------- 启动 ----------------
 
-ipcMain.on('app:quit', () => app.quit());
-ipcMain.on('app:log', (_e, level: unknown, text: unknown) => writeLog(String(level).slice(0, 16), String(text).slice(0, 8000)));
-ipcMain.on('app:openLogs', () => {
+/** 只处理游戏页面自己发来的 IPC 消息（A-10，Electron 安全清单第 17 条）：发送方的框架须是 app://yi/ 或开发服务器 */
+const fromApp = (event: IpcMainEvent) => isAppUrl(event.senderFrame?.url, DEV_ORIGIN);
+
+ipcMain.on('app:quit', event => {
+  if (fromApp(event)) app.quit();
+});
+ipcMain.on('app:log', (event, level: unknown, text: unknown) => {
+  const entry = fromApp(event) ? pageLog(level, text) : null;
+  if (entry) writeLog(entry.level, entry.text);
+});
+ipcMain.on('app:openLogs', event => {
+  if (!fromApp(event)) return;
   fs.mkdirSync(logDir(), { recursive: true });
-  shell.openPath(logDir());
+  void shell.openPath(logDir()); // 打不开文件夹时系统自会提示，游戏无须处理
 });
 // 窗口不在前台时匹配成功：任务栏闪烁 / 程序坞图标跳一下
-ipcMain.on('app:attention', () => {
-  if (!win || win.isFocused()) return;
+ipcMain.on('app:attention', event => {
+  if (!fromApp(event) || !win || win.isFocused()) return;
   win.flashFrame(true);
   if (process.platform === 'darwin') app.dock?.bounce('informational');
 });
