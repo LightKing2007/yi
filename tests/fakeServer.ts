@@ -139,6 +139,7 @@ export function run(args: string[], script = SCRIPT, input = '', operator = 'tes
     YI_ETC: at('etc-yi'),
     YI_CADDYFILE: at('caddy/Caddyfile'),
     YI_CADDY_SITES: at('caddy/sites'),
+    YI_WAIT_POLLS: '3', // 维护模式中查活跃对局数的次数：默认 180（30 分钟），测试中改小以免测试过慢
     YI_SITE_POLLS: '3', // 安装 Caddy 站点配置后的检查次数：默认 60，测试中改小以免测试过慢
     YI_OPERATOR: operator,
   };
