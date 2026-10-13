@@ -9,7 +9,7 @@ let now = START;
 function tick(minutes = 1) {
   now += minutes * 60;
   write(at('sim/now'), String(now));
-  return run(['watch'], SCRIPT, '', 'watch');
+  return run(['watch'], SCRIPT, '', { YI_OPERATOR: 'watch' });
 }
 /** 上线后的检查是否仍在进行 */
 const watching = () => fs.existsSync(at('state/watch/started'));

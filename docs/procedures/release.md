@@ -3,8 +3,8 @@
 | 项目 | 内容 |
 |---|---|
 | 性质 | 规程，强制执行；依据 [07-operations.md](../standards/07-operations.md)、[08-versioning.md](../standards/08-versioning.md)、[09-text-and-i18n.md](../standards/09-text-and-i18n.md) |
-| 文件版本 | 1.1.11 |
-| 修订日期 | 2026-10-05 |
+| 文件版本 | 1.1.12 |
+| 修订日期 | 2026-10-13 |
 | 适用范围 | 从修改代码到玩家获得新版本的全部步骤：分支、提交、PR、更新日志、发版、上线、回滚、紧急修复 |
 
 本规程只规定操作步骤。各步骤须满足的要求以规则编号引用，规则内容以 `docs/standards/` 为准。
@@ -118,6 +118,8 @@ gh release view v2.0.3 --web
 npm run deploy -- 2.0.5
 ```
 
+上线、`restart`、`rollback`、`status` 以部署用户 `deploy` 登录，经 sudo 执行服务器上 root 所有的 `/usr/local/sbin/yi-deploy`（SEC-044）。它是 `scripts/server/deploy-remote.sh` 的副本，二者不一致时上线脚本在上传前中止；该脚本有改动时，须先以 root 执行 `npm run deploy -- install-deploy-user` 更新，这一步安装以 root 身份运行的配置，须经项目所有者同意。其余 `install-*` 与 `migrate-layout` 同样以 root 执行。
+
 6.2 服务器上的文件按版本存放（OPS-043）：`/opt/yi/releases/版本号/` 下为服务端 `server.cjs`、安装程序目录 `download/` 与记录 `YI_LATEST` 的 `env`；`/opt/yi/current`、`/opt/yi/previous` 为指向当前与上一版本目录的符号链接，`yi.service` 经 `current` 读取三者。服务器上只保留这两个版本。由旧的目录结构改为版本目录只需一次，不重启服务端，自下一次重启起生效：
 
 ```bash
@@ -134,7 +136,7 @@ npm run deploy -- migrate-layout
 6. 重启前读取 `/healthz` 中的活跃对局数：为 0 时立即重启；不为 0 时进入维护模式，等待对局结束后重启，至多 30 分钟，超时后强制重启（OPS-045）。线上版本没有 `/healthz`（2.0.4 及以前）时，不进入维护模式，直接重启；
 7. 重启后 30 秒内，`/healthz` 返回的版本号与提交号须等于新版本，否则自动回滚到上一版本，写 `deploy.rolled-back` 日志（OPS-046）；
 8. 在 `/var/lib/yi/deploy.log` 追加一行（OPS-048），结果为 `ok`、`installed`（未重启）、`rolled-back` 或 `fail`。本次上线的完整输出保存在 `/var/lib/yi/deploy-last.log`；
-9. 上线成功后，建立定时器 `yi-watch`，60 分钟内每分钟检查一次：5 分钟内重启 ≥ 3 次、健康检查连续 3 次失败、5 分钟内服务端内部错误（`internal.error`）占消息 ≥ 1%（少于 100 条消息时不计），任一满足即自动回滚，写 `deploy.rolled-back` 日志，部署日志的操作者记为 `watch`（OPS-047）。查看检查是否仍在进行：`ssh root@47.108.181.240 systemctl list-timers yi-watch.timer`。手动回滚时自动停止检查。
+9. 上线成功后，建立定时器 `yi-watch`，60 分钟内每分钟检查一次：5 分钟内重启 ≥ 3 次、健康检查连续 3 次失败、5 分钟内服务端内部错误（`internal.error`）占消息 ≥ 1%（少于 100 条消息时不计），任一满足即自动回滚，写 `deploy.rolled-back` 日志，部署日志的操作者记为 `watch`（OPS-047）。查看检查是否仍在进行：`ssh deploy@47.108.181.240 systemctl list-timers yi-watch.timer`。手动回滚时自动停止检查。
 
 服务器上的步骤以 `nohup` 执行，ssh 中途断开时照常做完。
 

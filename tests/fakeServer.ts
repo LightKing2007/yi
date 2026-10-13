@@ -72,7 +72,18 @@ case "$last" in */healthz) printf %s "$(cat "$SIM/healthz-code" 2>/dev/null || e
   "release view") echo false ;;
   "release download") while [ $# -gt 0 ]; do [ "$1" = -D ] && dir=$2; shift; done; cp "$SIM"/release/* "$dir/" ;;
 esac`,
-  ssh: `exec sh -c "$(printf %s "$2" | sed "s#/opt/yi#$ROOT#g")"`,
+  // 在模拟的主目录中执行（部署用户的上传目录以主目录为准）
+  ssh: `cd "$SIM/home" && exec sh -c "$(printf %s "$2" | sed "s#/opt/yi#$ROOT#g")"`,
+  // sudo：以发起者 deploy 执行（真的 sudo 会清空环境变量，模拟的服务器靠环境变量指路，此处保留）
+  sudo: `[ "$1" = -n ] && shift; echo "sudo $*" >> "$SIM/calls"; exec env SUDO_USER=deploy "$@"`,
+  // runuser -u 用户 -- 命令：记下用户、命令与最后一个参数的文件名后直接执行
+  runuser: `for last; do :; done; echo "runuser $2 $4 \${last##*/}" >> "$SIM/calls"; shift 3; exec "$@"`,
+  // getent passwd：sim/users 中列出的用户存在
+  getent: `grep -qx "$2" "$SIM/users" 2>/dev/null && echo "$2:x:1001:1001::$SIM/home:/bin/bash"`,
+  useradd: `echo "useradd $*" >> "$SIM/calls"; for last; do :; done; echo "$last" >> "$SIM/users"`,
+  usermod: `echo "usermod $*" >> "$SIM/calls"`,
+  // visudo -c：sim/visudo-fails 存在时校验不通过（白名单本身的语法由 tests/deployUser.test.ts 以真的 visudo 检查）
+  visudo: `echo "visudo $*" >> "$SIM/calls"; [ ! -f "$SIM/visudo-fails" ]`,
   scp: `shift
 echo "scp $(($# - 1))" >> "$SIM/calls"
 for last; do :; done
@@ -123,8 +134,11 @@ export function incoming(version: string, tamper = false) {
   return at('incoming/deploy-remote.sh');
 }
 
-/** 以 sh 执行脚本 script（默认为仓库中的脚本），返回退出码与输出（标准输出在前、标准错误在后，不打到终端）；input 为标准输入 */
-export function run(args: string[], script = SCRIPT, input = '', operator = 'tester') {
+/**
+ * 以 sh 执行脚本 script（默认为仓库中的脚本），返回退出码与输出（标准输出在前、标准错误在后，不打到终端）；input 为标准输入，
+ * extra 为另加或覆盖的环境变量（操作者 YI_OPERATOR 默认为 tester）
+ */
+export function run(args: string[], script = SCRIPT, input = '', extra: Record<string, string> = {}) {
   const env = {
     ...process.env,
     PATH: `${at('bin')}:${process.env.PATH}`,
@@ -141,7 +155,13 @@ export function run(args: string[], script = SCRIPT, input = '', operator = 'tes
     YI_CADDY_SITES: at('caddy/sites'),
     YI_WAIT_POLLS: '3', // 维护模式中查活跃对局数的次数：默认 180（30 分钟），测试中改小以免测试过慢
     YI_SITE_POLLS: '3', // 安装 Caddy 站点配置后的检查次数：默认 60，测试中改小以免测试过慢
-    YI_OPERATOR: operator,
+    YI_OPERATOR: 'tester',
+    YI_DEPLOY_SSH: 'root@test', // 本机脚本默认以部署用户上线；除 tests/deployUser.test.ts 外按以 root 执行的方式测试
+    YI_BIN: at('sbin/yi-deploy'),
+    YI_SUDOERS: at('sudoers.d/yi-deploy'),
+    YI_ROOT_KEYS: at('root-keys'),
+    YI_UPLOAD_ROOT_HOME: at('sim/home'),
+    ...extra,
   };
   const result = spawnSync('sh', [script, ...args], { env, encoding: 'utf8', input });
   return { code: result.status, out: result.stdout + result.stderr };
@@ -167,7 +187,7 @@ export function setupServer() {
     write(at('bin', name), `#!/bin/sh\n${body}\n`);
     fs.chmodSync(at('bin', name), 0o755);
   }
-  for (const name of ['state', 'systemd']) fs.mkdirSync(at(name), { recursive: true });
+  for (const name of ['state', 'systemd', 'sim/home', 'sbin', 'sudoers.d']) fs.mkdirSync(at(name), { recursive: true });
   write(at('sim/games'), '0');
   write(at('sim/maint'), 'false');
   write(at('sim/now'), '1000000');

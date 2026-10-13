@@ -3,12 +3,12 @@
 | 项目 | 内容 |
 |---|---|
 | 性质 | 规程，强制执行；依据 [07-operations.md](../standards/07-operations.md)、[03-data.md](../standards/03-data.md)、[05-security.md](../standards/05-security.md) |
-| 文件版本 | 1.1.3 |
-| 修订日期 | 2026-10-05 |
+| 文件版本 | 1.1.4 |
+| 修订日期 | 2026-10-13 |
 | 适用范围 | 线上服务器 47.108.181.240 的日常检查、备份与恢复、回滚、应急处置 |
 | 相关文档 | [release.md](release.md)（发版与上线）、[README.md](../../README.md) 第 5.3、5.4 节（部署结构） |
 
-本规程只规定操作步骤。各步骤须满足的要求以规则编号引用，规则内容以 `docs/standards/` 为准。文中 `ssh yi` 指 `ssh root@47.108.181.240`；本机命令在仓库根目录执行。
+本规程只规定操作步骤。各步骤须满足的要求以规则编号引用，规则内容以 `docs/standards/` 为准。文中 `ssh deploy` 指以部署用户登录（`ssh deploy@47.108.181.240`），用于第 2 章的日常检查：部署用户属 `systemd-journal` 组，可直接查看日志，上线、重启、回滚与查看状态经 `npm run deploy` 以 sudo 白名单执行（SEC-044）；`ssh yi` 指以 root 登录（`ssh root@47.108.181.240`），只用于第 3 章至第 5 章的恢复、回滚与应急处置，以及经项目所有者同意的配置修改；本机命令在仓库根目录执行。
 
 ## 1 服务器概况
 
@@ -22,6 +22,8 @@
 | `/var/lib/yi/backup/` | 每日本地备份，保留 7 份，每份附 `.sha256`（DAT-061、DAT-064） |
 | 阿里云 OSS 存储桶 | 异地加密备份：`daily/` 下为每日一份（保留 30 日），`monthly/` 下为每月一份（保留 365 日），均以 age 加密（DAT-061、DAT-063） |
 | `/var/lib/yi/deploy.log` | 上线、回滚及配置修改的记录（OPS-048）；`deploy-last.log` 为最近一次上线的完整输出 |
+| 部署用户 `deploy`、`/usr/local/sbin/yi-deploy`、`/etc/sudoers.d/yi-deploy` | 日常运维的身份（SEC-044）：只能经 sudo 执行 root 所有的 `yi-deploy`（`scripts/server/deploy-remote.sh` 的副本），且只限 preflight、install、restart、rollback、status；由 `npm run deploy -- install-deploy-user` 以 root 安装，该脚本改动后须重新执行 |
+| 用户 `admin` | 阿里云 Workbench 一键连接建立的用户，已失效、无法登录；按项目所有者 2026-10-13 的决定保留，不是可疑账号 |
 
 1.2 服务器上的改动统一经 `npm run deploy` 的各子命令执行。本规程第 3 章、第 5 章中须手工执行的步骤，执行前必须先手工备份存档（DAT-066），执行后必须按第 6.1 条追加部署日志。
 
@@ -32,11 +34,11 @@
 | 项目 | 命令 | 正常结果 |
 |---|---|---|
 | 服务状态与版本 | `npm run deploy -- status` | 显示当前版本号与提交号，且与最新 Release 一致 |
-| 服务端警告及以上 | `ssh yi journalctl -u yi -p warning --since yesterday --no-pager` | 无输出，或均已处理 |
-| 备份任务 | `ssh yi journalctl -u yi-backup --since yesterday --no-pager -o cat` | 有一行“段位存档已备份到……”，无“备份失败” |
-| 异地备份 | `ssh yi journalctl -u yi-offsite --since yesterday --no-pager -o cat` | 有一行“异地备份已上传……”，无“异地备份失败” |
-| 上线过程的错误 | `ssh yi journalctl -t yi-deploy --since yesterday --no-pager -o cat` | 无输出；有 `deploy.rolled-back` 时按第 5.3 条处理 |
-| 磁盘 | `ssh yi df -h /` | 使用率 < 80%（OPS-074） |
+| 服务端警告及以上 | `ssh deploy journalctl -u yi -p warning --since yesterday --no-pager` | 无输出，或均已处理 |
+| 备份任务 | `ssh deploy journalctl -u yi-backup --since yesterday --no-pager -o cat` | 有一行“段位存档已备份到……”，无“备份失败” |
+| 异地备份 | `ssh deploy journalctl -u yi-offsite --since yesterday --no-pager -o cat` | 有一行“异地备份已上传……”，无“异地备份失败” |
+| 上线过程的错误 | `ssh deploy journalctl -t yi-deploy --since yesterday --no-pager -o cat` | 无输出；有 `deploy.rolled-back` 时按第 5.3 条处理 |
+| 磁盘 | `ssh deploy df -h /` | 使用率 < 80%（OPS-074） |
 
 2.2 发现异常时，按第 5 章判定事件级别并处置。
 
