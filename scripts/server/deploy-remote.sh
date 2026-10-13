@@ -9,6 +9,7 @@
 #   sh deploy-remote.sh service                                         安装同目录下的 yi.service（SEC-045），重启并检查，不通过即恢复原文件
 #   sh deploy-remote.sh offsite                                         安装异地加密备份（P1-13）：程序、单元文件与配置，并立即上传一次
 #   sh deploy-remote.sh watch                                           上线后的检查（OPS-047），由上线成功后建立的定时器 yi-watch 每分钟运行
+#   sh deploy-remote.sh caddy                                           安装同目录下的 yi.caddy（Caddy 中弈的站点配置），校验后平滑重载并检查，不通过即恢复原文件
 # 目录（OPS-043）：/opt/yi/releases/版本号/ 下为 server.cjs、download/（安装程序）、env（YI_LATEST）；
 # /opt/yi/current、/opt/yi/previous 为指向版本目录的符号链接，yi.service 经 current 读取三者。
 # 规则：加锁 OPS-041；降级确认 OPS-042；整体回滚 OPS-044；维护模式 OPS-045；健康检查与自动回滚 OPS-046；部署日志 OPS-048
@@ -23,10 +24,14 @@ LOCK=${YI_LOCK:-/run/yi-deploy.lock}
 UNIT_FILE=${YI_UNIT_FILE:-/etc/systemd/system/yi.service}
 SYSTEMD_DIR=${YI_SYSTEMD_DIR:-/etc/systemd/system}
 ETC=${YI_ETC:-/etc/yi}
+CADDYFILE=${YI_CADDYFILE:-/etc/caddy/Caddyfile}
+CADDY_SITES=${YI_CADDY_SITES:-/etc/caddy/sites}
+SITE=yi.lightking.com.cn
 WHO=${YI_OPERATOR:-unknown}
 WAIT_STEP=10     # 维护模式中每 10 秒查一次活跃对局数
 WAIT_POLLS=180   # 至多 180 次，即 30 分钟（OPS-045）
 HEALTH_POLLS=30  # 重启后每秒查一次健康检查，至多 30 秒（OPS-046）
+SITE_POLLS=${YI_SITE_POLLS:-60} # 重载 Caddy 后每秒经 HTTPS 检查一次，至多 60 秒：首次安装时要先申请证书（测试时改小）
 SCORE_MAX=4.0    # systemd-analyze security 的评分上限（SEC-045）
 LOCK_BUSY=75     # flock 拿不到锁时的退出码
 WATCH_SECS=3600         # 上线后检查 60 分钟（OPS-047）
@@ -393,6 +398,58 @@ locked() {
   exit "$rc"
 }
 
+# 经本机的 Caddy 以 HTTPS 访问弈的站点：下载页面 200、/healthz 被屏蔽为 404 即为正常（API-061）
+site_ok() {
+  page=$(curl -s -o /dev/null -w '%{http_code}' --resolve "$SITE:443:127.0.0.1" "https://$SITE/" || true)
+  internal=$(curl -s -o /dev/null -w '%{http_code}' --resolve "$SITE:443:127.0.0.1" "https://$SITE/healthz" || true)
+  [ "$page" = 200 ] && [ "$internal" = 404 ]
+}
+
+# 安装 yi.caddy（路线图第 6 章）：Caddy 与主配置由 LightsWeb 仓库安装，主配置须 import $CADDY_SITES/*.caddy。
+# 放入后以整套配置校验，通过才平滑重载（不中断其他网站，也不断开已建立的联机）；重载后 SITE_POLLS 秒内经 HTTPS 检查通过即完成，
+# 否则恢复原来的文件（没有则删除）并再次重载。原文件在检查期间备份为 yi.caddy.prev
+cmd_caddy() {
+  new=$HERE/yi.caddy
+  dest=$CADDY_SITES/yi.caddy
+  [ -f "$new" ] || fail "没有 $new"
+  command -v caddy >/dev/null 2>&1 || fail '服务器上没有 Caddy：先按 LightsWeb 仓库安装 Caddy 与主配置'
+  grep -qF "import $CADDY_SITES/*.caddy" "$CADDYFILE" 2>/dev/null ||
+    fail "$CADDYFILE 中没有 import $CADDY_SITES/*.caddy：先按 LightsWeb 仓库安装主配置"
+  mkdir -p "$CADDY_SITES"
+  if [ -f "$dest" ]; then cp -p "$dest" "$dest.prev"; else rm -f "$dest.prev"; fi
+  cp "$new" "$dest"
+  chmod 644 "$dest"
+  if ! caddy validate --config "$CADDYFILE" --adapter caddyfile; then
+    restore_site "$dest"
+    fail 'Caddy 的配置校验不通过，未安装'
+  fi
+  if systemctl reload caddy; then
+    i=0
+    while [ "$i" -lt "$SITE_POLLS" ]; do
+      if site_ok; then
+        rm -f "$dest.prev"
+        record config 'stage-4 install-caddy' ok
+        say "✓ $dest 已安装：https://$SITE/ 可以访问，/healthz 已屏蔽"
+        return 0
+      fi
+      i=$((i + 1))
+      sleep 1
+    done
+    say "✗ 重载后 ${SITE_POLLS} 秒内 https://$SITE/ 检查没有通过：恢复原来的配置"
+  else
+    say '✗ Caddy 重载失败：恢复原来的配置'
+  fi
+  restore_site "$dest"
+  if systemctl reload caddy; then r=restored; else r=fail; fi
+  record config 'stage-4 install-caddy' "$r"
+  fail "已恢复原来的配置（Caddy 重载：${r}）；请查看 journalctl -u caddy"
+}
+
+# 恢复 $1 安装前的内容：有备份则换回，没有则删除
+restore_site() {
+  if [ -f "$1.prev" ]; then mv "$1.prev" "$1"; else rm -f "$1"; fi
+}
+
 cmd=${1:-}
 [ $# -gt 0 ] && shift
 allow=0 restart=1
@@ -412,5 +469,6 @@ case "$cmd" in
   service) locked service "$@" && cmd_service ;;
   offsite) locked offsite "$@" && cmd_offsite ;;
   watch) locked watch "$@" && cmd_watch ;;
-  *) fail "用法：sh deploy-remote.sh preflight|install|restart|rollback|migrate|status|service|offsite|watch" ;;
+  caddy) locked caddy "$@" && cmd_caddy ;;
+  *) fail "用法：sh deploy-remote.sh preflight|install|restart|rollback|migrate|status|service|offsite|watch|caddy" ;;
 esac

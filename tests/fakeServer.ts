@@ -35,6 +35,7 @@ case "$1" in
     echo 0 > "$SIM/maint" ;;
   kill) echo true > "$SIM/maint" ;;
   start) [ ! -f "$SIM/start-fails" ] ;;
+  reload) [ ! -f "$SIM/reload-fails" ] ;;
   show) cat "$SIM/nrestarts" 2>/dev/null || echo 0 ;;
   is-active) [ -s "$SIM/running" ] ;;
 esac`,
@@ -58,6 +59,13 @@ shift 4; exec "$@"`,
   // date +%s：sim/now 中的模拟时刻；其余用法交给系统的 date
   date: `if [ "$1" = +%s ]; then cat "$SIM/now"; else exec /bin/date "$@"; fi`,
   ss: `printf 'a\\nb\\nc\\n'`,
+  // caddy validate：sim/caddy-invalid 存在时失败
+  caddy: `echo "caddy $1" >> "$SIM/calls"
+[ "$1" != validate ] || [ ! -f "$SIM/caddy-invalid" ]`,
+  // 经 Caddy 以 HTTPS 访问站点：sim/site-down 存在时连不上；/healthz 回应 sim/healthz-code（默认 404，即已屏蔽），其余 200
+  curl: `for last; do :; done
+if [ -f "$SIM/site-down" ]; then printf 000; exit 7; fi
+case "$last" in */healthz) printf %s "$(cat "$SIM/healthz-code" 2>/dev/null || echo 404)" ;; *) printf 200 ;; esac`,
   sha256sum: `exec shasum -a 256 "$@"`,
   // 本机脚本所用的 gh、ssh、scp：ssh 在本机执行命令，scp 复制到本机，两者都把 /opt/yi 换成模拟的目录
   gh: `case "$1 $2" in
@@ -129,6 +137,9 @@ export function run(args: string[], script = SCRIPT, input = '', operator = 'tes
     YI_UNIT_FILE: at('yi.service'),
     YI_SYSTEMD_DIR: at('systemd'),
     YI_ETC: at('etc-yi'),
+    YI_CADDYFILE: at('caddy/Caddyfile'),
+    YI_CADDY_SITES: at('caddy/sites'),
+    YI_SITE_POLLS: '3', // 安装 Caddy 站点配置后的检查次数：默认 60，测试中改小以免测试过慢
     YI_OPERATOR: operator,
   };
   const result = spawnSync('sh', [script, ...args], { env, encoding: 'utf8', input });
