@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.8 |
+| 文件版本 | 1.1.9 |
 | 修订日期 | 2026-10-13 |
 | 规则前缀 | `SEC` |
 
@@ -60,9 +60,9 @@
 
 | 编号 | 等级 | 规定 | 现状 |
 |---|---|---|---|
-| SEC-040 | A | SSH 统一为 `PasswordAuthentication no`、`PermitRootLogin prohibit-password`、`KbdInteractiveAuthentication no`、`MaxAuthTries 3`；只允许 Ed25519 密钥 | 未满足（F-04） |
+| SEC-040 | A | SSH 统一为 `PasswordAuthentication no`、`PermitRootLogin prohibit-password`、`KbdInteractiveAuthentication no`、`MaxAuthTries 3`；只允许 Ed25519 密钥 | 满足（整改项 P0-03，2026-10-02；2026-10-13 以 `sshd -T` 核对：`passwordauthentication no`、`permitrootlogin without-password`（即 `prohibit-password`）、`kbdinteractiveauthentication no`、`maxauthtries 3`，`pubkeyacceptedalgorithms` 只含 Ed25519） |
 | SEC-041 | A | 主机防火墙（UFW）必须启用，默认拒绝入站，只放行 22、8443（启用 TLS 后改为 22、80、443）；放行清单必须与云安全组一致 | 部分满足（2026-10-13 起放行 22、80、443、8443，与安全组一致；8443 在过渡期内保留，3.0 起关闭） |
-| SEC-042 | A | 必须安装 fail2ban，SSH 10 分钟内失败 5 次封禁 1 小时 | 未满足 |
+| SEC-042 | A | 必须安装 fail2ban，SSH 10 分钟内失败 5 次封禁 1 小时 | 满足（整改项 P0-03，2026-10-02；2026-10-13 核对：fail2ban 运行中，`sshd` 规则 `findtime` 600 秒、`maxretry` 5、`bantime` 3600 秒） |
 | SEC-043 | A | 必须启用 `unattended-upgrades` 自动安装安全更新；需要重启的内核更新，必须在 7 日内择无对局时重启 | 未知 |
 | SEC-044 | C | 日常运维统一使用非 root 的部署用户 `deploy`，以 `sudo` 白名单执行 `systemctl restart yi` 等命令；root 登录只允许用于应急 | 未满足 |
 | SEC-045 | A | `systemd-analyze security yi` 的评分必须 ≤ 4.0。除现有选项外，必须增加：`PrivateDevices=yes`、`ProtectKernelTunables=yes`、`ProtectKernelModules=yes`、`ProtectKernelLogs=yes`、`ProtectControlGroups=yes`、`ProtectClock=yes`、`ProtectHostname=yes`、`RestrictNamespaces=yes`、`RestrictRealtime=yes`、`RestrictSUIDSGID=yes`、`LockPersonality=yes`、`MemoryDenyWriteExecute=no`（V8 需要 JIT）、`RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX`、`CapabilityBoundingSet=`、`SystemCallFilter=@system-service`、`SystemCallArchitectures=native`、`UMask=0077`、`MemoryMax=768M`、`TasksMax=64`、`LimitNOFILE=65536` | 满足（P1-11，#79：`scripts/server/yi.service`；2026-10-05 安装到服务器，评分由 8.3 降为 1.3） |
