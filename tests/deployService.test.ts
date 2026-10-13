@@ -99,6 +99,7 @@ describe('仓库中的 yi.service', () => {
       'ExecStart=/opt/node/bin/node /opt/yi/current/server.cjs 8443',
       'EnvironmentFile=/opt/yi/current/env',
       'Environment=YI_FILES=/opt/yi/current/download',
+      'Environment=YI_DOWNLOAD=http://yi.lightking.com.cn:8443/', // 面向玩家的地址用域名
       'ReadWritePaths=/var/lib/yi',
     ];
     expect(required.filter(line => !lines.includes(line))).toEqual([]);

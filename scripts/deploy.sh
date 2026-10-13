@@ -17,6 +17,7 @@
 # 安装程序和服务端都取自同一个 Release 的附件，与标签上的代码一一对应；下载后与传到服务器后各按 Release 的 SHA256SUMS 核对一次（OPS-031）。
 # 服务器上的步骤在 scripts/server/deploy-remote.sh：加锁、版本目录、维护模式、健康检查与自动回滚、部署日志（OPS-041 至 OPS-048）。
 set -eu
+# SSH 用 IP 而不用域名：维护者本机的代理软件可能把域名解析为虚拟地址，SSH 会连到代理上而登录失败
 SERVER=${YI_SERVER_SSH:-root@47.108.181.240}
 DIR=/opt/yi
 fail() { echo "✗ $1" >&2; exit 1; }
