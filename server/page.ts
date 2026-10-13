@@ -132,6 +132,10 @@ const GUIDES: [string, string[]][] = [
   ],
 ];
 
+/** 域名 lightking.com.cn 的 ICP 备案号（2026-10-12 通过）：以域名对外提供网页时须在页面底部展示，并链接到工信部的备案管理系统 */
+const ICP_NUMBER = '渝ICP备2025066996号-2';
+const ICP_URL = 'https://beian.miit.gov.cn/';
+
 /** 生成下载页面；assetVersion 用于资源地址的版本参数 */
 export function downloadPage(pkgs: PagePkg[], assetVersion: string) {
   const latest = pkgs.map(p => p.version).sort((a, b) => b.localeCompare(a, 'en', { numeric: true }))[0];
@@ -191,6 +195,8 @@ export function downloadPage(pkgs: PagePkg[], assetVersion: string) {
 </div></section>
 </main>
 <footer><div class="wrap"><p>Copyright © 2026 LightKing。保留所有权利。</p>
-<p>游戏附带思源黑体、思源宋体的子集，依 SIL Open Font License 1.1 授权使用。</p></div></footer>
+<p>游戏附带思源黑体、思源宋体的子集，依 SIL Open Font License 1.1 授权使用。</p>
+<p class="record"><a class="icp" href="${ICP_URL}" target="_blank" rel="noopener noreferrer">
+<img src="/assets/icp.png?v=${assetVersion}" alt="" width="16" height="16">${ICP_NUMBER}</a></p></div></footer>
 </body></html>`;
 }
