@@ -57,4 +57,5 @@
 | [perf-2.0.4.md](audits/perf-2.0.4.md) | 2.0.4 的性能基线（TST-046）：电脑思考、服务端、下载页面、打包体积与渲染帧 |
 | [perf-2.0.5.md](audits/perf-2.0.5.md) | 2.0.5 的性能测量（TST-046）：与 2.0.4 比较，含渲染帧在同一环境下的对照测量 |
 | [perf-2.0.6.md](audits/perf-2.0.6.md) | 2.0.6 的性能测量：电脑思考、服务端、下载页面、打包体积；渲染帧未测及理由 |
+| [perf-2.0.7.md](audits/perf-2.0.7.md) | 2.0.7 的性能测量：电脑思考、服务端、下载页面、渲染帧、打包体积，并在同一环境中复测 2.0.6 作对照 |
 | [baseline.json](audits/baseline.json) | 违规基线（OPS-015、00-general.md 第 4.3.2 条）：由 `node scripts/ratchet.mjs --update` 生成，各项只允许减少 |
