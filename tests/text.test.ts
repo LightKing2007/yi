@@ -72,8 +72,8 @@ function installerTexts(source: string) {
   };
 }
 
-/** 下载页面不是段落的 <p>：首屏的棋种与标语 */
-const PAGE_TAGLINES = ['kinds', 'motto'];
+/** 下载页面不是段落的 <p>：首屏的棋种与标语、页脚的备案号（编号不以句号结尾） */
+const PAGE_TAGLINES = ['kinds', 'motto', 'record'];
 
 /** 下载页面的文字：页面由服务端生成，结构固定，按标签切分即可。段落为 <p> 与 <li>（标语除外），其余为标题、按钮、表格与属性中的文字 */
 function pageTexts(html: string) {

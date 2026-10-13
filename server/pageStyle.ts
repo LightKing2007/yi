@@ -195,6 +195,8 @@ code.inline { padding: 1px 6px; border-radius: 5px; background: var(--code); fon
 
 footer { padding: 40px 0 56px; border-top: 1px solid var(--card-line); font-size: 13px; color: var(--faint); }
 footer p { margin: 4px 0; }
+.icp { display: inline-flex; align-items: center; gap: 4px; color: inherit; text-decoration: none; }
+.icp:hover { text-decoration: underline; }
 
 /* 动画 */
 @keyframes brush { from { clip-path: inset(0 0 100% 0); opacity: 0.2; } to { clip-path: inset(0 0 0 0); opacity: 1; } }

@@ -674,7 +674,7 @@ describe('安装包下载', () => {
     }
   });
 
-  it('下载页面带安全响应头，只提供名单内的资源；SHA256SUMS 与页面上的校验值一致（API-060、API-063、SEC-070）', async () => {
+  it('下载页面带安全响应头，只提供名单内的资源，页脚有 ICP 备案号；SHA256SUMS 与页面上的校验值一致（API-060、API-063、SEC-070）', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-files-'));
     fs.writeFileSync(path.join(dir, 'Yi-2.0.3-win-x64-setup.exe'), 'windows');
     fs.writeFileSync(path.join(dir, 'Yi-2.0.3-linux-x86_64.AppImage'), 'linux');
@@ -689,10 +689,15 @@ describe('安装包下载', () => {
       const html = await page.text();
       expect(html).not.toMatch(/<script/i);
       expect(html).toContain('/assets/title-yi.png');
+      // 页脚展示 ICP 备案号并链接到工信部的备案管理系统（以域名对外提供网页的要求）
+      expect(html).toMatch(
+        /<a class="icp" href="https:\/\/beian\.miit\.gov\.cn\/"[^>]*>\s*<img src="\/assets\/icp\.png\?v=[^"]+"[^>]*>渝ICP备2025066996号-2<\/a>/,
+      );
       for (const [name, type] of [
         ['title-yi.png', 'image/png'],
         ['icon.png', 'image/png'],
         ['yi-serif-900.woff2', 'font/woff2'],
+        ['icp.png', 'image/png'],
       ]) {
         const r = await fetch(`${base}/assets/${name}?v=1`);
         expect(r.status, name).toBe(200);

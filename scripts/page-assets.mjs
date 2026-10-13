@@ -9,6 +9,7 @@ const SOURCES = {
   'title-yi.png': 'src/ui/assets/title-yi.png',
   'icon.png': 'public/icon.png',
   'yi-serif-900.woff2': 'src/ui/assets/fonts/yi-serif-900.woff2',
+  'icp.png': 'server/assets/icp.png', // ICP 备案图标（48×48）
 };
 
 /** 读取全部资源；root 为仓库根目录的 URL */
