@@ -236,6 +236,7 @@ node dist-server/server.cjs --version
 | `/var/lib/yi/backup/` | 段位存档的备份 `yi-ratings-UTC时间.json` 及其 `.sha256` 校验和，保留最近 7 份（DAT-064） |
 | `/opt/yi/offsite.cjs`、`/etc/systemd/system/yi-offsite.service`、`/etc/yi/offsite.env` | 异地加密备份（DAT-061 第二层、DAT-063）：每日本地备份成功后，以 age 加密最新的一份并上传到阿里云 OSS；`offsite.env` 内含 OSS 的存储桶与只能写入的访问密钥（属主 root:yi，权限 640），解密用的私钥只在维护者本机。源文件为仓库中的 `scripts/offsite.ts` 与 `scripts/server/yi-offsite.service`，由 `npm run deploy -- install-offsite` 安装 |
 | `/etc/systemd/journald.conf.d/yi.conf` | journald 的保留策略：日志总量至多 1 GB，保留 90 日（OPS-065），源文件为仓库中的 `scripts/server/journald-yi.conf`，由 `npm run deploy -- install-journald` 安装 |
+| `/etc/caddy/sites/yi.caddy` | Caddy 中弈的站点配置：`yi.lightking.com.cn` 以 HTTPS 转发到本机 8443，屏蔽 `/healthz` 与 `/metrics`（API-061），不开访问日志（DAT-073）；源文件为仓库中的 `scripts/server/yi.caddy`，由 `npm run deploy -- install-caddy` 安装。Caddy 本身与主配置 `/etc/caddy/Caddyfile` 由 LightsWeb 仓库管理 |
 
 `yi.service` 的内容见仓库中的 [scripts/server/yi.service](scripts/server/yi.service)，由 `npm run deploy -- install-service` 安装：服务端、安装程序与 `YI_LATEST` 均经 `/opt/yi/current` 读取；加固选项按 SEC-045，安装前检查 `systemd-analyze security` 的评分不高于 4.0，装好后重启并做健康检查，不通过即恢复原文件。
 
@@ -259,12 +260,14 @@ node dist-server/server.cjs --version
 
 ### 5.5 域名与 TLS
 
-域名 `yi.lightking.com.cn` 已解析至该服务器。ICP 备案通过前，阿里云拦截未备案域名在 80、443 端口上的访问，因此 `wss://` 将在备案通过后配置，步骤如下：
+域名 `lightking.com.cn` 的 ICP 备案已于 2026-10-12 通过（渝ICP备2025066996号-2），`yi.lightking.com.cn` 已解析至该服务器。按项目所有者的决定，域名与 TLS 提前于 3.0 启用（路线图第 6 章），过渡期内新旧地址并行：
 
-1. 使用 Caddy 作为反向代理，并自动申请证书：`yi.lightking.com.cn { reverse_proxy 127.0.0.1:8443 }`；
-2. 在 `yi.service` 中增加 `Environment=HOST=127.0.0.1`，使服务端仅接受本机反向代理的连接；
-3. 在安全组与 UFW 中关闭 8443 端口，改为放行 80、443 端口，其中 80 端口仅供 Caddy 申请证书及跳转至 HTTPS；
-4. 将 `YI_DOWNLOAD` 改为 `https://yi.lightking.com.cn/`。
+1. Caddy 作为整台服务器的反向代理，监听 80、443 端口并自动申请、续期证书（SEC-010）。Caddy 本身、主配置 `/etc/caddy/Caddyfile`（以 `import /etc/caddy/sites/*.caddy` 引入各站点）、默认拒绝以 IP 或未登记的域名访问、公共响应头由 LightsWeb 仓库管理；
+2. 弈的站点配置为仓库中的 `scripts/server/yi.caddy`，以 `npm run deploy -- install-caddy` 安装：先以整套配置校验，再平滑重载（不中断其他网站与已建立的联机），经 HTTPS 检查下载页面可以访问、`/healthz` 已屏蔽，不通过即恢复原文件；
+3. 服务端按客户端的真实地址限流：经本机代理时取 `X-Forwarded-For` 的最后一项，只信任来自本机的这个头（API-040，`server/clientIp.ts`）；
+4. 阿里云安全组与 UFW 放行 80、443 端口，其中 80 端口仅供证书验证及跳转至 HTTPS；过渡期内 8443 端口保持开放，供旧版客户端直连；
+5. 新版客户端改用 `wss://yi.lightking.com.cn`，`YI_DOWNLOAD` 改为 `https://yi.lightking.com.cn/`，下载页面底部展示备案号；
+6. 3.0 起关闭 8443 端口，并在 `yi.service` 中增加 `Environment=HOST=127.0.0.1`，使服务端仅接受本机反向代理的连接。
 
 ## 6 多语言
 

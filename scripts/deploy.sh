@@ -12,6 +12,8 @@
 #                                              加 --keep-config 时不询问，只更新程序与单元文件
 #   npm run deploy -- install-backup           安装或更新每日备份（scripts/server/ 下的脚本与定时器），并立即备份一次；不重启服务端
 #   npm run deploy -- install-journald         安装或更新 journald 的保留策略（scripts/server/journald-yi.conf），重启 journald；不重启服务端
+#   npm run deploy -- install-caddy            安装或更新 Caddy 中弈的站点配置（scripts/server/yi.caddy），校验后平滑重载，经 HTTPS 检查，
+#                                              不通过即恢复原文件；不重启服务端。须先按 LightsWeb 仓库装好 Caddy 与主配置
 # 安装程序和服务端都取自同一个 Release 的附件，与标签上的代码一一对应；下载后与传到服务器后各按 Release 的 SHA256SUMS 核对一次（OPS-031）。
 # 服务器上的步骤在 scripts/server/deploy-remote.sh：加锁、版本目录、维护模式、健康检查与自动回滚、部署日志（OPS-041 至 OPS-048）。
 set -eu
@@ -80,6 +82,10 @@ case "${1:-}" in
     remote service "$HERE/yi.service"
     exit 0
     ;;
+  install-caddy)
+    remote caddy "$HERE/yi.caddy"
+    exit 0
+    ;;
   install-offsite)
     npm run -s build:node >/dev/null
     set -- "$(dirname "$0")/../dist-server/offsite.cjs" "$HERE/yi-offsite.service" "$HERE/yi-backup.service" "${2:-}"
@@ -141,7 +147,7 @@ if [ "${1:-}" = install-journald ]; then
 fi
 
 V=${1:-}
-echo "$V" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || fail '用法：npm run deploy -- 版本号 [--restart] [--allow-downgrade]，或 npm run deploy -- restart、rollback、status、migrate-layout、install-service、install-offsite、install-backup、install-journald'
+echo "$V" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || fail '用法：npm run deploy -- 版本号 [--restart] [--allow-downgrade]，或 npm run deploy -- restart、rollback、status、migrate-layout、install-service、install-caddy、install-offsite、install-backup、install-journald'
 shift
 ALLOW=
 RESTART=

@@ -1,0 +1,13 @@
+# 弈：联机与安装包下载（路线图第 6 章）。由本仓库经 npm run deploy -- install-caddy 安装为 /etc/caddy/sites/yi.caddy，
+# 严禁在服务器上直接改动。Caddy 本身、主配置（import /etc/caddy/sites/*.caddy）、默认拒绝与公共响应头由 LightsWeb 仓库管理。
+# 证书由 Caddy 自动申请与续期（SEC-010），经 80 端口的 HTTP 验证（SEC-011）。
+# 不开访问日志：日志中严禁出现未脱敏的 IP 地址（DAT-073），服务端的日志已按事件记录所需的信息。
+yi.lightking.com.cn {
+  # 健康检查与指标只供本机读取（API-061）；服务端对经代理转来的请求同样不回应（server/clientIp.ts），两处互为备份
+  @internal path /healthz /metrics
+  respond @internal 404
+
+  # 联机的 WebSocket 与下载页面、安装包都转给本机的服务端。Caddy 把 X-Forwarded-For 设为客户端的地址，
+  # 服务端取其最后一项按 IP 限流（API-040、API-041）；下载为流式转发，断点续传的 Range 请求原样转发
+  reverse_proxy 127.0.0.1:8443
+}
