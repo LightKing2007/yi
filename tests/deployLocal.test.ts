@@ -64,7 +64,7 @@ describe('本机脚本（scripts/deploy.sh）', () => {
   });
 
   it('部署日志中的操作者只留字母、数字与 ._-', () => {
-    expect(run(['2.0.5', '--restart'], DEPLOY, '', "Light King'; x")).toMatchObject({ code: 0 });
+    expect(run(['2.0.5', '--restart'], DEPLOY, '', { YI_OPERATOR: "Light King'; x" })).toMatchObject({ code: 0 });
     expect(read(at('state/deploy.log'))).toMatch(/^\S+ Light_King___x deploy 2\.0\.5 ok\n$/);
   });
 });

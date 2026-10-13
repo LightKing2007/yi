@@ -85,22 +85,22 @@ describe('部署用户经 sudo 执行 yi-deploy', () => {
 
   it('只允许 preflight、install、restart、rollback、status；安装配置的命令须以 root 执行', () => {
     for (const cmd of ['service', 'caddy', 'offsite', 'migrate', 'watch', 'deploy-user']) {
-      const result = run([cmd], SCRIPT, '', 'tester', AS_DEPLOY);
+      const result = run([cmd], SCRIPT, '', AS_DEPLOY);
       expect([cmd, result.code]).not.toEqual([cmd, 0]);
       expect(result.out).toContain(`部署用户不能执行 ${cmd}`);
     }
-    expect(run(['status'], SCRIPT, '', 'tester', AS_DEPLOY)).toMatchObject({ code: 0 });
+    expect(run(['status'], SCRIPT, '', AS_DEPLOY)).toMatchObject({ code: 0 });
   });
 
   it('上线须以 --from 指定上传目录，不用与脚本同目录的文件', () => {
-    const result = run(['install', '2.0.5'], SCRIPT, '', 'tester', AS_DEPLOY);
+    const result = run(['install', '2.0.5'], SCRIPT, '', AS_DEPLOY);
     expect(result.out).toContain('须以 --from= 指定上传目录');
     expect(link('current')).toBe('releases/2.0.4');
   });
 
   it('以部署用户的身份读出上传的文件，只取安装程序、服务端与 SHA256SUMS，上线后删除上传目录', () => {
     const dir = upload('2.0.5', { 'notes.txt': 'x' });
-    expect(run(['install', '2.0.5', `--from=${dir}`], SCRIPT, '', 'tester', AS_DEPLOY)).toMatchObject({ code: 0 });
+    expect(run(['install', '2.0.5', `--from=${dir}`], SCRIPT, '', AS_DEPLOY)).toMatchObject({ code: 0 });
     expect([link('current'), read(at('sim/running'))]).toEqual(['releases/2.0.5', '2.0.5 c205']);
     expect(calls().filter(line => line.startsWith('runuser'))).toEqual([
       'runuser deploy ls run.abc123',
@@ -124,7 +124,7 @@ describe('部署用户经 sudo 执行 yi-deploy', () => {
       [`${at('sim/home/incoming')}/run.abc123/../run.abc123`, '上传目录的名称不合规'],
     ];
     for (const [from, reason] of cases) {
-      const result = run(['install', '2.0.5', `--from=${from}`], SCRIPT, '', 'tester', AS_DEPLOY);
+      const result = run(['install', '2.0.5', `--from=${from}`], SCRIPT, '', AS_DEPLOY);
       expect([from, result.code, result.out.includes(reason ?? '')]).toEqual([from, 1, true]);
     }
     expect(link('current')).toBe('releases/2.0.4');
@@ -137,8 +137,8 @@ describe('部署用户经 sudo 执行 yi-deploy', () => {
   });
 
   it('部署日志中的操作者：放行的 YI_OPERATOR 同样过滤；没有时记为发起 sudo 的用户', () => {
-    run(['install', '2.0.5', `--from=${upload('2.0.5')}`], SCRIPT, '', "x'; rm", AS_DEPLOY);
-    run(['rollback'], SCRIPT, '', '', AS_DEPLOY);
+    run(['install', '2.0.5', `--from=${upload('2.0.5')}`], SCRIPT, '', { ...AS_DEPLOY, YI_OPERATOR: "x'; rm" });
+    run(['rollback'], SCRIPT, '', { ...AS_DEPLOY, YI_OPERATOR: '' });
     expect(deployLog()).toEqual(['x___rm deploy 2.0.5 ok', 'deploy rollback 2.0.4 ok']);
   });
 });
@@ -153,7 +153,7 @@ describe('本机脚本以部署用户上线（scripts/deploy.sh）', () => {
   });
 
   it('文件传到部署用户的上传目录，经 sudo 执行 yi-deploy 上线', () => {
-    expect(run(['2.0.5', '--restart'], DEPLOY, '', 'tester', AS_USER)).toMatchObject({ code: 0 });
+    expect(run(['2.0.5', '--restart'], DEPLOY, '', AS_USER)).toMatchObject({ code: 0 });
     expect([link('current'), read(at('sim/running'))]).toEqual(['releases/2.0.5', '2.0.5 c205']);
     expect(
       calls()
@@ -165,7 +165,7 @@ describe('本机脚本以部署用户上线（scripts/deploy.sh）', () => {
   });
 
   it('status、restart、rollback 同样经 sudo 执行', () => {
-    for (const cmd of ['status', 'restart', 'rollback']) expect([cmd, run([cmd], DEPLOY, '', 'tester', AS_USER).code]).toEqual([cmd, 0]);
+    for (const cmd of ['status', 'restart', 'rollback']) expect([cmd, run([cmd], DEPLOY, '', AS_USER).code]).toEqual([cmd, 0]);
     expect(
       calls()
         .filter(line => line.startsWith('sudo'))
@@ -175,7 +175,7 @@ describe('本机脚本以部署用户上线（scripts/deploy.sh）', () => {
 
   it('服务器上的 yi-deploy 与本机的 deploy-remote.sh 不一致时，在上传前中止', () => {
     write(at('sbin/yi-deploy'), '#!/bin/sh\necho old\n');
-    const result = run(['2.0.5', '--restart'], DEPLOY, '', 'tester', AS_USER);
+    const result = run(['2.0.5', '--restart'], DEPLOY, '', AS_USER);
     expect(result.code).not.toBe(0);
     expect(result.out).toContain('install-deploy-user');
     expect(calls().some(line => line.startsWith('scp') || line.startsWith('sudo'))).toBe(false);

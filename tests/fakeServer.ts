@@ -134,8 +134,11 @@ export function incoming(version: string, tamper = false) {
   return at('incoming/deploy-remote.sh');
 }
 
-/** 以 sh 执行脚本 script（默认为仓库中的脚本），返回退出码与输出（标准输出在前、标准错误在后，不打到终端）；input 为标准输入 */
-export function run(args: string[], script = SCRIPT, input = '', operator = 'tester', extra: Record<string, string> = {}) {
+/**
+ * 以 sh 执行脚本 script（默认为仓库中的脚本），返回退出码与输出（标准输出在前、标准错误在后，不打到终端）；input 为标准输入，
+ * extra 为另加或覆盖的环境变量（操作者 YI_OPERATOR 默认为 tester）
+ */
+export function run(args: string[], script = SCRIPT, input = '', extra: Record<string, string> = {}) {
   const env = {
     ...process.env,
     PATH: `${at('bin')}:${process.env.PATH}`,
@@ -152,7 +155,7 @@ export function run(args: string[], script = SCRIPT, input = '', operator = 'tes
     YI_CADDY_SITES: at('caddy/sites'),
     YI_WAIT_POLLS: '3', // 维护模式中查活跃对局数的次数：默认 180（30 分钟），测试中改小以免测试过慢
     YI_SITE_POLLS: '3', // 安装 Caddy 站点配置后的检查次数：默认 60，测试中改小以免测试过慢
-    YI_OPERATOR: operator,
+    YI_OPERATOR: 'tester',
     YI_DEPLOY_SSH: 'root@test', // 本机脚本默认以部署用户上线；除 tests/deployUser.test.ts 外按以 root 执行的方式测试
     YI_BIN: at('sbin/yi-deploy'),
     YI_SUDOERS: at('sudoers.d/yi-deploy'),
