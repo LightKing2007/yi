@@ -7,7 +7,7 @@ import { startHost } from '../server/host';
 import type { Log } from '../server/log';
 import { HTTP_BURST } from '../server/ratelimit';
 
-describe('HTTP 请求', () => {
+describe('HTTP 请求的频率限制（API-041）', () => {
   it('同一 IP（经代理时按真实地址）的 HTTP 请求超出频率时返回 429 与 Retry-After，其他 IP 照常；本机直接发出的请求不计；日志至多每分钟一行（API-041）', async () => {
     let clock = 1000;
     const logs: string[] = [];
@@ -34,7 +34,9 @@ describe('HTTP 请求', () => {
       await host.close();
     }
   });
+});
 
+describe('下载目录列表的缓存（P2-17）', () => {
   it('目录未变时不再读取目录；新增安装程序后页面随即列出；原地改写的安装程序按新的内容下载，已删掉的返回 404（P2-17）', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-files-'));
     const exe = path.join(dir, 'Yi-2.0.1-win-x64-setup.exe');
