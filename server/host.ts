@@ -1,18 +1,19 @@
 /**
  * 把 RoomServer 接到 WebSocket 上：可以同时监听几个端口（换端口的过渡期新旧端口都开），共用同一个 RoomServer。
  * 同一个端口上的普通网页请求：本机来的 /healthz 回应健康检查（API-061），其余交给安装包下载（设了 files 目录时），没设就一律 404。
- * 连接层的限制：单条消息大小（API-002）、同一 IP 的连接数与新建频率（API-040、API-041）、HTTP 超时（API-047）。
+ * 连接层的限制：单条消息大小（API-002）、同一 IP 的连接数与新建频率（API-040、API-041）、同一 IP 的 HTTP 请求频率（API-041）、HTTP 超时（API-047）。
  */
 import { randomUUID } from 'node:crypto';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { CLOSE_CODE } from '../src/shared/protocol';
-import { clientIp } from './clientIp';
-import { fileServer } from './files';
+import { clientIp, fromThisHost } from './clientIp';
+import { fileServer, tooManyRequests } from './files';
 import { withHealth, type Build, type Web } from './health';
 import type { Gauges } from './metrics';
-import { IpGate, NEW_CONN_BLOCK_SECS, NEW_CONN_MAX, NEW_CONN_WINDOW_SECS } from './ratelimit';
+import type { Log } from './log';
+import { HttpGate, IpGate, NEW_CONN_BLOCK_SECS, NEW_CONN_MAX, NEW_CONN_WINDOW_SECS } from './ratelimit';
 import { RoomServer, type Conn, type RoomServerOptions } from './rooms';
 
 const MAX_MSG_BYTES = 4096; // 单条消息的字节上限：远大于任何合法消息（API-002）
@@ -23,6 +24,8 @@ const MS_PER_SEC = 1000;
 const TICK_MS = 250;
 /** WebSocket 层心跳的间隔；同时清理按 IP 的连接记录 */
 const BEAT_MS = 10_000;
+/** HTTP 请求被限流时，至多每隔这么久写一行 http.limited 日志（秒） */
+const HTTP_LIMITED_LOG_SECS = 60;
 
 /** HTTP 服务器的超时与请求头上限（API-047），防止慢速请求占住连接 */
 export const HTTP_LIMITS = {
@@ -52,6 +55,29 @@ export interface Host {
 const notFound: Web = (_req, res) => {
   res.writeHead(404).end();
 };
+
+/**
+ * 在 next 之前按 IP 限制 HTTP 请求的频率（API-041）：超出时返回 429 与 Retry-After（04-api.md 第 4.1 条）。
+ * 本机直接发出的请求（上线脚本读健康检查）不计。被限流时至多每 HTTP_LIMITED_LOG_SECS 秒写一行 warn 日志，
+ * 只记次数，不记 IP（DAT-073）
+ */
+function withHttpLimit(next: Web, gate: HttpGate, now: () => number, log?: Log): Web {
+  let limited = 0,
+    loggedAt = -Infinity;
+  return (req, res) => {
+    const wait = fromThisHost(req) ? 0 : gate.admit(clientIp(req), now());
+    if (!wait) {
+      next(req, res);
+      return;
+    }
+    tooManyRequests(res, wait);
+    limited++;
+    if (now() - loggedAt < HTTP_LIMITED_LOG_SECS) return;
+    log?.('warn', 'http.limited', { msg: 'HTTP 请求超出频率限制', count: limited });
+    loggedAt = now();
+    limited = 0;
+  };
+}
 
 /** 一个监听中的端口 */
 interface Listening {
@@ -206,7 +232,9 @@ export async function startHost(ports: number | number[], opt: HostOptions = {})
     residentMemoryBytes: process.memoryUsage.rss(),
   });
   const { metrics } = opt;
-  const web = withHealth(build, () => server.health(), files ?? notFound, metrics ? () => metrics.render(gauges()) : undefined);
+  const httpGate = new HttpGate();
+  const health = withHealth(build, () => server.health(), files ?? notFound, metrics ? () => metrics.render(gauges()) : undefined);
+  const web = withHttpLimit(health, httpGate, now, opt.log);
   const listening = await listenAll(Array.isArray(ports) ? ports : [ports], opt.host, web);
   servers = listening.map(item => item.wss);
   const limits = new IpLimits(now);
@@ -230,6 +258,7 @@ export async function startHost(ports: number | number[], opt: HostOptions = {})
   const beat = setInterval(() => {
     for (const wss of servers) for (const client of wss.clients) if (client.readyState === client.OPEN) client.ping();
     limits.prune();
+    httpGate.prune(now());
   }, BEAT_MS);
   const actual = listening.map(item => (item.http.address() as AddressInfo).port);
   return {
