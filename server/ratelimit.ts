@@ -1,5 +1,5 @@
 /**
- * 限流（API-041 至 API-045）：令牌桶、滑动时间窗计数，以及由它们组成的每条连接的限额与按 IP 的新建连接频率。
+ * 限流（API-041 至 API-045）：令牌桶、滑动时间窗计数，以及由它们组成的每条连接的限额、按 IP 的新建连接频率与按 IP 的 HTTP 请求频率。
  * 都不读真实时钟，时刻（秒）由调用方传入，测试时以假时钟驱动（TST-020）。
  */
 
@@ -29,6 +29,10 @@ export const NEW_CONN_MAX = 30;
 export const NEW_CONN_WINDOW_SECS = 60;
 /** 同一 IP 新建连接过频后，多久内拒绝它的新连接（API-041） */
 export const NEW_CONN_BLOCK_SECS = 60;
+/** 同一 IP 的 HTTP 请求（下载页面、资源、安装程序）每秒补充的次数，即持续速率上限（API-041） */
+export const HTTP_RATE_PER_SEC = 5;
+/** 同一 IP 的 HTTP 请求可连续发出的次数：打开一次下载页面约 5 次请求，可连续刷新数次（API-041） */
+export const HTTP_BURST = 30;
 
 /** 令牌桶：每秒补充 rate 个令牌，最多存 burst 个；每条消息取一个，取不到即超出限速 */
 export class TokenBucket {
@@ -52,6 +56,17 @@ export class TokenBucket {
     if (this.tokens < 1) return false;
     this.tokens--;
     return true;
+  }
+
+  /** 还要等多少秒才能再取到一个令牌；现在就能取到时为 0 */
+  waitSecs(now: number): number {
+    const tokens = Math.min(this.burst, this.tokens + Math.max(0, now - this.at) * this.rate);
+    return tokens >= 1 ? 0 : (1 - tokens) / this.rate;
+  }
+
+  /** 桶是否已满，即这段时间没有取过令牌（满桶与新建的桶等价，可以丢弃） */
+  full(now: number): boolean {
+    return this.tokens + Math.max(0, now - this.at) * this.rate >= this.burst;
   }
 }
 
@@ -129,6 +144,28 @@ export class IpGate {
   /** 正在追踪的 IP 数（测试与监控用） */
   get size() {
     return this.recent.size + this.blocked.size;
+  }
+}
+
+/** 按 IP 的 HTTP 请求频率（API-041）：每个 IP 一个令牌桶 */
+export class HttpGate {
+  private buckets = new Map<string, TokenBucket>();
+
+  /** 记一次请求；超出频率时返回应等待的秒数（向上取整，至少 1），否则返回 0 */
+  admit(ip: string, now: number): number {
+    let bucket = this.buckets.get(ip);
+    if (!bucket) this.buckets.set(ip, (bucket = new TokenBucket(HTTP_RATE_PER_SEC, HTTP_BURST, now)));
+    return bucket.take(now) ? 0 : Math.max(1, Math.ceil(bucket.waitSecs(now)));
+  }
+
+  /** 清掉已满的桶（定时调用）：满桶与新建的桶等价，来过一次的 IP 不会一直占着内存 */
+  prune(now: number) {
+    for (const [ip, bucket] of this.buckets) if (bucket.full(now)) this.buckets.delete(ip);
+  }
+
+  /** 正在追踪的 IP 数（测试与监控用） */
+  get size() {
+    return this.buckets.size;
   }
 }
 

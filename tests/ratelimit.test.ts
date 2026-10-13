@@ -1,7 +1,10 @@
-/** 限流部件（server/ratelimit.ts）：令牌桶、滑动时间窗、按 IP 的新建连接频率、每条连接的限额；时刻全部由测试给出（API-041 至 API-045） */
+/** 限流部件（server/ratelimit.ts）：令牌桶、滑动时间窗、按 IP 的新建连接频率与 HTTP 请求频率、每条连接的限额；时刻全部由测试给出（API-041 至 API-045） */
 import { describe, expect, it } from 'vitest';
 import {
   ConnLimits,
+  HTTP_BURST,
+  HTTP_RATE_PER_SEC,
+  HttpGate,
   IpGate,
   MSG_BURST,
   MSG_RATE_PER_SEC,
@@ -92,6 +95,36 @@ describe('按 IP 的新建连接频率（API-041）', () => {
     expect(g.size).toBe(101);
     g.prune(Math.max(NEW_CONN_WINDOW_SECS, NEW_CONN_BLOCK_SECS));
     expect(g.size).toBe(0);
+  });
+});
+
+describe('按 IP 的 HTTP 请求频率（API-041）', () => {
+  it('每个 IP 可连续请求 30 次，再请求即被拒并给出应等待的秒数；按每秒 5 次恢复，其他 IP 不受影响', () => {
+    const gate = new HttpGate();
+    expect(Array.from({ length: HTTP_BURST }, () => gate.admit('a', 0))).toEqual(Array(HTTP_BURST).fill(0));
+    expect(gate.admit('a', 0)).toBe(1); // 还差 1 / 5 秒，向上取整为 1
+    expect(gate.admit('b', 0)).toBe(0);
+    expect(gate.admit('a', 1 / HTTP_RATE_PER_SEC)).toBe(0);
+    expect(gate.admit('a', 1 / HTTP_RATE_PER_SEC)).toBe(1);
+  });
+
+  it('长时间被拒时应等待的秒数仍按补充一次所需计，不随请求累积', () => {
+    const gate = new HttpGate();
+    for (let i = 0; i < HTTP_BURST; i++) gate.admit('a', 0);
+    for (let i = 0; i < 100; i++) expect(gate.admit('a', 0)).toBe(1);
+    expect(gate.admit('a', 0.2)).toBe(0);
+  });
+
+  it('清理时只丢弃已补满的 IP：还在受限或尚未恢复的 IP 照常追踪', () => {
+    const gate = new HttpGate();
+    gate.admit('a', 0);
+    for (let i = 0; i <= HTTP_BURST; i++) gate.admit('b', 0);
+    gate.prune(0.1);
+    expect(gate.size).toBe(2);
+    gate.prune(0.2); // a 用了 1 次，0.2 秒后补满
+    expect(gate.size).toBe(1);
+    gate.prune(HTTP_BURST / HTTP_RATE_PER_SEC);
+    expect(gate.size).toBe(0);
   });
 });
 

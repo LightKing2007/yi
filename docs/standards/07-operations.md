@@ -3,8 +3,8 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.9 |
-| 修订日期 | 2026-10-12 |
+| 文件版本 | 1.1.10 |
+| 修订日期 | 2026-10-13 |
 | 规则前缀 | `OPS` |
 
 参考：ISO/IEC/IEEE 12207:2017 第 6.4.10 节至第 6.4.13 节；ISO/IEC 20000-1:2018；ISO/IEC 27035-1:2023；GB/T 20986—2023；RFC 3339；RFC 5424；SLSA v1.0。
@@ -145,6 +145,7 @@
 | `rating.changed` | info | 段位变化 | `playerId`、`before`、`after` |
 | `proto.invalid` | warn | 非法消息 | `playerId`、`reason` |
 | `rate.limited` | warn | 触发限流；同一连接每秒至多一行 | `playerId`、`count`（60 秒内累计的违规次数，API-045） |
+| `http.limited` | warn | HTTP 请求超出按 IP 的频率上限（API-041）；至多每 60 秒一行，不记 IP（DAT-073） | `count`（距上一行以来被拒的请求数） |
 | `conn.kicked` | warn | 累计违规断开 | `playerId`、`code` |
 | `http.download` | info | 下载开始 | `file`、`range` |
 | `deploy.done` | info | 上线完成（写入 `deploy.log`） | `version`、`commit` |

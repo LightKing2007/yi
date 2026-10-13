@@ -40,6 +40,16 @@ const ASSET_TYPES: Record<string, string> = {
 
 /** 所有响应都带的头（API-063） */
 const BASE_HEADERS = { 'X-Content-Type-Options': 'nosniff' };
+/** 超出 HTTP 请求频率时的状态码（04-api.md 第 4.1 条） */
+const TOO_MANY_REQUESTS = 429;
+
+/** 回应超出按 IP 的 HTTP 请求频率（API-041）：429 与 Retry-After（秒） */
+export function tooManyRequests(res: ServerResponse, retryAfterSecs: number) {
+  res
+    .writeHead(TOO_MANY_REQUESTS, { ...BASE_HEADERS, 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': String(retryAfterSecs) })
+    .end('请求过于频繁，请稍后再试。');
+}
+
 /** HTML 响应另带的头（API-063）：不允许任何脚本 */
 const HTML_HEADERS = {
   ...BASE_HEADERS,
@@ -91,6 +101,48 @@ function list(dir: string): Pkg[] {
 }
 
 /**
+ * 目录列表的缓存（P2-17）：目录的 inode 与修改时间都不变时沿用上次的结果，省去每次请求读目录、逐个查看文件。
+ * 目录里增删、改名文件，或经 current 切换到另一个版本的目录时，二者之一会变；原地改写文件不会改变目录，
+ * 故下载前另以 fresh 核对该文件，不一致时作废缓存
+ */
+function listing(dir: string) {
+  let key = '',
+    pkgs: Pkg[] = [];
+  const load = (): Pkg[] => {
+    let st: fs.Stats;
+    try {
+      st = fs.statSync(dir);
+    } catch {
+      key = '';
+      return [];
+    }
+    const k = `${st.ino}:${st.mtimeMs}`;
+    if (k !== key) {
+      pkgs = list(dir);
+      key = k;
+    }
+    return pkgs;
+  };
+  return {
+    load,
+    /** 按文件名取安装包，并核对文件的大小与修改时间仍与缓存一致；不一致时重新读取目录 */
+    fresh(file: string): Pkg | undefined {
+      const pkg = load().find(p => p.file === file);
+      if (!pkg) return undefined;
+      let st: fs.Stats | null = null;
+      try {
+        st = fs.statSync(path.join(dir, file));
+      } catch {
+        // 文件刚被删掉或改名：重新读取目录
+      }
+      if (st && st.size === pkg.size && st.mtimeMs === pkg.mtimeMs) return pkg;
+      key = '';
+      return load().find(p => p.file === file);
+    },
+  };
+}
+
+/**
  * 安装程序的 SHA-256：在后台流式计算一次，按文件名、大小与修改时间缓存；文件被替换后自动重算。
  * 尚未算完时 get 返回 null
  */
@@ -126,6 +178,9 @@ export function fileServer(dir: string, stall: StallLimit = STALL) {
   const perIp = new Map<string, number>();
   let total = 0;
   const sums = checksums(dir);
+  const pkgs = listing(dir);
+  /** 下载页面的缓存：安装包列表未变、校验值都已算好时沿用上次生成的页面 */
+  let page = { from: null as Pkg[] | null, body: '' };
   const notFound = (res: ServerResponse) => {
     res.writeHead(404, { ...BASE_HEADERS, 'Content-Type': 'text/plain; charset=utf-8' }).end('未找到所请求的文件。');
   };
@@ -145,8 +200,12 @@ export function fileServer(dir: string, stall: StallLimit = STALL) {
     const head = req.method === 'HEAD';
 
     if (name === '') {
-      const pkgs: PagePkg[] = list(dir).map(p => ({ ...p, sha256: sums.get(p) }));
-      const body = downloadPage(pkgs, __APP_VERSION__);
+      const current = pkgs.load();
+      if (page.from !== current) {
+        const shown: PagePkg[] = current.map(p => ({ ...p, sha256: sums.get(p) }));
+        page = { from: shown.every(p => p.sha256) ? current : null, body: downloadPage(shown, __APP_VERSION__) };
+      }
+      const { body } = page;
       res.writeHead(200, { ...HTML_HEADERS, 'Content-Length': Buffer.byteLength(body) }).end(head ? undefined : body);
       return;
     }
@@ -165,8 +224,7 @@ export function fileServer(dir: string, stall: StallLimit = STALL) {
     }
 
     if (name === 'SHA256SUMS') {
-      const pkgs = list(dir),
-        lines = pkgs.map(p => [sums.get(p), p.file] as const);
+      const lines = pkgs.load().map(p => [sums.get(p), p.file] as const);
       if (lines.some(([hex]) => !hex)) {
         res
           .writeHead(503, { ...BASE_HEADERS, 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': String(RETRY_AFTER_SECS) })
@@ -180,7 +238,7 @@ export function fileServer(dir: string, stall: StallLimit = STALL) {
       return;
     }
 
-    const pkg = NAME.test(name) ? list(dir).find(p => p.file === name) : undefined;
+    const pkg = NAME.test(name) ? pkgs.fresh(name) : undefined;
     if (!pkg) {
       notFound(res);
       return;
