@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.3 |
+| 文件版本 | 1.1.4 |
 | 修订日期 | 2026-10-13 |
 | 规则前缀 | `I18N` |
 
@@ -42,7 +42,7 @@
 | 对局 | 一盘棋的全过程 | `game` | 比赛、游戏（指一盘棋时） |
 | 落子 | 在棋盘上放置棋子 | `move`、`play` | 下子、放子 |
 | 安装程序 | 用于安装本游戏的文件 | `installer` | 安装包（面向玩家的文字中） |
-| 下载页面 | http://yi.lightking.com.cn:8443/（启用 TLS 后为 https://yi.lightking.com.cn/） | `download page` | 下载站 |
+| 下载页面 | https://yi.lightking.com.cn/（过渡期内 http://yi.lightking.com.cn:8443/ 仍可访问） | `download page` | 下载站 |
 | 段位 | 排位模式的等级，十级至九段 | `rank` | 等级、分数 |
 | 段位分 | 决定段位的整数分值 | `points` | 积分 |
 | 房间 | 好友对局以房号进入的场所 | `room` | 包间、频道 |
