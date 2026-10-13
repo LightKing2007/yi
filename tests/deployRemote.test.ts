@@ -120,8 +120,13 @@ describe('维护模式（OPS-045）', () => {
     const result = run(['install', '2.0.5'], incoming('2.0.5'));
     expect(result).toMatchObject({ code: 0 });
     expect(result.out).toContain('等满 30 分钟仍有 1 局，强制重启');
-    expect(calls().filter(line => line === 'sleep 10')).toHaveLength(180);
+    expect(calls().filter(line => line === 'sleep 10')).toHaveLength(3); // 测试中 YI_WAIT_POLLS=3
     expect(calls().indexOf('systemctl restart yi')).toBeGreaterThan(calls().lastIndexOf('sleep 10'));
+  });
+
+  it('默认至多等待 180 次、每次 10 秒，即 30 分钟', () => {
+    expect(read(SCRIPT)).toContain('WAIT_STEP=10 ');
+    expect(read(SCRIPT)).toContain('WAIT_POLLS=${YI_WAIT_POLLS:-180}');
   });
 
   it('线上的服务端没有健康检查（2.0.4 及以前）时不发 SIGUSR2，直接重启', () => {
