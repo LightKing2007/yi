@@ -1,11 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { setClock } from '../src/core/clock';
 import { Game } from '../src/core/game';
 import { BoardView } from '../src/presentation/boardView';
 import { goThink } from '../src/core/goAI';
 import { gomokuMove } from '../src/core/gomokuAI';
 import { renjuForbidden, Renju } from '../src/core/renju';
 import { autoMarkDead, goSnap, gomokuSnap } from '../src/core/snap';
-import { at, BLACK, EMPTY, GameType, MAXN, WHITE } from '../src/core/types';
+import { at, BLACK, EMPTY, GameType, MAXN, Rng, WHITE } from '../src/core/types';
 
 const B = BLACK,
   W = WHITE;
@@ -28,6 +29,11 @@ function gomoku15(stones: number[] = []) {
   return g;
 }
 const playAll = (g: Game, mv: [number, number][]) => mv.forEach(([x, y]) => g.play(x, y));
+/** 以 seed 为种子的随机数（TST-020：测试中不用真实的随机数） */
+const seeded = (seed: number) => {
+  const rng = new Rng(seed);
+  return () => rng.next();
+};
 
 describe('围棋规则', () => {
   it('角上提一子', () => {
@@ -184,7 +190,7 @@ describe('五子棋人机', () => {
         [1, 14],
         [9, 7],
       ]);
-      let m = gomokuMove(gomokuSnap(g), lv)!;
+      let m = gomokuMove(gomokuSnap(g), lv, seeded(1))!;
       expect((m.x === 6 || m.x === 10) && m.y === 7).toBe(true);
       g = gomoku15();
       playAll(g, [
@@ -197,7 +203,7 @@ describe('五子棋人机', () => {
         [10, 7],
         [6, 7],
       ]);
-      m = gomokuMove(gomokuSnap(g), lv)!;
+      m = gomokuMove(gomokuSnap(g), lv, seeded(1))!;
       expect(m).toEqual({ x: 11, y: 7 });
     });
   }
@@ -216,7 +222,7 @@ describe('五子棋人机', () => {
           [3, 6],
           [1, 13],
         ]);
-        const m = gomokuMove(gomokuSnap(g), lv)!;
+        const m = gomokuMove(gomokuSnap(g), lv, seeded(rep + 1))!;
         expect(m.x === 3 && (m.y === 2 || m.y === 7)).toBe(true);
       }
     });
@@ -226,7 +232,7 @@ describe('五子棋人机', () => {
         worst = 0;
       while (!g.over && moves < 80) {
         const t0 = performance.now();
-        const m = gomokuMove(gomokuSnap(g), lv);
+        const m = gomokuMove(gomokuSnap(g), lv, seeded(moves + 1));
         worst = Math.max(worst, performance.now() - t0);
         if (!m) break;
         expect(g.b(m.x, m.y)).toBe(EMPTY);
@@ -238,6 +244,42 @@ describe('五子棋人机', () => {
       if (lv === 2) expect(worst).toBeLessThan(process.env.CI ? 4000 : 1500);
     }, 60000);
   }
+});
+
+describe('围棋人机按思考时间搜索', () => {
+  afterEach(() => setClock(null));
+
+  /** 手动推进的时钟：依次返回 times 中的时刻（秒），读完后停在最后一个；记下读了几次 */
+  const scripted = (times: number[]) => {
+    const clock = { reads: 0 };
+    setClock(() => times[Math.min(clock.reads++, times.length - 1)] ?? 0);
+    return clock;
+  };
+  const opening = () => {
+    const g = go9();
+    playAll(g, [
+      [4, 4],
+      [2, 3],
+    ]);
+    return goSnap(g);
+  };
+
+  it('按思考时间搜索时经 clock.ts 读时钟：过了预算即停，结果与同样模拟次数、同样种子时相同', () => {
+    // 开始时读一次；第一次检查未超时，做一轮（16 次模拟）；第二次检查已过普通等级的 1.2 秒预算
+    const clock = scripted([0, 0, 1.2]);
+    const byTime = goThink(opening(), 1, { seed: 3 });
+    expect(clock.reads).toBe(3);
+    expect(byTime).toEqual(goThink(opening(), 1, { seed: 3, iterations: 16 }));
+  });
+
+  it('思考时间按 timeScale 放大；取消后立即停止', () => {
+    const scaled = scripted([0, 0, 1.2, 2.3, 2.4]);
+    goThink(opening(), 1, { seed: 3, timeScale: 2 }); // 预算 2.4 秒：1.2、2.3 时都未超时，2.4 时停止
+    expect(scaled.reads).toBe(5);
+    const cancelled = scripted([0, 0, 0, 0, 99]); // 最后越过预算：即使不响应取消也会停下，测试不会卡住
+    goThink(opening(), 2, { seed: 3, cancelled: () => true });
+    expect(cancelled.reads).toBe(2);
+  });
 });
 
 describe('围棋人机', () => {
@@ -273,7 +315,7 @@ describe('围棋人机', () => {
     g.cur.b[at(7, 4)] = B;
     g.pass();
     g.pass();
-    autoMarkDead(g);
+    autoMarkDead(g, 1);
     expect([g.dead[at(1, 4)], g.dead[at(7, 4)], g.dead[at(3, 0)], g.dead[at(5, 0)]]).toEqual([1, 1, 0, 0]);
   });
   it('点目时不把两眼活棋判死', () => {
@@ -289,7 +331,7 @@ describe('围棋人机', () => {
     for (let y = 0; y <= 5; y++) g.cur.b[at(5, y)] = W;
     g.pass();
     g.pass();
-    autoMarkDead(g);
+    autoMarkDead(g, 1);
     expect([g.dead[at(6, 0)], g.dead[at(2, 0)], g.dead[at(3, 0)]]).toEqual([0, 0, 0]);
   });
 });

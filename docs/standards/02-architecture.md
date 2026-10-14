@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.2 |
+| 文件版本 | 1.1.3 |
 | 修订日期 | 2026-10-14 |
 | 规则前缀 | `ARC` |
 
@@ -43,7 +43,7 @@
 
 | 编号 | 等级 | 规定 | 现状 |
 |---|---|---|---|
-| ARC-020 | A | `src/core/` 严禁直接调用 `Date.now`、`new Date`、`performance.now`、`Math.random`、`setTimeout`、`setInterval`、`console.*`、DOM API、`localStorage`、网络与文件 API；时间统一经 `src/core/clock.ts` 注入，随机数统一经参数传入的种子化生成器获得 | 部分满足（`goAI.ts` 直接调用 `performance.now` 和 `Math.random`） |
+| ARC-020 | A | `src/core/` 严禁直接调用 `Date.now`、`new Date`、`performance.now`、`Math.random`、`setTimeout`、`setInterval`、`console.*`、DOM API、`localStorage`、网络与文件 API；时间统一经 `src/core/clock.ts` 注入，随机数统一经参数传入的种子化生成器获得 | 满足（整改项 P2-13：时间经 `clock.ts` 读取，随机数的种子或随机数函数由调用方给出） |
 | ARC-021 | A | 规则函数（`src/core/rules/`）必须是纯函数：相同输入必须得到相同输出，严禁修改入参 | 满足 |
 | ARC-022 | A | 规则层的拒绝原因统一为 `Reject` 枚举码，严禁返回自然语言文本 | 满足 |
 | ARC-023 | C | 电脑算法的思考时间上限必须由调用方注入（预算毫秒数或模拟次数），严禁在算法内部写死 | 部分满足 |
