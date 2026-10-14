@@ -23,9 +23,9 @@ export function goSnap(g: Game): GoSnap {
   };
 }
 
-/** 点目时用随机对局估计每块棋的归属，把多半会被吃掉的棋块标成死子 */
-export function autoMarkDead(g: Game) {
-  const dead = estimateDead(g.cur.b, g.N, g.komi);
+/** 点目时用随机对局估计每块棋的归属，把多半会被吃掉的棋块标成死子；seed 为随机数的种子（ARC-020） */
+export function autoMarkDead(g: Game, seed: number) {
+  const dead = estimateDead(g.cur.b, g.N, g.komi, seed);
   for (const p of dead) g.dead[p.x * MAXN + p.y] = 1;
   if (dead.length) g.computeScore();
 }

@@ -131,7 +131,7 @@ function benchGo(size: number, level: number, moves: number) {
   const times: number[] = [];
   for (let i = 0; i < moves; i++) {
     const board = goPosition(size, warmup, i * MS_PER_SEC);
-    times.push(timed(() => goThink(goSnap(board), level))[1]);
+    times.push(timed(() => goThink(goSnap(board), level, { seed: i + 1 }))[1]); // 按时间思考，耗时与种子无关；固定种子使每次测量的走法相同
   }
   const board = goPosition(size, warmup, 1);
   const [, ms] = timed(() => goThink(goSnap(board), level, { iterations: GO_THROUGHPUT_ITERATIONS, seed: 1 }));
@@ -142,7 +142,7 @@ function benchGo(size: number, level: number, moves: number) {
 function benchDead() {
   const board = goPosition(MAXN, DEAD_ESTIMATE_MOVES, DEAD_SEED);
   const times: number[] = [];
-  for (let i = 0; i < DEAD_RUNS; i++) times.push(timed(() => estimateDead(board.cur.b, board.N, board.komi))[1]);
+  for (let i = 0; i < DEAD_RUNS; i++) times.push(timed(() => estimateDead(board.cur.b, board.N, board.komi, DEAD_SEED + i))[1]);
   return stats(times);
 }
 

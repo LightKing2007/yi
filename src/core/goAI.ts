@@ -5,6 +5,7 @@
  *         统计每一手的胜率，最后选试得最多的那一手；困难思考更久，随机对局里也会优先提子、逃子
  * 终局点目时，用同样的随机对局估计每块棋最终归谁，自动标出死子（markDead）。
  */
+import { now } from './clock';
 import { BLACK, EMPTY, MAXN, Rng, WHITE, type Board } from './types';
 
 const GV = (MAXN + 2) * (MAXN + 2);
@@ -395,7 +396,8 @@ export interface GoThinkOptions {
   timeScale?: number;
   /** 大于 0 时不按时间、而按固定的模拟次数思考 */
   iterations?: number;
-  seed?: number;
+  /** 随机数的种子（ARC-020：core 层不直接调用 Math.random，由调用方给出） */
+  seed: number;
   cancelled?: () => boolean;
 }
 
@@ -618,86 +620,128 @@ class Search {
   }
 }
 
-/** 为轮到的一方思考，返回落点；(-1, -1) 表示停一手 */
-export function goThink(snap: GoSnap, level: number, opt: GoThinkOptions = {}): { x: number; y: number } {
-  const s = new Search(snap, level, opt.seed ?? (Math.random() * 4294967295) >>> 0);
-  if (level === 0) return s.toXY(s.easyMove());
-  s.expand(0, s.root, true);
+/** 按时间思考时，每做这么多次模拟才读一次时钟、查一次是否取消 */
+const ITERATIONS_PER_CHECK = 16;
+/** 困难（等级 2）每一手的思考时间（秒），乘以 timeScale */
+const HARD_BUDGET_SECS = 3.0;
+/** 普通（等级 1）每一手的思考时间（秒），乘以 timeScale */
+const NORMAL_BUDGET_SECS = 1.2;
+
+/** 展开搜索树：给了模拟次数时按次数，否则按思考时间（经 clock.ts 读取，测试可换成手动推进的时钟，ARC-020） */
+function searchFor(search: Search, level: number, opt: GoThinkOptions) {
   if (opt.iterations && opt.iterations > 0) {
-    for (let i = 0; i < opt.iterations; i++) s.iterate();
-  } else {
-    const budget = (level >= 2 ? 3.0 : 1.2) * (opt.timeScale ?? 1) * 1000,
-      t0 = performance.now();
-    while (childCount(0) > 1 && performance.now() - t0 < budget && !(opt.cancelled && opt.cancelled())) {
-      for (let i = 0; i < 16; i++) s.iterate();
-    }
+    for (let i = 0; i < opt.iterations; i++) search.iterate();
+    return;
   }
-  let most = -1,
-    p = PASS;
-  const count = childCount(0),
-    c0 = firstChild(0);
-  for (let i = 0; i < count; i++) {
-    const c = c0 + i,
-      n = visitsOf(c);
-    if (n > most) {
-      most = n;
-      p = moveOf(c);
-    }
+  const budget = (level >= 2 ? HARD_BUDGET_SECS : NORMAL_BUDGET_SECS) * (opt.timeScale ?? 1),
+    start = now();
+  while (childCount(0) > 1 && now() - start < budget && !opt.cancelled?.()) {
+    for (let i = 0; i < ITERATIONS_PER_CHECK; i++) search.iterate();
   }
-  return s.toXY(p);
 }
 
-/** 点目时用随机对局估计每块棋的归属：返回多半会被吃掉的棋子（逐个坐标） */
-export function estimateDead(b: Board, N: number, komi: number): { x: number; y: number }[] {
-  const root = new GB(),
-    work = new GB(),
-    rng = new Rng((Math.random() * 4294967295) >>> 0);
-  const runs = N >= 19 ? 160 : N >= 13 ? 240 : 400;
-  root.setup(b, N, BLACK, 0, komi);
-  const own = new Int32Array(MAXN * MAXN);
-  for (let r = 0; r < runs; r++) {
-    // 反复下完随机对局，统计每个点最后归谁
+/** 根结点下模拟次数最多的一手；根结点没有孩子时为停一手 */
+function mostVisited(): number {
+  let most = -1,
+    best = PASS;
+  const count = childCount(0),
+    first = firstChild(0);
+  for (let i = 0; i < count; i++) {
+    const child = first + i,
+      visits = visitsOf(child);
+    if (visits > most) {
+      most = visits;
+      best = moveOf(child);
+    }
+  }
+  return best;
+}
+
+/** 为轮到的一方思考，返回落点；(-1, -1) 表示停一手。随机数由 opt.seed 决定：种子与模拟次数相同时结果相同 */
+export function goThink(snap: GoSnap, level: number, opt: GoThinkOptions): { x: number; y: number } {
+  const search = new Search(snap, level, opt.seed);
+  if (level === 0) return search.toXY(search.easyMove());
+  search.expand(0, search.root, true);
+  searchFor(search, level, opt);
+  return search.toXY(mostVisited());
+}
+
+/** 19 路及以上、13 路及以上的棋盘 */
+const LARGE_BOARD = 19;
+const MEDIUM_BOARD = 13;
+/** 点目估死子时下的随机对局数：棋盘越小每局越快，下得越多 */
+const DEAD_RUNS_LARGE = 160;
+const DEAD_RUNS_MEDIUM = 240;
+const DEAD_RUNS_SMALL = 400;
+/** 一块棋的子平均归属（1 为全归自己，-1 为全归对方）低于这个值即判为死子 */
+const DEAD_THRESHOLD = -0.05;
+/** 一个点四周的方向数 */
+const SIDES = 4;
+
+/** 随机对局下完后点 p 的归属：有子即归该子；空点四周只有一方的子时归那一方，两方都有时不归任何一方 */
+function ownerAt(work: GB, root: GB, p: number): number {
+  const color = work.c[p] ?? EMPTY;
+  if (color !== EMPTY) return color;
+  let seen = 0;
+  for (let k = 0; k < SIDES; k++) {
+    const side = work.col(p + root.dir(k));
+    if (side === BLACK || side === WHITE) seen |= side;
+  }
+  return seen === (BLACK | WHITE) ? EMPTY : seen;
+}
+
+/** 从 root 反复下完 runs 局随机对局，累计每个点的归属（归黑 +1、归白 -1），按 x * MAXN + y 存放 */
+function sampleOwnership(root: GB, runs: number, rng: Rng): Int32Array {
+  const work = new GB(),
+    own = new Int32Array(MAXN * MAXN);
+  for (let run = 0; run < runs; run++) {
     work.copyFrom(root);
-    work.toMove = r & 1 ? WHITE : BLACK; // 轮流先走，不让任何一方多占一手的便宜
+    work.toMove = run & 1 ? WHITE : BLACK; // 轮流先走，不让任何一方多占一手的便宜
     playout(work, true, rng);
-    for (let x = 0; x < N; x++)
-      for (let y = 0; y < N; y++) {
-        const p = work.idx(x, y);
-        let c = work.c[p];
-        if (c === EMPTY) {
-          let seen = 0;
-          for (let k = 0; k < 4; k++) {
-            const dk = root.dir(k);
-            const q = work.col(p + dk);
-            if (q === BLACK || q === WHITE) seen |= q;
-          }
-          c = seen === 3 ? EMPTY : seen;
-        }
-        own[x * MAXN + y] = (own[x * MAXN + y] ?? 0) + (c === BLACK ? 1 : c === WHITE ? -1 : 0);
+    for (let x = 0; x < root.N; x++)
+      for (let y = 0; y < root.N; y++) {
+        const owner = ownerAt(work, root, work.idx(x, y));
+        own[x * MAXN + y] = (own[x * MAXN + y] ?? 0) + (owner === BLACK ? 1 : owner === WHITE ? -1 : 0);
       }
   }
-  // 一块棋多数子最后都归了对方，就判为死子
+  return own;
+}
+
+/** root 中点 p 所在棋块的全部棋子（棋块以 head、next 串成环） */
+function groupAt(root: GB, p: number): { x: number; y: number }[] {
+  const head = root.hd(p),
+    group: { x: number; y: number }[] = [];
+  let stone = head;
+  do {
+    group.push({ x: (stone % root.W) - 1, y: Math.floor(stone / root.W) - 1 });
+    stone = root.next(stone);
+  } while (stone !== head);
+  return group;
+}
+
+/** 把子平均多半归了对方的棋块整块判为死子；b 为原局面，own 为 sampleOwnership 累计的 runs 局结果 */
+function deadGroups(b: Board, root: GB, own: Int32Array, runs: number): { x: number; y: number }[] {
   const done = new Uint8Array(MAXN * MAXN),
     dead: { x: number; y: number }[] = [];
-  for (let x = 0; x < N; x++)
-    for (let y = 0; y < N; y++) {
-      const c = b[x * MAXN + y];
-      if (c === EMPTY || done[x * MAXN + y]) continue;
-      const h = root.hd(root.idx(x, y));
-      let s = h,
-        total = 0,
-        sum = 0;
-      const group: { x: number; y: number }[] = [];
-      do {
-        const sx = (s % root.W) - 1,
-          sy = Math.floor(s / root.W) - 1;
-        done[sx * MAXN + sy] = 1;
-        sum += ((own[sx * MAXN + sy] ?? 0) * (c === BLACK ? 1 : -1)) / runs;
-        total++;
-        group.push({ x: sx, y: sy });
-        s = root.next(s);
-      } while (s !== h);
-      if (sum / total < -0.05) dead.push(...group);
+  for (let x = 0; x < root.N; x++)
+    for (let y = 0; y < root.N; y++) {
+      const color = b[x * MAXN + y];
+      if (color === EMPTY || done[x * MAXN + y]) continue;
+      const group = groupAt(root, root.idx(x, y));
+      let sum = 0;
+      for (const stone of group) {
+        done[stone.x * MAXN + stone.y] = 1;
+        sum += ((own[stone.x * MAXN + stone.y] ?? 0) * (color === BLACK ? 1 : -1)) / runs;
+      }
+      if (sum / group.length < DEAD_THRESHOLD) dead.push(...group);
     }
   return dead;
+}
+
+/** 点目时用随机对局估计每块棋的归属：返回多半会被吃掉的棋子（逐个坐标）。随机数由 seed 决定（ARC-020） */
+export function estimateDead(b: Board, size: number, komi: number, seed: number): { x: number; y: number }[] {
+  const root = new GB(),
+    runs = size >= LARGE_BOARD ? DEAD_RUNS_LARGE : size >= MEDIUM_BOARD ? DEAD_RUNS_MEDIUM : DEAD_RUNS_SMALL;
+  root.setup(b, size, BLACK, 0, komi);
+  return deadGroups(b, root, sampleOwnership(root, runs, new Rng(seed)), runs);
 }

@@ -205,7 +205,7 @@ class Searcher {
 }
 
 /** 为轮到的一方选一手。level：0 简单，1 普通，2 困难。棋盘已满时返回 null */
-export function gomokuMove(snap: GomokuSnap, level: number, random: () => number = Math.random, budgetMs = HARD_BUDGET_MS): { x: number; y: number } | null {
+export function gomokuMove(snap: GomokuSnap, level: number, random: () => number, budgetMs = HARD_BUDGET_MS): { x: number; y: number } | null {
   const { N, me } = snap,
     op = 3 - me;
   const s = new Searcher(snap.b.slice(), N, snap.renju);

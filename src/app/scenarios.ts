@@ -17,6 +17,9 @@ import { devHooks } from './app';
 import { goScreen, newGame, requestNewGame, requestUndo, setVsAI, toggleReview } from './controller';
 import { Phase, st as net } from '../online/client';
 
+/** 随机数种子的取值上限：32 位无符号整数 */
+const SEED_MAX = 0xffffffff;
+
 const STEP = 1 / 60;
 const T0 = 1000; // 虚拟时钟的起点（秒）
 
@@ -190,17 +193,17 @@ const SCENARIOS: Record<string, Scenario> = {
         GAME,
         () => {
           newGame(GameType.Go, 9);
-          const s: [number, number, number][] = [];
+          const stones: [number, number, number][] = [];
           for (let y = 0; y < 9; y++) {
-            s.push([3, y, BLACK]);
-            s.push([5, y, WHITE]);
+            stones.push([3, y, BLACK]);
+            stones.push([5, y, WHITE]);
           }
-          s.push([1, 4, WHITE], [7, 4, BLACK], [7, 5, BLACK]);
-          place(s);
-          game.cur.moves = s.length;
+          stones.push([1, 4, WHITE], [7, 4, BLACK], [7, 5, BLACK]);
+          place(stones);
+          game.cur.moves = stones.length;
           game.pass();
           game.pass();
-          autoMarkDead(game);
+          autoMarkDead(game, (Math.random() * SEED_MAX) >>> 0); // prepare() 已把 Math.random 换成固定的序列，种子与改动前 core 内部取的相同
         },
       ],
       [GAME + 1.0, () => game.confirmScore()],

@@ -3,6 +3,11 @@ import { estimateDead, goThink, type GoSnap } from '../core/goAI';
 import { gomokuMove, type GomokuSnap } from '../core/gomokuAI';
 import type { Board } from '../core/types';
 
+/** 种子的取值上限：32 位无符号整数 */
+const SEED_MAX = 0xffffffff;
+/** 随机数的种子：core 层不直接取随机数（ARC-020），由这里在后台线程中取 */
+export const randomSeed = () => (Math.random() * SEED_MAX) >>> 0;
+
 export type ThinkRequest =
   | { id: number; kind: 'gomoku'; snap: GomokuSnap; level: number }
   | { id: number; kind: 'go'; snap: GoSnap; level: number }
@@ -12,7 +17,7 @@ export type ThinkRequest =
 export type ThinkReply = { id: number; x: number; y: number } | { id: number; dead: { x: number; y: number }[] };
 
 export function think(r: ThinkRequest): ThinkReply {
-  if (r.kind === 'dead') return { id: r.id, dead: estimateDead(r.b, r.N, r.komi) };
-  const m = r.kind === 'go' ? goThink(r.snap, r.level) : (gomokuMove(r.snap, r.level) ?? { x: -1, y: -1 });
+  if (r.kind === 'dead') return { id: r.id, dead: estimateDead(r.b, r.N, r.komi, randomSeed()) };
+  const m = r.kind === 'go' ? goThink(r.snap, r.level, { seed: randomSeed() }) : (gomokuMove(r.snap, r.level, Math.random) ?? { x: -1, y: -1 });
   return { id: r.id, x: m.x, y: m.y };
 }

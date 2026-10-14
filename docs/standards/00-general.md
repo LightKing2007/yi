@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 文件编号 | YI-STD-001 |
-| 文件版本 | 1.1.38 |
+| 文件版本 | 1.1.39 |
 | 发布日期 | 2026-10-02 |
 | 状态 | 现行；整改项按 [plan/remediation.md](../plan/remediation.md) 的期限实施 |
 | 编制 | LightKing、Claude |
@@ -300,3 +300,4 @@ GB/T 11457—2006 界定的以及下列术语和定义适用于本规范。
 | 1.1.36 | 2026-10-13 | 同步 [05-security.md](05-security.md) 的 SEC-044 的“现状”为满足：部署用户、`/usr/local/sbin/yi-deploy` 与 sudo 白名单已于 2026-10-13 经项目所有者同意安装到服务器并核对；规定本身不变，规则编号不变 |
 | 1.1.37 | 2026-10-13 | 同步 [05-security.md](05-security.md) 的 SEC-043 的“现状”为部分满足：自动安全更新已启用，但 2026-09-30 起待重启的 `libc6` 更新至 2026-10-13 才重启，晚于期限 6 日；[procedures/ops.md](../procedures/ops.md) 第 2.1 条的日常检查补入待重启的更新一项；规定本身不变，规则编号不变 |
 | 1.1.38 | 2026-10-14 | 随整改项 P2-11 建立 `docs/adr/`：同步 [02-architecture.md](02-architecture.md) 的 ARC-060 与 [11-documentation.md](11-documentation.md) 第 1.1 条中 `docs/adr/` 的“现状”；规定本身不变，规则编号不变 |
+| 1.1.39 | 2026-10-14 | 随整改项 P2-13 的完成，同步 [02-architecture.md](02-architecture.md) 的 ARC-020 的“现状”为满足；规定本身不变，规则编号不变 |
