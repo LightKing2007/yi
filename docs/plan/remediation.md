@@ -60,7 +60,7 @@
 | P2-08 | Electron Fuses | SEC-033 | 已完成（#98：`package.json` 的 `build.electronFuses` 在打包时关闭 `runAsNode`、`NODE_OPTIONS` 与调试参数，开启 `app.asar` 完整性校验与只从 `app.asar` 载入；`scripts/check-fuses.mjs` 在 CI 中核对打包产物，并以未改动的 Electron 为探针。随下一个版本发布生效） |
 | P2-09 | `SECURITY.md` | SEC-063 | 已完成（[SECURITY.md](../../SECURITY.md)：支持的版本、经 GitHub 私下报告提交、范围与测试守则、72 小时内确认、按 SEC-060 的期限修复、修复后 30 日内公开说明；2026-10-06 开启仓库的私下报告漏洞功能） |
 | P2-10 | 开启 `noImplicitOverride`、`noUncheckedIndexedAccess` 并整改 | F-32；COD-050 | 已完成（两项均在 `tsconfig.json` 中开启。`noImplicitOverride` 随 #100 开启；`noUncheckedIndexedAccess` 分 6 批整改约 667 处，即 #100、#102、#103、#104、#106 与本项的最后一批，过渡用的 `tsconfig.strict.json` 已删除。机械性改动所触及函数的存量违规由 P2-12 整改） |
-| P2-11 | 建立 `docs/adr/`，补录近期决策 | ARC-060 | 待实施 |
+| P2-11 | 建立 `docs/adr/`，补录近期决策 | ARC-060 | 已完成（#134：[docs/adr/](../adr/README.md) 的写法与索引，补录 0001 联机对局上限、0002 服务端异常隔离、0003 内存上限、0004 域名与 TLS 提前启用、0005 Caddy 配置的分工、0006 部署用户、0007 不申请 Developer ID 签名） |
 | P2-12 | 存量超长文件与函数拆分（`server/rooms.ts`、`src/online/client.ts`、`src/core/game.ts` 等），含 P2-10 的机械性改动所触及、按总则第 4.3.3 条未一并整改的函数（电脑思考、声音合成、渲染等）；文档注释覆盖率提升至 ≥ 80% | F-30；COD-031、COD-037、COD-040 | 待实施 |
 | P2-13 | `core` 层去除对 `performance.now`、`Math.random` 的直接调用 | ARC-020 | 部分完成（#21：`gomokuAI.ts` 的思考时限改用注入的时钟；`goAI.ts` 待整改） |
 | P2-14 | 部署用户 `deploy` 与 sudo 白名单 | SEC-044 | 已完成（#129 按项目所有者的决定修订 SEC-044；#130：上线、重启、回滚、查看状态以部署用户经 sudo 执行 root 所有的 `/usr/local/sbin/yi-deploy`，上传的文件以部署用户的身份读出；其余配置修改以 root 执行。2026-10-13 经项目所有者同意，以 root 执行 `npm run deploy -- install-deploy-user` 安装到服务器，见 `deploy.log`；核对：`sudo -l` 只列出 `/usr/local/sbin/yi-deploy`，以部署用户执行 `npm run deploy -- status` 成功，白名单以外的命令与配置类命令均被拒） |

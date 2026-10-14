@@ -10,6 +10,7 @@
 | [procedures/](procedures/release.md) | 规程 | 规范性，强制执行 | 按规范执行某项工作的操作步骤 |
 | [plan/](plan/roadmap.md) | 计划 | 资料性 | 架构改造路线、规范整改路线 |
 | [audits/](audits/2026-10-02-baseline.md) | 审计 | 资料性，只增不改 | 审查报告、性能报告、违规基线 |
+| [adr/](adr/README.md) | 架构决策记录 | 资料性，接受后不改写正文 | 影响多层、运行时依赖、协议与数据格式，以及服务器结构与运维方式的决策（ARC-060） |
 | `incidents/` | 事件 | 资料性，只增不改 | 事件复盘报告（发生事件时建立） |
 
 ## 2 文件
@@ -47,7 +48,11 @@
 | [roadmap.md](plan/roadmap.md) | 架构改造路线图：目标、决策记录、未完成的阶段 5 至阶段 9、风险 |
 | [remediation.md](plan/remediation.md) | 规范整改路线图：P0、P1、P2 整改项与待决策事项 |
 
-### 2.4 审计（`audits/`）
+### 2.4 架构决策记录（`adr/`）
+
+写法与全部记录的索引见 [adr/README.md](adr/README.md)；路线图的 D1 至 D12、整改路线图的 D-1 至 D-4 视为已接受的记录。
+
+### 2.5 审计（`audits/`）
 
 | 文件 | 内容 |
 |---|---|
