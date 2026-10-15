@@ -3,8 +3,8 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.10 |
-| 修订日期 | 2026-10-13 |
+| 文件版本 | 1.1.11 |
+| 修订日期 | 2026-10-16 |
 | 规则前缀 | `OPS` |
 
 参考：ISO/IEC/IEEE 12207:2017 第 6.4.10 节至第 6.4.13 节；ISO/IEC 20000-1:2018；ISO/IEC 27035-1:2023；GB/T 20986—2023；RFC 3339；RFC 5424；SLSA v1.0。
@@ -133,6 +133,8 @@
 | `store.write-recovered` | info | 写盘在失败后恢复成功 | `file`、`attempts` |
 | `store.records-invalid` | warn | 存档中有记录损坏，已按新玩家处理，原文件另存 | `file`、`count`、`copy` |
 | `store.dumped` | error | 退出前写盘失败，段位数据已转储到另一文件 | `file`、`dump` |
+| `db.migrated` | info | 数据库结构已升到本程序支持的版本（DAT-041）；已有结构的数据库在迁移前已备份（DAT-042） | `file`、`from`、`to`、`backup` |
+| `db.opened` | info | 数据库已打开，PRAGMA 与完整性检查通过（DAT-002） | `file`、`schemaVersion` |
 | `store.dump-failed` | error | 退出前写盘与转储都失败，本次运行后的段位变化丢失 | `file`、`dump`、`err` |
 | `player.online` | info | 玩家上线 | `playerId` |
 | `player.offline` | info | 玩家断开 | `playerId`、`code` |
