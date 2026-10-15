@@ -153,6 +153,8 @@ export interface ServerContext {
   readonly queue: QEntry[];
   /** 已配对、等双方确认的配对 */
   readonly matches: Set<Match>;
+  /** 是否处于维护模式（OPS-045）：不再开始新的对局 */
+  readonly maintenance: boolean;
   /** 监控指标（07-operations.md 第 9 节）；不统计时为 undefined */
   readonly metrics: Metrics | undefined;
   /** 下一个房间号：开房间时取用并加一 */
