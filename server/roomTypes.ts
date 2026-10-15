@@ -153,6 +153,12 @@ export interface ServerContext {
   readonly queue: QEntry[];
   /** 已配对、等双方确认的配对 */
   readonly matches: Set<Match>;
+  /** 监控指标（07-operations.md 第 9 节）；不统计时为 undefined */
+  readonly metrics: Metrics | undefined;
+  /** 下一个房间号：开房间时取用并加一 */
+  nextRoom: number;
+  /** 下一个对局编号：每开一局取用并加一（日志用，07-operations.md 第 5.1 条） */
+  nextGame: number;
   /** 给玩家发一条消息；玩家不存在或已掉线时不发，错误提示计入监控指标 */
   send(p: Player | null | undefined, msg: S2C): void;
   /** 开一个房间（还没有人入座） */
