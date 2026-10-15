@@ -39,3 +39,4 @@
 | [0005](0005-caddy-config-ownership.md) | Caddy 本身与主配置由 LightsWeb 仓库管理，各站点的配置由各自的仓库管理 | 接受 | 2026-10-13 |
 | [0006](0006-deploy-user.md) | 日常运维改用部署用户经 sudo 白名单执行，配置修改仍以 root 执行 | 接受 | 2026-10-13 |
 | [0007](0007-no-developer-id.md) | 暂不申请 Apple Developer ID 签名，macOS 权限声明保持现状 | 接受 | 2026-10-13 |
+| [0008](0008-node-sqlite.md) | 服务端持久化采用 Node.js 内置的 `node:sqlite`，单文件数据库，不新增第三方依赖 | 接受 | 2026-10-16 |
