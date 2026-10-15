@@ -18,7 +18,6 @@ import {
   MOVES_MAX,
   ASK_SECS,
   CLOSE_CODE,
-  CONFIRM_SECS,
   DRAWN,
   DRAW_LIMIT,
   GRACE_SECS,
@@ -54,6 +53,7 @@ import {
   type Session,
 } from './roomTypes';
 import { rate, typeKey } from './rating';
+import { confirm, dropMatch, enqueue, oppInfo, rankedElsewhere, tickMatch, unqueue } from './matchmaking';
 
 // 共用的类型已移到 roomTypes.ts（整改项 P2-12）；对外的部分仍从这里导出，引用方不必改动
 export { MemoryStore, type Conn, type Health, type RatingStore, type RoomServerOptions, type Session } from './roomTypes';
@@ -66,8 +66,6 @@ const MAX_PLAYERS = 2048;
  */
 export const PENDING_MAX = MAX_PLAYERS;
 const MAX_ROOMS = 1024;
-/** 匹配与排位开局时，先配上的一方执黑的概率 */
-const FIRST_BLACK_CHANCE = 0.5;
 const JOIN_FAILS = 5; // 一条连接一分钟内最多几次加入失败，超过就暂时不让再试（防止遍历房号）
 /** 统计加入失败次数的时间窗 */
 const JOIN_WINDOW_SECS = 60;
@@ -132,7 +130,32 @@ export class RoomServer {
     this.store = opt.store ?? new MemoryStore();
     this.latest = opt.latest ? { latest: opt.latest, url: opt.download } : {};
     this.metrics = opt.metrics;
-    this.ctx = { store: this.store, log: this.log, send: (p, msg) => this.send(p, msg) };
+    this.ctx = RoomServer.context(this);
+  }
+
+  /** 交给拆出的各模块的上下文：状态以 getter 现取（关停时会换掉匹配队列），方法包装本类的私有方法 */
+  private static context(server: RoomServer): ServerContext {
+    return {
+      store: server.store,
+      log: server.log,
+      now: server.now,
+      random: server.random,
+      get players() {
+        return server.players;
+      },
+      get rooms() {
+        return server.rooms;
+      },
+      get queue() {
+        return server.queue;
+      },
+      get matches() {
+        return server.matches;
+      },
+      send: (p, msg) => server.send(p, msg),
+      newRoom: (kind, rules, seat) => server.newRoom(kind, rules, seat),
+      seatPlayers: (r, first, second, firstColor) => server.seatPlayers(r, first, second, firstColor),
+    };
   }
 
   // ---------------- 对外接口 ----------------
@@ -227,8 +250,8 @@ export class RoomServer {
       return;
     }
     this.log('info', 'player.offline', { msg: `${p.name} 断开`, playerId: p.id, code });
-    this.unqueue(p);
-    if (p.match) this.dropMatch(p.match, [p], '对方已离开');
+    unqueue(this.ctx, p);
+    if (p.match) dropMatch(this.ctx, p.match, [p], '对方已离开');
     const r = this.rooms.get(p.room);
     if (r && r.state === RoomState.Play) {
       if (r.deadline) {
@@ -253,7 +276,7 @@ export class RoomServer {
     for (const m of [...this.matches]) {
       const fault = { msg: '检查配对确认时出现未预期的异常', playerIds: m.side.map(side => side.p.id) };
       this.guard(
-        () => this.tickMatch(m, now),
+        () => tickMatch(this.ctx, m, now),
         fault,
         errorId => this.scrapMatch(m, errorId),
       );
@@ -277,16 +300,6 @@ export class RoomServer {
         errorId => this.evict(p, errorId),
       );
     }
-  }
-
-  /** 配对的时限：确认超时，没点接受的一方作罢 */
-  private tickMatch(m: Match, now: number) {
-    if (now > m.deadline)
-      this.dropMatch(
-        m,
-        m.side.filter((_, i) => !m.ok[i]).map(side => side.p),
-        '对方未确认',
-      );
   }
 
   /** 房间的时限：申请无人回应，视为拒绝；本手超时，判负 */
@@ -386,7 +399,7 @@ export class RoomServer {
     for (const m of this.matches) for (const side of m.side) cancelled.add(side.p);
     for (const entry of this.queue) cancelled.add(entry.p);
     for (const p of cancelled) {
-      this.unqueue(p);
+      unqueue(this.ctx, p);
       p.match = null;
     }
     this.matches.clear();
@@ -428,18 +441,6 @@ export class RoomServer {
   }
   private busy(p: Player) {
     return !!(p.room || p.match);
-  }
-
-  /** 同一台设备的另一个会话正在排位（排队、等确认或对局中）：两个窗口同时排位会互相覆盖段位 */
-  private rankedElsewhere(p: Player) {
-    if (!p.key) return false;
-    for (const o of this.players) {
-      if (o === p || o.key !== p.key) continue;
-      if (o.queued?.mode === 'ranked' || o.match?.mode === 'ranked') return true;
-      const r = this.rooms.get(o.room);
-      if (r && r.kind === 'ranked' && r.state === RoomState.Play) return true;
-    }
-    return false;
   }
 
   // ---------------- 未预期的异常（API-023、EDGE-002） ----------------
@@ -531,96 +532,6 @@ export class RoomServer {
     if (p.limits.allow(op, this.now())) return true;
     this.limited(p);
     return false;
-  }
-
-  // ---------------- 匹配与排位 ----------------
-
-  /** 进入匹配队列：want 为想要的模式、棋类与路数，since 为排队的起始时刻（配对作罢后按原来的时刻继续排） */
-  private enqueue(p: Player, want: Pick<QEntry, 'mode' | 'type' | 'size'>, since = this.now()) {
-    const { mode } = want;
-    const rules = queueRules(mode, want.type, want.size);
-    const entry: QEntry = { p, mode, type: rules.type, size: rules.size, since };
-    // 队列按进入的先后排好；与同一队列里等得最久的人配对
-    const other = this.queue.find(
-      cand =>
-        cand.p !== p &&
-        cand.mode === mode &&
-        cand.type === entry.type &&
-        cand.size === entry.size &&
-        cand.p.conn &&
-        !(mode === 'ranked' && cand.p.key === p.key),
-    ); // 排位不和自己（同一台设备）配对
-    if (!other) {
-      let i = this.queue.findIndex(cand => cand.since > since);
-      if (i < 0) i = this.queue.length;
-      this.queue.splice(i, 0, entry);
-      p.queued = entry;
-      this.send(p, { t: 'queued', mode, type: entry.type, size: entry.size });
-      return;
-    }
-    this.unqueue(other.p);
-    const m: Match = { mode, type: entry.type, size: entry.size, side: [other, entry], ok: [false, false], deadline: this.now() + CONFIRM_SECS };
-    this.matches.add(m);
-    const [first, second] = m.side;
-    for (const [me, opp] of [
-      [first.p, second.p],
-      [second.p, first.p],
-    ] as const) {
-      me.match = m;
-      this.send(me, { t: 'found', opp: this.oppInfo(opp, m.mode, m.type), secs: CONFIRM_SECS });
-    }
-    this.log('info', 'match.paired', {
-      msg: `配对（${mode === 'ranked' ? '排位' : '匹配'}）：${other.p.name} 与 ${p.name}`,
-      mode,
-      playerId: p.id,
-      opponentId: other.p.id,
-    });
-  }
-
-  private unqueue(p: Player) {
-    if (!p.queued) return;
-    const i = this.queue.indexOf(p.queued);
-    if (i >= 0) this.queue.splice(i, 1);
-    p.queued = null;
-  }
-
-  private oppInfo(p: Player, mode: QueueMode | GameKind, type: number): Opponent {
-    return mode === 'ranked' ? { name: p.name, points: p.ratings[typeKey(type)].points } : { name: p.name };
-  }
-
-  /** 配对作罢：culprits（拒绝、超时、掉线的）退出匹配，另一方按原来的排队时刻继续匹配 */
-  private dropMatch(m: Match, culprits: Player[], reason: string) {
-    if (!this.matches.delete(m)) return;
-    for (const side of m.side) side.p.match = null;
-    for (const side of m.side) {
-      if (culprits.includes(side.p)) {
-        this.send(side.p, { t: 'unmatched', requeued: false, reason: '' });
-        continue;
-      }
-      this.send(side.p, { t: 'unmatched', requeued: true, reason });
-      if (side.p.conn) this.enqueue(side.p, side, side.since);
-    }
-  }
-
-  private confirm(p: Player, ok: boolean) {
-    const m = p.match;
-    if (!m) return;
-    const i = m.side[0].p === p ? 0 : 1;
-    const other = m.side[i === 0 ? 1 : 0];
-    if (!ok) {
-      this.dropMatch(m, [p], '对方未接受');
-      return;
-    }
-    if (m.ok[i]) return;
-    m.ok[i] = true;
-    if (!m.ok[1 - i]) {
-      this.send(other.p, { t: 'accepted' });
-      return;
-    }
-    this.matches.delete(m);
-    for (const side of m.side) side.p.match = null;
-    const r = this.newRoom(m.mode, queueRules(m.mode, m.type, m.size), { hostColor: 2, host: 0 });
-    this.seatPlayers(r, m.side[0].p, m.side[1].p, this.random() < FIRST_BLACK_CHANCE ? BLACK : WHITE);
   }
 
   // ---------------- 房间 ----------------
@@ -736,7 +647,7 @@ export class RoomServer {
   private sendStart(r: Room, only?: Player) {
     const info = (c: number): Opponent => {
       const p = r.who[c];
-      return p ? this.oppInfo(p, r.kind, r.type) : { name: '?' };
+      return p ? oppInfo(p, r.kind, r.type) : { name: '?' };
     };
     for (const c of [BLACK, WHITE]) {
       const p = this.seat(r, c);
@@ -985,10 +896,10 @@ export class RoomServer {
         if (this.allow(p, 'queue')) this.queueFor(p, m.mode, m.type, m.size);
         return true;
       case 'unqueue':
-        if (this.allow(p, 'queue')) this.unqueue(p);
+        if (this.allow(p, 'queue')) unqueue(this.ctx, p);
         return true;
       case 'confirm':
-        this.confirm(p, m.ok);
+        confirm(this.ctx, p, m.ok);
         return true;
       case 'create':
         this.createRoom(p, m);
@@ -1023,12 +934,12 @@ export class RoomServer {
       this.send(p, { t: 'error', text: '你已经在一个房间里了' });
       return;
     }
-    if (mode === 'ranked' && this.rankedElsewhere(p)) {
+    if (mode === 'ranked' && rankedElsewhere(this.ctx, p)) {
       this.send(p, { t: 'error', text: '这台设备已经在排位中了' });
       return;
     }
-    this.unqueue(p);
-    this.enqueue(p, { mode, type, size });
+    unqueue(this.ctx, p);
+    enqueue(this.ctx, p, { mode, type, size });
   }
 
   private createRoom(p: Player, m: Extract<C2S, { t: 'create' }>) {
@@ -1044,7 +955,7 @@ export class RoomServer {
       this.send(p, { t: 'error', text: '服务器房间已满，请稍后再试' });
       return;
     }
-    this.unqueue(p);
+    unqueue(this.ctx, p);
     // 路数与匹配相同：五子棋只有 15 路，围棋没有 15 路；禁手与每步限时由房主选
     const { size } = queueRules('match', m.type, m.size);
     const r = this.newRoom('friend', { type: m.type, size, renju: m.type === 0 && m.renju, moveTime: m.moveTime }, { hostColor: m.hostColor, host: p.id });
@@ -1098,7 +1009,7 @@ export class RoomServer {
       this.send(p, { t: 'joinNo', reason: '这是你自己的房间' });
       return;
     }
-    this.unqueue(p);
+    unqueue(this.ctx, p);
     const hostColor = r.hostColor === 2 ? this.randomColor() : r.hostColor === 1 ? WHITE : BLACK; // hostColor：0 执黑 1 执白 2 随机
     this.seatPlayers(r, host, p, hostColor);
   }

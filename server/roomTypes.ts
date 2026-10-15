@@ -141,8 +141,24 @@ export interface ServerContext {
   readonly store: RatingStore;
   /** 日志（07-operations.md 第 5 节） */
   readonly log: Log;
+  /** 时钟（秒） */
+  readonly now: () => number;
+  /** 随机数，[0, 1) */
+  readonly random: () => number;
+  /** 全部玩家（含尚未握手的） */
+  readonly players: Set<Player>;
+  /** 房间号 → 房间 */
+  readonly rooms: Map<number, Room>;
+  /** 匹配队列，按进入的先后排列 */
+  readonly queue: QEntry[];
+  /** 已配对、等双方确认的配对 */
+  readonly matches: Set<Match>;
   /** 给玩家发一条消息；玩家不存在或已掉线时不发，错误提示计入监控指标 */
   send(p: Player | null | undefined, msg: S2C): void;
+  /** 开一个房间（还没有人入座） */
+  newRoom(kind: GameKind, rules: RoomRules, seat: RoomSeat): Room;
+  /** 两名玩家入座并开局：first 执 firstColor */
+  seatPlayers(r: Room, first: Player, second: Player, firstColor: number): void;
 }
 
 /** 连接对象：由传输层持有，收到消息时交回 RoomServer */

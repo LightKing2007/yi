@@ -186,13 +186,14 @@ describe('扫描工具 hanTextsOf', () => {
     const source = [
       "logError('甲', e);",
       'this.log(`乙 ${x}`);',
+      "ctx.log('info', 'match.paired', { msg: `庚 ${x}` });",
       "console.warn('丙');",
       "throw new StoreLoadError(f, 1, '丁');",
       "if (bad) throw '戊';",
       "Promise.reject(new Error('己'));",
     ].join('\n');
     expect(scan(source, 'a.ts').every(([, , diagnostic]) => diagnostic)).toBe(true);
-    expect(scan(source, 'a.ts')).toHaveLength(6);
+    expect(scan(source, 'a.ts')).toHaveLength(7);
   });
 
   it('其他调用中的文字，以及日志参数里回调函数中的文字，都不是诊断信息', () => {

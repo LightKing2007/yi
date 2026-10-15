@@ -19,8 +19,8 @@ export interface HanText {
 /** 汉字：CJK 统一表意文字基本区 */
 export const HAN = /[一-鿿]/;
 
-/** 只写进日志或异常、不显示在界面上的调用：日志函数、`Promise.reject`，以及名字以 Error 结尾的函数或构造 */
-const DIAGNOSTIC_CALLEE = /^(?:logError|logWarn|log|this\.log|opt\.log|console\.\w+|Promise\.reject|\w*Error)$/;
+/** 只写进日志或异常、不显示在界面上的调用：日志函数（含联机服务端各模块经上下文写的 `ctx.log`）、`Promise.reject`，以及名字以 Error 结尾的函数或构造 */
+const DIAGNOSTIC_CALLEE = /^(?:logError|logWarn|log|this\.log|opt\.log|ctx\.log|console\.\w+|Promise\.reject|\w*Error)$/;
 
 /** node 是否位于诊断信息中：向上找到的第一个调用是日志或异常，或者在 throw 语句中；遇到函数即停止 */
 function inDiagnostic(node: ts.Node) {
