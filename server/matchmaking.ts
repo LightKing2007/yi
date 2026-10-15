@@ -24,10 +24,10 @@ export function tickMatch(ctx: ServerContext, m: Match, now: number) {
 /** 同一台设备的另一个会话正在排位（排队、等确认或对局中）：两个窗口同时排位会互相覆盖段位 */
 export function rankedElsewhere(ctx: ServerContext, p: Player) {
   if (!p.key) return false;
-  for (const o of ctx.players) {
-    if (o === p || o.key !== p.key) continue;
-    if (o.queued?.mode === 'ranked' || o.match?.mode === 'ranked') return true;
-    const r = ctx.rooms.get(o.room);
+  for (const peer of ctx.players) {
+    if (peer === p || peer.key !== p.key) continue;
+    if (peer.queued?.mode === 'ranked' || peer.match?.mode === 'ranked') return true;
+    const r = ctx.rooms.get(peer.room);
     if (r && r.kind === 'ranked' && r.state === RoomState.Play) return true;
   }
   return false;

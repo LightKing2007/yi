@@ -20,6 +20,7 @@ export interface RatingStore {
   set(key: string, r: Ratings, name: string): void;
 }
 
+/** 放在内存中的段位存放处：测试与没有指定存档时使用，进程退出即丢失 */
 export class MemoryStore implements RatingStore {
   private m = new Map<string, Ratings>();
   get(key: string) {
@@ -115,6 +116,7 @@ export interface Room {
   rated: ({ type: number; rating: Rating; delta: number } | null)[]; // 排位结算，按执子颜色
 }
 
+/** RoomServer 的可选依赖：时钟、随机数、日志、段位存放处、新版本信息与监控指标，测试中可替换 */
 export interface RoomServerOptions {
   now?: () => number; // 秒
   random?: () => number;

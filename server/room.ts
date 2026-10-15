@@ -43,7 +43,7 @@ export function colorOf(r: Room, p: Player) {
 
 /** 给对局双方各发一条消息 */
 export function broadcast(ctx: ServerContext, r: Room, msg: S2C) {
-  for (const c of [BLACK, WHITE]) ctx.send(seat(ctx, r, c), msg);
+  for (const color of [BLACK, WHITE]) ctx.send(seat(ctx, r, color), msg);
 }
 
 /** 记一条对局动作（重连时回放）；记满 ACTS_MAX 条后不再记，由 endAtLimit 结束对局 */
@@ -112,8 +112,8 @@ export function roomCode(ctx: ServerContext) {
   const taken = new Set<string>();
   for (const r of ctx.rooms.values()) if (r.state === RoomState.Wait) taken.add(r.code);
   for (let i = 0; i < CODE_TRIES; i++) {
-    const c = String(CODE_MIN + Math.floor(ctx.random() * CODE_SPAN));
-    if (!taken.has(c)) return c;
+    const code = String(CODE_MIN + Math.floor(ctx.random() * CODE_SPAN));
+    if (!taken.has(code)) return code;
   }
   for (let n = CODE_MIN; ; n++) if (!taken.has(String(n))) return String(n);
 }
@@ -162,17 +162,17 @@ export function endAtLimit(ctx: ServerContext, r: Room) {
 
 /** 发开局信息；only 给定时只发给这一方（重连时） */
 export function sendStart(ctx: ServerContext, r: Room, only?: Player) {
-  const info = (c: number): Opponent => {
-    const p = r.who[c];
+  const info = (color: number): Opponent => {
+    const p = r.who[color];
     return p ? oppInfo(p, r.kind, r.type) : { name: '?' };
   };
-  for (const c of [BLACK, WHITE]) {
-    const p = seat(ctx, r, c);
+  for (const color of [BLACK, WHITE]) {
+    const p = seat(ctx, r, color);
     if (!p || (only && p !== only)) continue;
     ctx.send(p, {
       t: 'start',
       kind: r.kind,
-      color: c,
+      color,
       type: r.type,
       size: r.size,
       renju: r.renju,
@@ -214,12 +214,12 @@ export function leaveRoom(ctx: ServerContext, p: Player) {
     freeRoom(ctx, r);
     return;
   }
-  const c = colorOf(r, p);
-  if (!c) return;
-  if (r.state === RoomState.Play) finish(ctx, r, { winner: 3 - c, reason: 'left' });
-  r.pid[c] = 0;
+  const color = colorOf(r, p);
+  if (!color) return;
+  if (r.state === RoomState.Play) finish(ctx, r, { winner: other(color), reason: 'left' });
+  r.pid[color] = 0;
   r.ask = null;
-  ctx.send(seat(ctx, r, 3 - c), { t: 'left' });
+  ctx.send(seat(ctx, r, other(color)), { t: 'left' });
   if (!r.pid[BLACK] && !r.pid[WHITE]) freeRoom(ctx, r);
 }
 
@@ -241,12 +241,12 @@ export function resolveAsk(ctx: ServerContext, r: Room, ok: boolean) {
     }
     if (r.state === RoomState.Play) startTurn(ctx, r);
   } else if (kind === 'draw') {
-    if (ok) finish(ctx, r, { winner: 3, reason: 'draw' });
+    if (ok) finish(ctx, r, { winner: DRAWN, reason: 'draw' });
     else if (r.state === RoomState.Play) startTurn(ctx, r);
   } else if (kind === 'rematch' && ok) {
-    const b = seat(ctx, r, BLACK),
-      w = seat(ctx, r, WHITE);
-    if (b && w) seatPlayers(ctx, r, [w, b], BLACK); // 交换先后手
+    const black = seat(ctx, r, BLACK),
+      white = seat(ctx, r, WHITE);
+    if (black && white) seatPlayers(ctx, r, [white, black], BLACK); // 交换先后手
   }
 }
 
@@ -254,7 +254,7 @@ export function resolveAsk(ctx: ServerContext, r: Room, ok: boolean) {
 export function resync(ctx: ServerContext, r: Room, p: Player) {
   sendStart(ctx, r, p);
   ctx.send(p, { t: 'sync', acts: r.acts.slice() });
-  for (const c of [BLACK, WHITE]) if (r.agreed[c]) ctx.send(p, { t: 'agreed', color: c });
+  for (const color of [BLACK, WHITE]) if (r.agreed[color]) ctx.send(p, { t: 'agreed', color });
   if (r.state === RoomState.Over) {
     // 掉线期间对局已经结束：补发结果与排位结算
     if (r.result) ctx.send(p, { t: 'over', ...r.result });

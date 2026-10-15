@@ -31,10 +31,13 @@ export const BUSY_TEXT = '服务器繁忙，请稍后再试';
 const tokenHash = (token: string) => createHash('sha256').update(token).digest('hex');
 /** 两个十六进制散列是否相同：常量时间比较（SEC-022）；长度不同（含空串）时不同 */
 const sameHash = (left: string, right: string) => left.length === right.length && timingSafeEqual(Buffer.from(left, 'hex'), Buffer.from(right, 'hex'));
+/** 十六进制的基数 */
+const HEX_RADIX = 16;
+/** n 个随机字节的十六进制表示（2n 位） */
 const hex = (n: number) => {
   const b = new Uint8Array(n);
   globalThis.crypto.getRandomValues(b);
-  return Array.from(b, v => v.toString(16).padStart(2, '0')).join('');
+  return Array.from(b, byte => byte.toString(HEX_RADIX).padStart(2, '0')).join('');
 };
 
 /** 连接断了：未握手的直接移除；对局中保留席位并暂停计时、告诉对方；其余离开房间并移除 */
