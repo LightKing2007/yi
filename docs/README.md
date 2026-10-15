@@ -47,6 +47,7 @@
 |---|---|
 | [roadmap.md](plan/roadmap.md) | 架构改造路线图：目标、决策记录、未完成的阶段 5 至阶段 9、风险 |
 | [remediation.md](plan/remediation.md) | 规范整改路线图：P0、P1、P2 整改项与待决策事项 |
+| [phase5.md](plan/phase5.md) | 阶段 5 开发计划：现状与差距、待决策事项、工作分解、验收、风险 |
 
 ### 2.4 架构决策记录（`adr/`）
 
