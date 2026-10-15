@@ -3,9 +3,9 @@
 | 项目 | 内容 |
 |---|---|
 | 性质 | 计划，资料性；各阶段的实施必须符合 [docs/standards/](../standards/00-general.md)，二者冲突时以规范为准 |
-| 文件版本 | 第 3 版 |
-| 修订日期 | 2026-10-02 |
-| 当前版本 | 2.0.4（联机协议第 3 版） |
+| 文件版本 | 第 4 版 |
+| 修订日期 | 2026-10-16 |
+| 当前版本 | 2.0.7（联机协议第 3 版） |
 | 下一阶段 | 阶段 5：数据库、对局记录与服务端加固 |
 
 本文件规定“弈”的架构改造目标、原则与尚未完成的阶段。已完成阶段的设计与实施细节见 Git 历史（第 2 版：提交 `ed1cb10` 中的 `docs/PLAN.md`，可用 `git show ed1cb10:docs/PLAN.md` 查看）；规范整改项见 [remediation.md](remediation.md)。
@@ -67,7 +67,7 @@
 | 顺序 | 版本 | 阶段 | 内容 | 约（天） | 强制更新 |
 |---|---|---|---|---|---|
 | 1 | 2.0.x | — | 规范整改 P0、P1 项（[remediation.md](remediation.md)） | 见整改路线图 | 否 |
-| 2 | 2.1 | 5 | 数据库与对局记录；服务端加固（限流、连接上限）；维护模式 | 3.5 | 否（仅服务端） |
+| 2 | 2.0.8 | 5 | 数据库与对局记录；服务端加固（按 IP 限制加入房间）；版本号按 VER-002 与阶段 5 开发计划的决定 D5-2 | 3.5 | 否（仅服务端） |
 | 3 | **3.0** | 4 + 6 + 7 | 域名与 TLS（待备案通过）、账号系统、协议 v4 | 7.5 | **是** |
 | 4 | 3.0 | 8 | 反作弊与管理工具 | 4 | — |
 | 5 | 3.x | 9 | 新功能（复盘、战绩、自动更新、对局中设置等） | 按需 | 否 |
@@ -75,7 +75,7 @@
 ### 4.2 时间线
 
 ```
-现在（2.0.4）─► 规范整改 P0、P1 ─► 阶段 5 ─► 发布 2.1（以服务端为主）
+现在（2.0.7）─► 规范整改 P0、P1 ─► 阶段 5 ─► 发布 2.0.8（以服务端为主）
                                               ▼
                      ICP 备案通过 ─► 阶段 4 + 6 + 7 ─► 阶段 8 ─► 发布 3.0 ─► 阶段 9
 ```
@@ -88,213 +88,192 @@
 
 ### 5.1 选型
 
-- `node:sqlite`（Node 22.13+ 无需参数；服务器上推荐 Node 24 LTS，先确认系统 glibc ≥ 2.28）。同步 API（`DatabaseSync`），适合单进程服务端。
-- 打开时设置 `PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=3000;`。
-- 文件位置：环境变量 `YI_DB`，默认 `./yi.db`。
-- 服务端仍打包成单文件 `server.cjs`，`scripts/build-node.mjs` 的服务端构建目标升到 `node22`。
+- `node:sqlite`，同步接口 `DatabaseSync`，适合单进程服务端；选型的背景与实测见 [架构决策记录 0008](../adr/0008-node-sqlite.md)（服务器为 Node.js v24.21.0、SQLite 3.53.4）。
+- 打开后立即执行 `PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=3000; PRAGMA synchronous=NORMAL;`，并校验 `PRAGMA integrity_check` 的结果为 `ok`，否则拒绝启动（DAT-002）。
+- 文件位置：环境变量 `YI_DB`，默认为工作目录下的 `yi.db`（服务器上为 `/var/lib/yi/yi.db`）。
+- 服务端仍打包成单文件 `server.cjs`，`scripts/build-node.mjs` 的构建目标升到 `node22`，与 `package.json` 的 `engines` 一致。
 
 ### 5.2 表结构
 
-本节表结构为草案，实施前必须按 [03-data.md](../standards/03-data.md) 修订（整改项 P2-01）：时间改为 UTC 毫秒、IP 截断存储、`flags` 改为子表、全部表声明 `STRICT`、索引统一命名、避免保留字作列名；二者冲突时以规范为准。
+5.2.1 本节按 [03-data.md](../standards/03-data.md) 修订（整改项 P2-01，2026-10-16），取代第 3 版中的草案。按阶段 5 开发计划的决定 D5-3，阶段 5 的迁移 `0001_init.sql` 只建本阶段写入的 6 张表（5.2.2）；其余各表的结构见 5.2.4，由对应阶段的迁移新增，实施时以届时的决定（D2 至 D5）为准，并须再次按 03-data.md 审查。
 
-### 5.2.1 草案（完整 DDL，放在 `server/db/schema.sql`，以迁移脚本方式执行）
+5.2.2 阶段 5 的 DDL（`server/db/migrations/0001_init.sql`）：
 
 ```sql
-CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);         -- schema_version 等
+-- 元数据：结构版本 schema_version 等（DAT-041）
+CREATE TABLE meta (
+  id         INTEGER PRIMARY KEY,
+  meta_name  TEXT NOT NULL CHECK (length(meta_name) BETWEEN 1 AND 64),
+  meta_text  TEXT NOT NULL CHECK (length(meta_text) <= 2000)
+) STRICT;
+CREATE UNIQUE INDEX uq_meta_meta_name ON meta (meta_name);
 
--- 用户：游客和会员都在这里，kind 区分
+-- 用户：阶段 5 只有游客，一个 uid_hash 对应一个游客用户；会员的列由阶段 6 的迁移新增
 CREATE TABLE users (
   id            INTEGER PRIMARY KEY,
-  kind          TEXT NOT NULL CHECK (kind IN ('guest','member')),
-  name          TEXT NOT NULL,
-  name_lower    TEXT,                                   -- 会员昵称唯一（D5）
-  email         TEXT,                                   -- 小写保存
-  email_ok      INTEGER NOT NULL DEFAULT 0,
-  pass_hash     TEXT,                                   -- scrypt$N$r$p$salt$hash
-  status        TEXT NOT NULL DEFAULT 'ok' CHECK (status IN ('ok','muted','ranked_ban','banned')),
-  status_until  INTEGER,                                -- 处罚到期（unix 秒），NULL 为永久
+  kind          TEXT NOT NULL CHECK (kind IN ('guest', 'member')),
+  name          TEXT NOT NULL CHECK (length(CAST(name AS BLOB)) BETWEEN 1 AND 64),   -- 最近一次使用的昵称，按 UTF-8 字节计（DAT-022）
   created_at    INTEGER NOT NULL,
-  last_login_at INTEGER,
-  consent_at    INTEGER,                                -- 同意隐私说明的时刻（注册时勾选）
-  merged_into   INTEGER REFERENCES users(id)            -- 游客并入会员后指向会员
-);
-CREATE UNIQUE INDEX users_email ON users(email) WHERE email IS NOT NULL;
-CREATE UNIQUE INDEX users_name  ON users(name_lower) WHERE name_lower IS NOT NULL;
+  last_seen_at  INTEGER NOT NULL
+) STRICT;
 
--- 设备：客户端本地生成的 uid 的散列（沿用现在的 sha256('yi:'+uid) 前 32 位），用于发现小号
+-- 设备：客户端本地 uid 的散列 sha256('yi:' + uid) 的前 32 位（DAT-075），用于关联游客与（阶段 6 起）会员
 CREATE TABLE devices (
-  uid_hash   TEXT NOT NULL,
-  user_id    INTEGER NOT NULL REFERENCES users(id),
-  first_seen INTEGER NOT NULL,
-  last_seen  INTEGER NOT NULL,
-  last_ip    TEXT,
-  PRIMARY KEY (uid_hash, user_id)
-);
-CREATE INDEX devices_user ON devices(user_id);
+  id             INTEGER PRIMARY KEY,
+  uid_hash       TEXT NOT NULL CHECK (length(uid_hash) = 32 AND uid_hash NOT GLOB '*[^0-9a-f]*'),
+  user_id        INTEGER NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  first_seen_at  INTEGER NOT NULL,
+  last_seen_at   INTEGER NOT NULL
+) STRICT;
+CREATE UNIQUE INDEX uq_devices_uid_hash_user_id ON devices (uid_hash, user_id);
+CREATE INDEX idx_devices_user_id ON devices (user_id);
 
--- 登录会话：只存令牌的 sha256
-CREATE TABLE sessions (
-  token_hash TEXT PRIMARY KEY,
-  user_id    INTEGER NOT NULL REFERENCES users(id),
-  uid_hash   TEXT,
-  created_at INTEGER NOT NULL,
-  expires_at INTEGER NOT NULL,
-  last_ip    TEXT
-);
-CREATE INDEX sessions_user ON sessions(user_id);
-
--- 邮箱验证码
-CREATE TABLE email_codes (
-  email      TEXT NOT NULL,
-  purpose    TEXT NOT NULL CHECK (purpose IN ('register','reset','change')),
-  code_hash  TEXT NOT NULL,
-  expires_at INTEGER NOT NULL,
-  tries      INTEGER NOT NULL DEFAULT 0,
-  created_at INTEGER NOT NULL
-);
-CREATE INDEX email_codes_email ON email_codes(email, purpose);
-
--- 段位（每人每种棋一行）
+-- 段位：每人每种棋一行
 CREATE TABLE ratings (
-  user_id   INTEGER NOT NULL REFERENCES users(id),
-  game_type INTEGER NOT NULL,                         -- 0 五子棋 1 围棋
-  points    INTEGER NOT NULL DEFAULT 1200,
-  win INTEGER NOT NULL DEFAULT 0, loss INTEGER NOT NULL DEFAULT 0, draw INTEGER NOT NULL DEFAULT 0,
-  games     INTEGER NOT NULL DEFAULT 0,               -- 排位局数（定级期判断）
-  abandons  INTEGER NOT NULL DEFAULT 0,               -- 逃跑次数
-  PRIMARY KEY (user_id, game_type)
-);
+  id          INTEGER PRIMARY KEY,
+  user_id     INTEGER NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  game_type   TEXT NOT NULL CHECK (game_type IN ('gomoku', 'go')),
+  points      INTEGER NOT NULL DEFAULT 1200 CHECK (points >= 0),
+  win_count   INTEGER NOT NULL DEFAULT 0 CHECK (win_count >= 0),
+  loss_count  INTEGER NOT NULL DEFAULT 0 CHECK (loss_count >= 0),
+  draw_count  INTEGER NOT NULL DEFAULT 0 CHECK (draw_count >= 0),
+  updated_at  INTEGER NOT NULL
+) STRICT;
+CREATE UNIQUE INDEX uq_ratings_user_id_game_type ON ratings (user_id, game_type);
 
--- 每一局
+-- 对局：开局时插入，终局时在结算事务中更新（DAT-040）
 CREATE TABLE games (
-  id          INTEGER PRIMARY KEY,
-  kind        TEXT NOT NULL CHECK (kind IN ('match','ranked','friend')),
-  game_type   INTEGER NOT NULL,
-  size        INTEGER NOT NULL,
-  black_id    INTEGER REFERENCES users(id),
-  white_id    INTEGER REFERENCES users(id),
-  record      TEXT NOT NULL,                          -- GameRecord 的 JSON（含每手用时）
-  moves       INTEGER NOT NULL,
-  winner      INTEGER,                                -- 1 黑 2 白 3 和
-  reason      TEXT,
-  started_at  INTEGER NOT NULL,
-  ended_at    INTEGER,
-  black_ip    TEXT, white_ip TEXT,                    -- 按 DAT-071 截断存储，180 天后清空（DAT-074）
-  black_dev   TEXT, white_dev TEXT,                   -- uid_hash
-  flags       TEXT                                    -- 反作弊自动标记，逗号分隔
-);
-CREATE INDEX games_black ON games(black_id, ended_at);
-CREATE INDEX games_white ON games(white_id, ended_at);
-CREATE INDEX games_ended ON games(ended_at);
+  id             INTEGER PRIMARY KEY,
+  kind           TEXT NOT NULL CHECK (kind IN ('match', 'ranked', 'friend')),
+  game_type      TEXT NOT NULL CHECK (game_type IN ('gomoku', 'go')),
+  board_size     INTEGER NOT NULL CHECK (board_size IN (9, 13, 15, 19)),
+  black_user_id  INTEGER NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  white_user_id  INTEGER NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  record         TEXT CHECK (record IS NULL OR (json_valid(record) AND length(record) <= 262144)),  -- 棋谱，见 5.2.3；NULL 表示尚未终局
+  move_count     INTEGER NOT NULL DEFAULT 0 CHECK (move_count BETWEEN 0 AND 1024),
+  winner         TEXT CHECK (winner IN ('black', 'white', 'draw')),                                 -- NULL 表示尚未终局
+  end_reason     TEXT CHECK (end_reason IN ('five', 'full', 'score', 'resign', 'timeout', 'disconnect', 'draw', 'left', 'limit', 'aborted')),  -- NULL 表示尚未终局
+  is_rated       INTEGER NOT NULL DEFAULT 0 CHECK (is_rated IN (0, 1)),                             -- 本局是否结算了段位
+  started_at     INTEGER NOT NULL,
+  ended_at       INTEGER,                                                                           -- NULL 表示尚未终局
+  CHECK ((ended_at IS NULL) = (end_reason IS NULL) AND (ended_at IS NULL) = (winner IS NULL)),
+  CHECK (is_rated = 0 OR kind = 'ranked')
+) STRICT;
+CREATE INDEX idx_games_black_user_id_ended_at ON games (black_user_id, ended_at);
+CREATE INDEX idx_games_white_user_id_ended_at ON games (white_user_id, ended_at);
+CREATE INDEX idx_games_ended_at ON games (ended_at);
 
--- 段位变化明细：可以精确回滚
+-- 段位变化明细：每一次段位分的变化一行，可以精确回滚
 CREATE TABLE rating_changes (
-  id        INTEGER PRIMARY KEY,
-  game_id   INTEGER REFERENCES games(id),
-  user_id   INTEGER NOT NULL REFERENCES users(id),
-  game_type INTEGER NOT NULL,
-  before    INTEGER NOT NULL,
-  after     INTEGER NOT NULL,
-  cause     TEXT NOT NULL DEFAULT 'game' CHECK (cause IN ('game','rollback','admin','import')),
-  at        INTEGER NOT NULL
-);
-CREATE INDEX rating_changes_user ON rating_changes(user_id, at);
-CREATE INDEX rating_changes_game ON rating_changes(game_id);
-
--- 举报
-CREATE TABLE reports (
-  id          INTEGER PRIMARY KEY,
-  reporter_id INTEGER NOT NULL REFERENCES users(id),
-  target_id   INTEGER NOT NULL REFERENCES users(id),
-  game_id     INTEGER REFERENCES games(id),
-  reason      TEXT NOT NULL CHECK (reason IN ('engine','farming','abuse','name','other')),
-  note        TEXT,
-  status      TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','valid','invalid')),
-  created_at  INTEGER NOT NULL,
-  resolved_at INTEGER, resolved_by TEXT
-);
-CREATE INDEX reports_target ON reports(target_id, created_at);
-CREATE UNIQUE INDEX reports_once ON reports(reporter_id, game_id);   -- 同一局只能举报一次
-
--- 处罚记录
-CREATE TABLE sanctions (
-  id         INTEGER PRIMARY KEY,
-  user_id    INTEGER NOT NULL REFERENCES users(id),
-  kind       TEXT NOT NULL CHECK (kind IN ('mute','ranked_ban','ban','unban','rollback','rename')),
-  reason     TEXT NOT NULL,
-  until      INTEGER,
-  by_admin   TEXT NOT NULL,
-  created_at INTEGER NOT NULL
-);
-
--- 管理操作日志
-CREATE TABLE audit (id INTEGER PRIMARY KEY, at INTEGER NOT NULL, who TEXT NOT NULL, action TEXT NOT NULL, detail TEXT);
+  id             INTEGER PRIMARY KEY,
+  game_id        INTEGER REFERENCES games (id) ON DELETE RESTRICT,   -- NULL 表示不是由对局引起（导入、回滚、管理操作）
+  user_id        INTEGER NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
+  game_type      TEXT NOT NULL CHECK (game_type IN ('gomoku', 'go')),
+  points_before  INTEGER NOT NULL CHECK (points_before >= 0),
+  points_after   INTEGER NOT NULL CHECK (points_after >= 0),
+  cause          TEXT NOT NULL CHECK (cause IN ('game', 'import', 'rollback', 'admin')),
+  changed_at     INTEGER NOT NULL,
+  CHECK ((cause = 'game') = (game_id IS NOT NULL))
+) STRICT;
+CREATE INDEX idx_rating_changes_user_id_changed_at ON rating_changes (user_id, changed_at);
+CREATE INDEX idx_rating_changes_game_id ON rating_changes (game_id);
 ```
+
+说明：
+
+1. 时间列均为 UTC 的 Unix 毫秒数（DAT-012），取自服务端注入的时钟；
+2. 枚举的取值一次列全：SQLite 修改 `CHECK` 须重建整张表，因此 `users.kind` 的 `member`、`rating_changes.cause` 的 `rollback`、`admin` 虽在阶段 6、8 才写入，也在此列出；
+3. `games.end_reason` 在协议第 3 版的 8 种终局原因之外，增加 `limit`（达到 API-046 的手数或动作记录上限，协议第 3 版中以 `draw` 下发）与 `aborted`（服务端异常隔离时放弃的房间，以及服务端重启时尚未终局的对局：启动时把 `ended_at` 为空的对局一律记为 `aborted`、和棋、不计段位）；
+4. 和棋时 `winner` 为 `draw`；协议中的 `winner` 数值（1 黑胜、2 白胜、3 和棋）在仓储模块中换算；
+5. 阶段 5 不保存 IP（决定 D5-4）：按 IP 的限流只在内存中统计；`devices.last_ip`、`games.black_ip` 与 `white_ip` 不建；
+6. `meta` 为单数名，沿用 DAT-041 中的表名；键与值的列名避开保留字 `key`、`value`（DAT-014）；
+7. 外键全部为 `ON DELETE RESTRICT`（DAT-030），每个外键列有以它开头的索引（DAT-031）：`games` 的两个用户外键由复合索引覆盖，`rating_changes.user_id` 由 `idx_rating_changes_user_id_changed_at` 覆盖；
+8. DAT-022 的昵称上限为 64 字节（按 16 个字素 × 4 字节），而 `cleanName` 按字素截到 `NAME_MAX` 个：由多个码位组成的字素（如带肤色或组合的表情符号）可使 16 个字素超过 64 字节。阶段 5 第 5 步须使写入的昵称同时满足字节上限（在仓储模块中按字素截短，不得因约束失败而丢弃整条写入），或经项目所有者决定修订 DAT-022。
+
+5.2.3 棋谱（`games.record`）：内容为 `{ "v": 1, "cfg": …, "moves": [{ "m": …, "ms": … }], "dead": …, "result": … }`，即 `src/core/record.ts` 的 `GameRecord` 加上版本字段 `v`（DAT-024，VER-012：棋谱 JSON 单独编号，读取到高于自身支持的版本时只读不写）。约定如下：
+
+- `moves` 只保存终局时的着法序列：被悔棋撤销的着法不保存；`ms` 为这一手的用时（毫秒），从轮到该方起至收到落子或停一手为止，以服务端时钟计；
+- 单值上限 256 KB；按 API-046 每局至多 1024 手，实际大小在阶段 5 第 6 步实测并记入 PR；
+- 由 `replay()` 可从头回放到终局局面，测试以此核对。
+
+5.2.4 后续阶段新增的表与列（结构示意；实施时按 03-data.md 写出完整 DDL）：
+
+| 阶段 | 表或列 | 结构要点 | 数据等级 |
+|---|---|---|---|
+| 6 | `users` 增加列 | `email`（小写、NFC，`length ≤ 254`，`uq_users_email` 为部分唯一索引）、`is_email_verified`、`pass_hash`（scrypt，参数按 DAT-070）、`name_lower`（会员昵称唯一，`uq_users_name_lower`）、`status` 与 `status_until_at`、`consent_at`、`merged_user_id`（游客并入的会员，外键 `RESTRICT`） | 邮箱 L3；口令散列 L4 |
+| 6 | `sessions` | `token_hash`（SHA-256，唯一）、`user_id`、`created_at`、`expires_at`、`last_seen_at` | 令牌散列 L4 |
+| 6 | `email_codes` | `email`、`purpose`（`register`、`reset`、`change`）、`code_hash`、`try_count`、`created_at`、`expires_at`；索引 `idx_email_codes_email_purpose` | 邮箱 L3；验证码散列 L4 |
+| 8 | `game_flags` | `game_id`、`flag`（`short`、`farming-suspect`、`timing-suspect`、`engine-suspect`）、`created_at`；唯一索引 `uq_game_flags_game_id_flag`；取代草案中逗号分隔的 `games.flags`（DAT-025） | L2 |
+| 8 | `reports` | `reporter_user_id`、`target_user_id`、`game_id`、`reason`、`note`（`length ≤ 2000`）、`status`、`created_at`、`resolved_at`；`uq_reports_reporter_user_id_game_id`（同一局只能举报一次，DAT-034） | L2 |
+| 8 | `sanctions` | `user_id`、`kind`、`reason_text`、`until_at`（NULL 表示永久）、`admin_name`、`created_at` | L2 |
+| 8 | `admin_actions` | 取代草案中的 `audit`：`admin_name`、`operation`、`detail_json`（`json_valid`）、`created_at` | L2；严禁含 L4（DAT-073） |
+| 8 | IP | 如需识别同一来源，按 DAT-071 截断或存 HMAC，并按 DAT-076 更新隐私说明 | L3 |
+
+5.2.5 阶段 5 各列的数据等级（03-data.md 第 6.1 条）：
+
+| 等级 | 列 |
+|---|---|
+| L1 公开 | `users.name`；`ratings` 的段位分与胜负局数；`games` 的种类、棋类、路数、胜方、终局原因 |
+| L2 内部 | `devices.uid_hash`；`games.record`；各表的时间列与编号；`rating_changes` 全部列；`meta` |
+| L3、L4 | 阶段 5 不收集 |
 
 ### 5.3 服务端代码结构
 
-`rooms.ts` 现在约 1050 行（2026-10-02 按 Prettier 格式化后），拆成：
+`server/rooms.ts` 已由整改项 P2-12 按职责拆分（`hub`、`matchmaking`、`room`、`play`、`lobby`、`rating`、`faults` 等，经 `ServerContext` 共用状态）。阶段 5 新增与改动：
 
 ```
 server/
-  main.ts               入口：读环境变量、打开数据库、启动 http + ws、优雅退出
-  config.ts             新：所有环境变量集中解析（PORT、EXTRA_PORTS、HOST、YI_DB、YI_LATEST、YI_DOWNLOAD、SMTP_*、ADMIN_TOKEN、TRUST_PROXY 等）
-  http.ts               新：node:http 服务器，/api/* 路由（阶段 6），/ws 升级给 ws
-  host.ts               改：从“自己开端口”改为挂到 http 服务器的 upgrade 上
-  hub.ts                新：连接与玩家（Player、hello、重连、心跳、tick 的连接部分）
-  matchmaking.ts        新：队列、配对、确认（enqueue / unqueue / dropMatch / confirm）
-  room.ts               新：一个房间的对局流程（申请、点目、计时、终局），持有 Match
-  rating.ts             新：Elo 计算、定级期、K 值（纯函数，便于测试）
-  anticheat.ts          新：配对限制、逃跑率、自动标记（阶段 8）
-  ratelimit.ts          新：令牌桶（按连接、按 IP、按接口）
-  maintenance.ts        新：维护模式
+  main.ts               改：读配置对象、打开数据库、启动服务、优雅退出
+  config.ts             新：环境变量与命令行参数集中解析与校验（P2-04，ARC-042）
   db/
-    index.ts            新：打开数据库、执行迁移
-    schema.sql          新：5.2 的 DDL
-    migrations/         新：001_init.sql、002_...（按 meta.schema_version 顺序执行）
-    repo.ts             新：所有 SQL 语句集中在这里（prepare 一次、复用）
+    index.ts            新：打开数据库、PRAGMA 与完整性检查、执行迁移、结构版本检查
+    migrations/         新：0001_init.sql、0002_…（DAT-017；随服务端打包进 server.cjs）
+    repo.ts             新：全部 SQL 集中于此，预编译一次、参数绑定（DAT-044、DAT-045）
     importLegacy.ts     新：导入 yi-ratings.json（见 5.6）
-  store.ts              删除（被 db/repo.ts 取代；测试用 ':memory:' 数据库）
-  admin/                阶段 8：命令行管理工具
+    backup.ts           新：node server.cjs backup，以 VACUUM INTO 生成快照（见 5.7）
+  store.ts              改：按决定 D5-1 在一个版本周期内继续写入 yi-ratings.json，下一个版本删除
 ```
 
-`RoomServer` 保持“与传输无关、时钟可注入”的特点，方便测试。
+`RoomServer` 保持“与传输无关、时钟可注入”的特点：段位与对局记录经接口注入，测试使用 `:memory:` 数据库。
 
 ### 5.4 这一阶段写入数据库的内容（仍是协议 v3，还没有账号）
 
-- 每个连上来的 uid 建一个 `kind='guest'` 的用户，写入 `devices`，段位从 `ratings` 表读。
-- 每局开始 `INSERT games`（基本信息），结束时 `UPDATE` 写入 `record`、结果、每手用时。**对局记录从这一刻开始积累**，以后反作弊有据可查。
-- 排位结算写 `ratings` 和 `rating_changes`，包在一个事务里；**结算前从数据库重新读取段位**，不再用登录时缓存的那份（彻底解决 A8 的覆盖问题）。
-- 每手用时：服务端在 `startTurn` 记开始时刻，收到 `move` 时算出毫秒数写进 `MoveRec.ms`。
+- 每个完成握手的 uid 找到或新建一个 `kind = 'guest'` 的用户与对应的设备行，段位从 `ratings` 表读。
+- 每局开局时 `INSERT games`（双方、种类、棋类、路数），终局时在一个事务内 `UPDATE` 写入棋谱、胜方、终局原因，并结算段位。**对局记录从这一刻开始积累**，以后反作弊有据可查。
+- 排位结算写 `ratings` 与 `rating_changes`，与对局记录在同一事务中（DAT-040）；**结算前从数据库重新读取段位**，不再用握手时缓存的那份（解决原问题 A8 中的覆盖问题）。
+- 写入失败（约束违反、磁盘写满）时回滚事务，写 `error` 日志，向双方下发 E5，本局不计段位并说明（10-edge-cases.md 第 4 节）。
 
 ### 5.5 服务端加固（从阶段 8 提前）
 
 | 项 | 做法 |
 |---|---|
-| 消息频率 | 每条连接每秒最多 20 条消息，超出丢弃，持续超出断开（已随整改项 P1-05 实施） |
-| 按 IP 限流 | 加入房间失败次数（A6）按 IP 统计；新建连接频率已随整改项 P1-05 实施；IP 取法见阶段 4 |
-| 维护模式 | `node server.cjs admin maintenance on`：不再接受新的匹配和开房间，向在线玩家提示“服务器即将维护”；等所有对局结束（或到达设定的最长等待时间）后退出，由 systemd 重启新版本 |
+| 消息频率 | 每条连接按令牌桶限速，持续超出断开（已随整改项 P1-05 实施） |
+| 按 IP 限流 | 加入房间的失败次数（A6）改为按真实 IP 统计，只在内存中进行；新建连接频率与同时连接数已随 P1-05 与 #115 实施 |
+| 维护模式 | 已随 OPS-045 实施：`systemctl kill -s SIGUSR2 yi` 开启，上线脚本在有对局时自动进入并等待对局结束（至多 30 分钟）；阶段 5 不新增管理命令行 |
 
 ### 5.6 老数据迁移
 
-`yi-ratings.json` 的结构是 `{ [uid_hash]: { name, ratings } }`。首次启动时，如果数据库为空并且找到这个文件：
+`yi-ratings.json` 的结构是 `{ [uid_hash]: { name, ratings } }`。首次启动时，如果数据库中没有用户且找到这个文件：
 
-1. 每一项建一个 `guest` 用户，名字沿用，`devices` 写入这个 `uid_hash`；
-2. 写入 `ratings`，同时写一条 `rating_changes(cause='import')`；
-3. 把原文件改名为 `yi-ratings.json.imported`，不删除。
+1. 在一个事务内导入：每一项建一个 `guest` 用户，名字沿用，`devices` 写入这个 `uid_hash`；
+2. 写入 `ratings`，同时每种棋写一条 `rating_changes`（`cause = 'import'`，`points_before` 为初始分 1200）；
+3. 逐条校验，校验失败的记录写 `warn` 并跳过，原文件不动；导入失败时回滚事务并拒绝启动；
+4. 按决定 D5-1，原文件不改名：首个数据库版本在一个版本周期内继续写入它，使回滚到 2.0.7 时段位不丢；下一个版本停止写入，并把原文件改名为 `yi-ratings.json.imported`，不删除。
 
 ### 5.7 备份
 
-- systemd timer 每天执行一次 `node server.cjs backup`，内部用 `VACUUM INTO '/opt/yi/backup/yi-YYYYMMDD.db'` 生成一致的快照，保留最近 14 份。
-- README 补一节“备份与恢复”。
+- 服务端新增 `node server.cjs backup`：以 `VACUUM INTO` 生成一致的快照（DAT-062），写入 `/var/lib/yi/backup/`，附 SHA-256 校验和（DAT-064）。
+- `yi-backup.timer` 由每日改为每小时，使 RPO ≤ 1 小时（DAT-060）；本地保留份数按服务器磁盘的实测余量确定，且满足 DAT-061 的“每日一份、保留 7 份”；异地备份（DAT-061 第二层、DAT-063）改为上传数据库快照。
+- 执行迁移前自动备份到 `/var/lib/yi/backup/pre-migrate-版本号-时间.db`（DAT-042）。
+- 上线后按 DAT-065 演练一次恢复；README 与 [ops.md](../procedures/ops.md) 的备份与恢复章节随之修改。
 
-**验收**：打满一局匹配和一局排位，数据库里有 `games`、`ratings`、`rating_changes` 记录；重启服务端后段位不丢；导入老 JSON 的测试通过；维护模式演练一次；`tests/server.test.ts` 改用 `:memory:` 数据库后全部通过。
+**验收**：见 [phase5.md](phase5.md) 第 5 章。
 
 ### 5.8 并入本阶段的事项
 
-- 按 IP 限制加入房间的失败次数（原问题 A6），与 API-041、API-044 一并实施。
-- 维护模式：停止开新局，等待现有对局结束后重启（OPS-045）。升级步骤为：开启维护模式并等待 ≤ 30 分钟 → 备份数据库 → 上线新版本（启动时自动执行迁移）→ 健康检查（OPS-046）。
-- 每日维护任务：备份、清理过期会话与验证码、截断到期的 IP、解除到期的处罚（DAT-061、DAT-074）。
+- 按 IP 限制加入房间的失败次数（原问题 A6），与 API-044 一并实施。
+- 升级步骤：开启维护模式并等待对局结束（OPS-045）→ 手工备份（DAT-066）→ 上线新版本（启动时自动执行迁移与导入）→ 健康检查（OPS-046）→ 核对导入的条数与段位。
+- 每日维护任务（清理过期会话与验证码、截断到期的 IP、解除到期的处罚，DAT-074）随阶段 6、8 引入相应数据时实施；阶段 5 不收集 L3 数据，无须截断。
 
 ## 6 阶段 4：域名与 TLS（约 0.5 天，**备案通过后**，随 3.0 发布）
 
