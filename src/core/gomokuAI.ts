@@ -9,7 +9,7 @@
  */
 import { now } from './clock';
 import { renjuForbidden } from './renju';
-import { BLACK, EMPTY, MAXN, type Board } from './types';
+import { BLACK, EMPTY, MAXN, other, type Board } from './types';
 
 export interface GomokuSnap {
   b: Board;
@@ -204,80 +204,117 @@ class Searcher {
   }
 }
 
-/** 为轮到的一方选一手。level：0 简单，1 普通，2 困难。棋盘已满时返回 null */
-export function gomokuMove(snap: GomokuSnap, level: number, random: () => number, budgetMs = HARD_BUDGET_MS): { x: number; y: number } | null {
-  const { N, me } = snap,
-    op = 3 - me;
-  const s = new Searcher(snap.b.slice(), N, snap.renju);
-  const top = s.candidates(me, 16, HARD_DEPTH + 1);
-  const n = top.n;
-  const cand = (i: number) => ({ x: top.x[i] ?? 0, y: top.y[i] ?? 0 }); // i 小于候选点数 n
-  if (!n) {
-    // 空棋盘：下天元
-    const c = N >> 1;
-    return s.b[c * MAXN + c] === EMPTY ? { x: c, y: c } : null;
-  }
-  const mine = s.findFive(me);
-  if (mine) return mine;
-  if (level > 0 || random() < 0.6) {
-    const theirs = s.findFive(op);
-    if (theirs) return theirs;
-  }
+/** 选点前取的候选点数（评分最高的若干个） */
+const CANDIDATES = 16;
+/** 简单：发现对方下一手能连五时去堵的概率 */
+const EASY_BLOCK_CHANCE = 0.6;
+/** 简单：在评分最高的这么多个候选点中按 4:3:2:1 加权随机 */
+const EASY_TOP = 4;
+/** 普通：每个候选点的评分加上 [0, NORMAL_JITTER) 的随机整数，同分附近的点轮流被选中 */
+const NORMAL_JITTER = 7;
+/** 困难：对评分最高的这么多个候选点逐层加深搜索 */
+const HARD_TOP = 12;
+/** 困难：逐层加深时先搜的两个较浅的深度，最后一层为 HARD_DEPTH */
+const SHALLOW_DEPTH = 2;
+const MIDDLE_DEPTH = 4;
+const HARD_DEPTHS = [SHALLOW_DEPTH, MIDDLE_DEPTH, HARD_DEPTH];
+/** 搜索中的“无穷大”：WIN_SCORE 的 4 倍，大于任何局面评分 */
+const SCORE_INF = 4e9;
 
-  if (level === 0) {
-    // 前四名按 4:3:2:1 加权随机
-    const k = Math.min(n, 4),
-      total = (k * (k + 1)) / 2;
-    let r = Math.floor(random() * total);
-    for (let i = 0; i < k; i++) {
-      r -= k - i;
-      if (r < 0) return cand(i);
-    }
-    return cand(0);
+type Point = { x: number; y: number };
+
+/** 困难的一次搜索：在 searcher 的棋盘上为 me 比较 points 中的候选点 */
+interface HardSearch {
+  searcher: Searcher;
+  points: Point[];
+  me: number;
+}
+
+/** 简单：评分最高的前 EASY_TOP 个候选点按 4:3:2:1 加权随机 */
+function easyPick(top: Cands, random: () => number): number {
+  const count = Math.min(top.n, EASY_TOP),
+    total = (count * (count + 1)) / 2;
+  let ticket = Math.floor(random() * total);
+  for (let i = 0; i < count; i++) {
+    ticket -= count - i;
+    if (ticket < 0) return i;
   }
-  if (level === 1) {
-    // 评分最高者，同分附近加一点随机
-    let pick = 0,
-      best = -1;
-    for (let i = 0; i < n; i++) {
-      const v = (top.s[i] ?? 0) + Math.floor(random() * 7);
-      if (v > best) {
-        best = v;
-        pick = i;
-      }
+  return 0;
+}
+
+/** 普通：评分加上一点随机后最高的候选点 */
+function normalPick(top: Cands, random: () => number): number {
+  let pick = 0,
+    best = -1;
+  for (let i = 0; i < top.n; i++) {
+    const score = (top.s[i] ?? 0) + Math.floor(random() * NORMAL_JITTER);
+    if (score > best) {
+      best = score;
+      pick = i;
     }
-    return cand(pick);
   }
-  // 困难：对前 12 个候选点逐层加深搜索（2、4、6 层），上一层最好的点放到最前面先算；超时就用已经算完的最深一层
-  const m = Math.min(n, 12),
-    xs = top.x.slice(0, m),
-    ys = top.y.slice(0, m),
-    order = Array.from({ length: m }, (_, i) => i);
+  return pick;
+}
+
+/** 困难的一层搜索：按 order 的顺序逐个试下候选点，返回最好的一个的下标；超过 searcher 的时限时抛出 ABORT */
+function bestAtDepth({ searcher, points, me }: HardSearch, order: number[], depth: number): number {
+  let bestI = order[0] ?? 0,
+    best = -SCORE_INF,
+    alpha = -SCORE_INF;
+  for (const i of order) {
+    const point = points[i] ?? { x: 0, y: 0 },
+      p = point.x * MAXN + point.y;
+    searcher.b[p] = me;
+    const score = -searcher.negamax(other(me), depth - 1, -SCORE_INF, -alpha);
+    searcher.b[p] = EMPTY;
+    if (score > best) {
+      best = score;
+      bestI = i;
+    }
+    if (score > alpha) alpha = score;
+  }
+  return bestI;
+}
+
+/**
+ * 困难：对前 HARD_TOP 个候选点逐层加深搜索，上一层最好的点放到最前面先算；
+ * 超过 budgetMs 就用已经算完的最深一层（时间经 clock.ts 读取，测试可换成手动推进的时钟，ARC-020、TST-020）
+ */
+function hardPick(searcher: Searcher, top: Cands, me: number, budgetMs: number): number {
+  const count = Math.min(top.n, HARD_TOP),
+    points = Array.from({ length: count }, (_, i) => ({ x: top.x[i] ?? 0, y: top.y[i] ?? 0 })),
+    order = Array.from({ length: count }, (_, i) => i);
   let pick = 0;
-  s.deadline = now() + budgetMs / MS_PER_SEC; // 时间经 clock.ts 读取，测试可换成手动推进的时钟（ARC-020、TST-020）
-  for (const depth of [2, 4, HARD_DEPTH]) {
-    let bestI = order[0] ?? 0,
-      best = -WIN_SCORE * 4,
-      alpha = -WIN_SCORE * 4;
+  searcher.deadline = now() + budgetMs / MS_PER_SEC;
+  for (const depth of HARD_DEPTHS) {
     try {
-      for (const i of order) {
-        const p = (xs[i] ?? 0) * MAXN + (ys[i] ?? 0);
-        s.b[p] = me;
-        const v = -s.negamax(op, depth - 1, -WIN_SCORE * 4, -alpha);
-        s.b[p] = EMPTY;
-        if (v > best) {
-          best = v;
-          bestI = i;
-        }
-        if (v > alpha) alpha = v;
-      }
-    } catch (e) {
-      if (e !== ABORT) throw e;
+      pick = bestAtDepth({ searcher, points, me }, order, depth);
+    } catch (err) {
+      if (err !== ABORT) throw err;
       break; // 这一层没算完：不用它的结果（棋盘副本也不再用）
     }
-    pick = bestI;
-    order.splice(order.indexOf(bestI), 1);
-    order.unshift(bestI);
+    order.splice(order.indexOf(pick), 1);
+    order.unshift(pick);
   }
-  return { x: xs[pick] ?? 0, y: ys[pick] ?? 0 };
+  return pick;
+}
+
+/** 为轮到的一方选一手。level：0 简单，1 普通，2 困难。棋盘已满时返回 null */
+export function gomokuMove(snap: GomokuSnap, level: number, random: () => number, budgetMs = HARD_BUDGET_MS): Point | null {
+  const { N, me } = snap;
+  const searcher = new Searcher(snap.b.slice(), N, snap.renju);
+  const top = searcher.candidates(me, CANDIDATES, HARD_DEPTH + 1);
+  if (!top.n) {
+    // 空棋盘：下天元
+    const center = N >> 1;
+    return searcher.b[center * MAXN + center] === EMPTY ? { x: center, y: center } : null;
+  }
+  const mine = searcher.findFive(me);
+  if (mine) return mine;
+  if (level > 0 || random() < EASY_BLOCK_CHANCE) {
+    const theirs = searcher.findFive(other(me));
+    if (theirs) return theirs;
+  }
+  const pick = level === 0 ? easyPick(top, random) : level === 1 ? normalPick(top, random) : hardPick(searcher, top, me, budgetMs);
+  return { x: top.x[pick] ?? 0, y: top.y[pick] ?? 0 };
 }
