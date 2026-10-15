@@ -26,6 +26,14 @@ const NODE_GLOBALS = [
   'TextDecoder',
   'WebSocket',
 ];
+/** 以语法树选择器禁止的写法（COD-055、COD-058、COD-060） */
+const RESTRICTED_SYNTAX = [
+  { selector: 'ExportDefaultDeclaration', message: '严禁 export default，统一使用具名导出（COD-055）' },
+  { selector: "ExportNamedDeclaration > VariableDeclaration[kind='let']", message: '严禁导出可变绑定（COD-058）' },
+  { selector: 'MemberExpression[property.name=/^(innerHTML|outerHTML)$/]', message: '严禁 innerHTML、outerHTML（COD-060）' },
+  { selector: "CallExpression[callee.object.name='document'][callee.property.name='write']", message: '严禁 document.write（COD-060）' },
+  { selector: "JSXAttribute[name.name='dangerouslySetInnerHTML']", message: '严禁 dangerouslySetInnerHTML（COD-060）' },
+];
 /** 允许使用 console 的位置（COD-064） */
 const CONSOLE_ALLOWED = ['scripts/**', 'src/app/scenarios.ts', 'server/log.ts'];
 
@@ -82,14 +90,7 @@ export default tseslint.config(
       'no-empty': ['error', { allowEmptyCatch: false }], // COD-062（catch 内只有注释时不算空，原因长度由 ratchet.mjs 检查）
       'no-console': 'error', // COD-064
       '@typescript-eslint/no-unused-expressions': ['error', { allowTernary: true, allowShortCircuit: true }],
-      'no-restricted-syntax': [
-        'error',
-        { selector: 'ExportDefaultDeclaration', message: '严禁 export default，统一使用具名导出（COD-055）' },
-        { selector: "ExportNamedDeclaration > VariableDeclaration[kind='let']", message: '严禁导出可变绑定（COD-058）' },
-        { selector: 'MemberExpression[property.name=/^(innerHTML|outerHTML)$/]', message: '严禁 innerHTML、outerHTML（COD-060）' },
-        { selector: "CallExpression[callee.object.name='document'][callee.property.name='write']", message: '严禁 document.write（COD-060）' },
-        { selector: "JSXAttribute[name.name='dangerouslySetInnerHTML']", message: '严禁 dangerouslySetInnerHTML（COD-060）' },
-      ],
+      'no-restricted-syntax': ['error', ...RESTRICTED_SYNTAX],
     },
   },
   {
@@ -104,6 +105,21 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/ban-ts-comment': ['error', { 'ts-expect-error': 'allow-with-description', 'ts-ignore': true, 'ts-nocheck': true }],
       '@typescript-eslint/no-magic-numbers': 'off',
+    },
+  },
+  {
+    // 服务端的环境变量与命令行参数统一由 server/config.ts 解析并校验（ARC-042）
+    files: ['server/**'],
+    ignores: ['server/config.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...RESTRICTED_SYNTAX,
+        {
+          selector: "MemberExpression[object.name='process'][property.name=/^(env|argv)$/]",
+          message: '环境变量与命令行参数统一由 server/config.ts 解析并校验（ARC-042）',
+        },
+      ],
     },
   },
   {

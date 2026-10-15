@@ -19,7 +19,8 @@ Environment=YI_FILES=/opt/yi/current/download
 Environment=YI_DOWNLOAD=https://yi.lightking.com.cn/
 Restart=always
 RestartSec=3
-RestartPreventExitStatus=65 74
+# 存档损坏（65）、无法读取（74）、配置不合法（78，ARC-042）时反复重启无济于事，停下等维护者处理
+RestartPreventExitStatus=65 74 78
 
 # 资源上限（SEC-045）：平常常驻内存约 85 MB（docs/audits/perf-2.0.5.md）。768M 按 2026-10-12 的满载实测确定：
 # 1023 个房间同时下正常的棋（每局 300 手）峰值约 449 MB；房间被刷到对局上限（API-046）时，480 个房间峰值约 760 MB。
