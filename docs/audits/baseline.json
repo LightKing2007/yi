@@ -20,7 +20,7 @@
     "ESLint complexity": 21,
     "ESLint id-length": 800,
     "ESLint max-depth": 19,
-    "ESLint max-lines": 6,
+    "ESLint max-lines": 5,
     "ESLint max-lines-per-function": 29,
     "ESLint max-params": 42,
     "ESLint no-console": 3,
