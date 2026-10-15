@@ -132,5 +132,18 @@ export interface Health {
   maintenance: boolean; // 是否处于维护模式（OPS-045）
 }
 
+/**
+ * RoomServer 交给拆出的各模块的上下文（整改项 P2-12）：各模块经它读写共用的状态、调用共用的方法，
+ * 不直接引用 RoomServer。随模块逐个拆出而增加成员
+ */
+export interface ServerContext {
+  /** 段位存放处 */
+  readonly store: RatingStore;
+  /** 日志（07-operations.md 第 5 节） */
+  readonly log: Log;
+  /** 给玩家发一条消息；玩家不存在或已掉线时不发，错误提示计入监控指标 */
+  send(p: Player | null | undefined, msg: S2C): void;
+}
+
 /** 连接对象：由传输层持有，收到消息时交回 RoomServer */
 export type Session = Player;

@@ -35,8 +35,6 @@ import {
   type Opponent,
   type OverReason,
   type QueueMode,
-  type Rating,
-  type Ratings,
   type S2C,
 } from '../src/shared/protocol';
 import {
@@ -52,8 +50,10 @@ import {
   type RoomRules,
   type RoomSeat,
   type RoomServerOptions,
+  type ServerContext,
   type Session,
 } from './roomTypes';
+import { rate, typeKey } from './rating';
 
 // 共用的类型已移到 roomTypes.ts（整改项 P2-12）；对外的部分仍从这里导出，引用方不必改动
 export { MemoryStore, type Conn, type Health, type RatingStore, type RoomServerOptions, type Session } from './roomTypes';
@@ -66,12 +66,6 @@ const MAX_PLAYERS = 2048;
  */
 export const PENDING_MAX = MAX_PLAYERS;
 const MAX_ROOMS = 1024;
-const ELO_K = 32;
-/** Elo 期望得分公式 1 / (1 + 10^(分差 / 400)) 中的底数与分差尺度 */
-const ELO_BASE = 10,
-  ELO_SCALE = 400;
-/** 和棋的得分（胜 1、负 0） */
-const DRAW_SCORE = 0.5;
 /** 匹配与排位开局时，先配上的一方执黑的概率 */
 const FIRST_BLACK_CHANCE = 0.5;
 const JOIN_FAILS = 5; // 一条连接一分钟内最多几次加入失败，超过就暂时不让再试（防止遍历房号）
@@ -98,7 +92,6 @@ const INTERNAL_TEXT = '服务器出现问题，请稍后再试';
 /** 玩家数或未握手的连接数达到上限时的提示（错误码 server.full，E2） */
 const BUSY_TEXT = '服务器繁忙，请稍后再试';
 
-const typeKey = (type: number) => (type ? 'go' : 'gomoku') as keyof Ratings;
 /** 令牌的散列（十六进制）：按令牌查找时以它为键（SEC-022） */
 const tokenHash = (token: string) => createHash('sha256').update(token).digest('hex');
 /** 两个十六进制散列是否相同：常量时间比较（SEC-022）；长度不同（含空串）时不同 */
@@ -129,6 +122,8 @@ export class RoomServer {
   private metrics: Metrics | undefined;
   /** 维护模式（OPS-045）：只能以重启结束 */
   private maintenance = false;
+  /** 交给拆出的各模块的上下文（整改项 P2-12） */
+  private readonly ctx: ServerContext;
 
   constructor(opt: RoomServerOptions = {}) {
     this.now = opt.now ?? (() => performance.now() / 1000);
@@ -137,6 +132,7 @@ export class RoomServer {
     this.store = opt.store ?? new MemoryStore();
     this.latest = opt.latest ? { latest: opt.latest, url: opt.download } : {};
     this.metrics = opt.metrics;
+    this.ctx = { store: this.store, log: this.log, send: (p, msg) => this.send(p, msg) };
   }
 
   // ---------------- 对外接口 ----------------
@@ -719,7 +715,7 @@ export class RoomServer {
     this.broadcast(r, { t: 'over', winner, reason });
     this.log('info', 'game.over', { msg: `房间 ${r.id} 结束`, roomId: r.id, gameId: r.gameId, winner, reason, moves: r.g.moves.length });
     this.metrics?.inc('yi_games_finished_total', { kind: r.kind, reason });
-    if (r.kind === 'ranked' && rated) this.rate(r, winner);
+    if (r.kind === 'ranked' && rated) rate(this.ctx, r, winner);
   }
 
   /**
@@ -735,34 +731,6 @@ export class RoomServer {
     r.limitNote = note;
     this.broadcast(r, { t: 'info', text: note });
     this.log('warn', 'game.limit', { msg: `房间 ${r.id} 达到上限，按和棋结束`, roomId: r.id, gameId: r.gameId, moves, acts });
-  }
-
-  /** 排位结算（Elo）：胜方至少加 1 分 */
-  private rate(r: Room, winner: number) {
-    const black = r.who[BLACK],
-      white = r.who[WHITE];
-    if (!black || !white) return;
-    const k = typeKey(r.type),
-      blackRating = black.ratings[k],
-      whiteRating = white.ratings[k];
-    const blackExpected = 1 / (1 + ELO_BASE ** ((whiteRating.points - blackRating.points) / ELO_SCALE));
-    const blackScore = winner === BLACK ? 1 : winner === WHITE ? 0 : DRAW_SCORE;
-    let gain = Math.round(ELO_K * (blackScore - blackExpected));
-    if (blackScore === 1) gain = Math.max(1, gain);
-    if (blackScore === 0) gain = Math.min(-1, gain);
-    const apply = (p: Player, rt: Rating, delta: number, score: number) => {
-      const before = rt.points;
-      rt.points = Math.max(0, rt.points + delta);
-      if (score === 1) rt.win++;
-      else if (score === 0) rt.loss++;
-      else rt.draw++;
-      if (p.key) this.store.set(p.key, p.ratings, p.name);
-      r.rated[p === black ? BLACK : WHITE] = { type: r.type, rating: { ...rt }, delta };
-      this.send(p, { t: 'rated', type: r.type, rating: { ...rt }, delta });
-      this.log('info', 'rating.changed', { playerId: p.id, roomId: r.id, gameId: r.gameId, before, after: rt.points });
-    };
-    apply(black, blackRating, gain, blackScore);
-    apply(white, whiteRating, -gain, 1 - blackScore);
   }
 
   private sendStart(r: Room, only?: Player) {
