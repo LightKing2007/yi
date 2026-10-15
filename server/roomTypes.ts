@@ -161,6 +161,18 @@ export interface ServerContext {
   nextRoom: number;
   /** 下一个对局编号：每开一局取用并加一（日志用，07-operations.md 第 5.1 条） */
   nextGame: number;
+  /** 下一个玩家号：握手时取用并加一 */
+  nextPlayer: number;
+  /** 令牌散列 → 玩家：重连时按令牌查找（SEC-022）。只含已握手的玩家 */
+  readonly byToken: Map<string, Player>;
+  /** 因累计违规被断开的匿名身份（散列）→ 解除的时刻（API-045） */
+  readonly banned: Map<string, number>;
+  /** 随 welcome 下发的最新版本号与下载地址；服务端没有配置时为空对象 */
+  readonly latest: { latest?: string; url?: string };
+  /** 尚未握手的连接数 */
+  pending(): number;
+  /** 连接断开：按断线处理（对局中保留席位）；conn 不是玩家当前的连接时忽略 */
+  disconnect(p: Player, conn?: Conn, code?: number): void;
   /** 给玩家发一条消息；玩家不存在或已掉线时不发，错误提示计入监控指标 */
   send(p: Player | null | undefined, msg: S2C): void;
   /** 开一个房间（还没有人入座） */
