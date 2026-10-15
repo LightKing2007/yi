@@ -10,6 +10,14 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { vi } from 'vitest';
+
+/**
+ * 引用本模块的测试文件中每个测试的超时（TST-024 的长测试，须显式声明且 ≤ 60 秒）：这些测试以 sh 实际执行上线脚本，
+ * 每个要启动数十至数百个进程，平时 0.5 至 1.5 秒，机器负载高时可慢 4 倍以上，超过默认的 5 秒（#138）
+ */
+export const SHELL_TEST_TIMEOUT_MS = 20_000;
+vi.setConfig({ testTimeout: SHELL_TEST_TIMEOUT_MS });
 
 /** 服务器端脚本 */
 export const SCRIPT = path.resolve(__dirname, '../scripts/server/deploy-remote.sh');
@@ -155,6 +163,7 @@ export function run(args: string[], script = SCRIPT, input = '', extra: Record<s
     YI_CADDY_SITES: at('caddy/sites'),
     YI_WAIT_POLLS: '3', // 维护模式中查活跃对局数的次数：默认 180（30 分钟），测试中改小以免测试过慢
     YI_SITE_POLLS: '3', // 安装 Caddy 站点配置后的检查次数：默认 60，测试中改小以免测试过慢
+    YI_HEALTH_POLLS: '3', // 重启后查健康检查的次数：默认 30，测试中改小，否则健康检查不通过的测试在负载高时超时（#138）
     YI_OPERATOR: 'tester',
     YI_DEPLOY_SSH: 'root@test', // 本机脚本默认以部署用户上线；除 tests/deployUser.test.ts 外按以 root 执行的方式测试
     YI_BIN: at('sbin/yi-deploy'),
