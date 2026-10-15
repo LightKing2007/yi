@@ -51,7 +51,7 @@
 | 编号 | 整改内容 | 对应发现与规则 | 状态 |
 |---|---|---|---|
 | P2-01 | 修订 [roadmap.md](roadmap.md) 中阶段 5 的表结构，使其符合 [03-data.md](../standards/03-data.md)（命名、STRICT、毫秒时间、IP 截断、子表、外键策略、CHECK） | F-24、F-25；DAT-010 至 DAT-034、DAT-071 | 已完成（2026-10-16 修订 [roadmap.md](roadmap.md) 第 5.2 节：阶段 5 的 6 张表的完整 DDL 均为 `STRICT`，时间为 UTC 毫秒，枚举、布尔、文本长度、JSON 均有 `CHECK`，外键 `ON DELETE RESTRICT`，索引按 `idx_`、`uq_` 命名；DDL 在 `node:sqlite` 中执行，20 种违规数据均被拒，热路径查询均走索引；阶段 5 不保存 IP；后续阶段的表列出结构要点） |
-| P2-02 | 数据库迁移框架与在线备份 | DAT-040 至 DAT-045、DAT-062 | 随阶段 5 |
+| P2-02 | 数据库迁移框架与在线备份 | DAT-040 至 DAT-045、DAT-062 | 部分完成（阶段 5 第 4 步：`server/db/index.ts` 打开数据库、PRAGMA 与完整性检查、结构版本检查、按序执行迁移、迁移前备份，`server/db/migrations/` 下的 SQL 文件以文本打包进 `server.cjs`；待实施：接入服务端（第 5 步）、在线备份与每小时备份（第 7 步）） |
 | P2-03 | 协议 v4 错误码体系，`src/shared/errors.ts` | F-17；API-020 至 API-024、[04-api.md](../standards/04-api.md) 第 8 节 | 随阶段 7 |
 | P2-04 | `server/config.ts` 集中解析与校验配置 | ARC-042 | 已完成（阶段 5 第 3 步：`server/config.ts` 解析并校验端口、监听地址、存档路径、最新版本号、下载地址、安装程序目录与日志级别，不合法时逐项写 `server.config-invalid` 并以退出码 78 退出；ESLint 禁止 `server/` 下其他文件读取 `process.env`、`process.argv`；`yi.service` 的 `RestartPreventExitStatus` 加入 78，须以 `install-service` 安装后生效） |
 | P2-05 | TLS 与 CSP 收紧 | F-08；SEC-010 至 SEC-013 | 随阶段 4 |

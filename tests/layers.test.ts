@@ -176,6 +176,8 @@ describe('故意违规的引用都能被发现', () => {
   it('桌面版主进程严禁依赖 src/；引用找不到的文件、动态 import() 的参数不是字面量时都报告', () => {
     expect(problems('electron/probe.ts', "import { MAXN } from '../src/core/types';")).toEqual(['electron/probe.ts:1 electron → core（../src/core/types）']);
     expect(inCore("import './nope';")).toEqual(['src/core/probe.ts:1 找不到 ./nope']);
+    expect(problems('server/probe.ts', "import sql from './db/migrations/0001_init.sql?raw';")).toEqual([]); // ?raw 引用的是文件本身
+    expect(problems('server/probe.ts', "import sql from './db/migrations/nope.sql?raw';")).toEqual(['server/probe.ts:1 找不到 ./db/migrations/nope.sql?raw']);
     expect(inCore('const name = "x";\nawait import(name);')).toEqual(['src/core/probe.ts:2 动态 import() 的参数不是字符串字面量，无法检查']);
     expect(problems('scripts/probe.ts', '')).toEqual(['scripts/probe.ts 不属于任何已定义的层']);
   });

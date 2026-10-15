@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.3 |
+| 文件版本 | 1.1.4 |
 | 修订日期 | 2026-10-16 |
 | 规则前缀 | `DAT` |
 
@@ -14,7 +14,7 @@
 | 编号 | 等级 | 规定 | 现状 |
 |---|---|---|---|
 | DAT-001 | C | 服务端持久化统一使用 `node:sqlite`（SQLite 3.37 或更高），单文件数据库；严禁同时维护两套持久化格式超过一个版本周期。迁移期间 JSON 存档只读，作为导入来源 | 不适用（阶段 5 实施） |
-| DAT-002 | A | 打开数据库后必须立即执行：`PRAGMA journal_mode=WAL`、`PRAGMA foreign_keys=ON`、`PRAGMA busy_timeout=3000`、`PRAGMA synchronous=NORMAL`；启动时必须校验 `PRAGMA integrity_check` 结果为 `ok`，否则拒绝启动 | 不适用 |
+| DAT-002 | A | 打开数据库后必须立即执行：`PRAGMA journal_mode=WAL`、`PRAGMA foreign_keys=ON`、`PRAGMA busy_timeout=3000`、`PRAGMA synchronous=NORMAL`；启动时必须校验 `PRAGMA integrity_check` 结果为 `ok`，否则拒绝启动 | 部分满足（`server/db/index.ts` 打开后执行 4 条 PRAGMA 并校验完整性，未通过即抛出 `DbOpenError`；尚未接入服务端，随阶段 5 第 5 步接入） |
 
 ## 2 命名
 
@@ -27,7 +27,7 @@
 | DAT-014 | A | 严禁以 ISO/IEC 9075 及 SQLite 的保留字作为表名或列名，包括但不限于 `before`、`after`、`at`、`key`、`value`、`order`、`group`、`user`、`index` | 草案满足（整改项 P2-01：2026-10-16 修订 [roadmap.md](../plan/roadmap.md) 第 5.2 节） |
 | DAT-015 | A | 普通索引统一命名为 `idx_表名_列名[_列名]`，唯一索引统一命名为 `uq_表名_列名[_列名]` | 草案满足（整改项 P2-01：2026-10-16 修订 [roadmap.md](../plan/roadmap.md) 第 5.2 节） |
 | DAT-016 | A | 枚举列统一为 `TEXT`，取值为 kebab-case 英文，必须带 `CHECK (列 IN (…))` 列出全部取值；严禁用无约束的整数表示枚举 | 草案满足（整改项 P2-01：2026-10-16 修订 [roadmap.md](../plan/roadmap.md) 第 5.2 节） |
-| DAT-017 | A | 迁移文件统一命名为 `server/db/migrations/NNNN_描述.sql`，NNNN 为四位连续序号，描述为 snake_case 英文 | 不适用 |
+| DAT-017 | A | 迁移文件统一命名为 `server/db/migrations/NNNN_描述.sql`，NNNN 为四位连续序号，描述为 snake_case 英文 | 满足（`server/db/migrations/0001_init.sql`；`tests/db.test.ts` 核对迁移清单与目录中的文件逐一对应、序号连续） |
 | DAT-018 | A | 一张表的列数 ≤ 30；一行的预计大小 ≤ 64 KB（`record` 等 JSON 列除外，其上限见 DAT-024） | 草案满足 |
 
 ## 3 字段类型选型
@@ -56,8 +56,8 @@
 | 编号 | 等级 | 规定 | 现状 |
 |---|---|---|---|
 | DAT-040 | A | 同一业务动作涉及的多条写入必须在一个事务内完成。对局结束时“写入对局记录、更新双方段位、写入段位变化明细”三项必须在同一事务中 | 不适用 |
-| DAT-041 | A | 迁移只允许向前执行，必须幂等，并以 `meta` 表中的 `schema_version` 判断是否已执行；每个迁移在单个事务内执行 | 不适用 |
-| DAT-042 | A | 执行迁移前必须自动备份数据库文件到 `/var/lib/yi/backup/pre-migrate-版本号-时间.db`；迁移失败时必须回滚事务并拒绝启动 | 不适用 |
+| DAT-041 | A | 迁移只允许向前执行，必须幂等，并以 `meta` 表中的 `schema_version` 判断是否已执行；每个迁移在单个事务内执行 | 部分满足（`server/db/index.ts` 按 `meta` 中的 `schema_version` 执行尚未执行的迁移，每个迁移一个事务，失败即回滚并拒绝启动；尚未接入服务端，随阶段 5 第 5 步接入） |
+| DAT-042 | A | 执行迁移前必须自动备份数据库文件到 `/var/lib/yi/backup/pre-migrate-版本号-时间.db`；迁移失败时必须回滚事务并拒绝启动 | 部分满足（已有结构的数据库在迁移前以 `VACUUM INTO` 备份到 `backup/pre-migrate-版本号-时间.db`，新建的空数据库不备份；尚未接入服务端，随阶段 5 第 5 步接入） |
 | DAT-043 | A | 严禁删除列或修改列类型的一步式迁移；统一采用“新增列 → 双写 → 回填 → 切换读取 → 下一个版本删除旧列”的扩展收缩模式 | 不适用 |
 | DAT-044 | A | 数据访问统一集中在 `server/db/` 下的仓储模块，业务模块严禁直接编写 SQL | 不适用 |
 | DAT-045 | A | 所有 SQL 统一使用预编译语句与参数绑定（COD-068） | 不适用 |

@@ -70,10 +70,14 @@ export function packageOf(spec: string) {
   return spec.startsWith('@') ? parts.slice(0, 2).join('/') : (parts[0] ?? spec);
 }
 
+/** 以文本导入的后缀（Vite 的写法，服务端构建由 build-node.mjs 的插件处理）：引用的是去掉后缀的文件本身 */
+const RAW_SUFFIX = '?raw';
+
 /** 解析一处引用：相对路径找仓库中的文件，其余按包名 */
 export function resolve(root: string, fromFile: string, spec: string): Target {
   if (!spec.startsWith('.')) return { pkg: packageOf(spec) };
-  const base = path.resolve(path.dirname(path.join(root, fromFile)), spec);
+  const bare = spec.endsWith(RAW_SUFFIX) ? spec.slice(0, -RAW_SUFFIX.length) : spec;
+  const base = path.resolve(path.dirname(path.join(root, fromFile)), bare);
   for (const suffix of TS_SUFFIXES) {
     const full = base + suffix;
     if (fs.existsSync(full) && fs.statSync(full).isFile()) return { file: path.relative(root, full).split(path.sep).join('/') };

@@ -1,6 +1,7 @@
 /** 打包 Node 端：桌面版主进程与预加载（dist-electron/），独立联机服务端（dist-server/server.cjs，单文件、无需 npm install），异地备份（dist-server/offsite.cjs） */
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
+import path from 'node:path';
 import { build } from 'esbuild';
 import { pageAssets } from './page-assets.mjs';
 
@@ -13,6 +14,15 @@ if (!commit)
   } catch {
     commit = 'unknown';
   }
+
+/** 以 `?raw` 结尾的导入按文本内联（与 Vite 的写法一致），用于把数据库迁移的 SQL 文件打包进 server.cjs */
+const rawText = {
+  name: 'raw-text',
+  setup(build) {
+    build.onResolve({ filter: /\?raw$/ }, args => ({ path: path.resolve(args.resolveDir, args.path.slice(0, -'?raw'.length)), namespace: 'raw-text' }));
+    build.onLoad({ filter: /.*/, namespace: 'raw-text' }, args => ({ contents: fs.readFileSync(args.path, 'utf8'), loader: 'text' }));
+  },
+};
 
 const common = {
   bundle: true,
@@ -32,6 +42,7 @@ await Promise.all([
     ...common,
     entryPoints: ['server/main.ts'],
     outfile: 'dist-server/server.cjs',
+    plugins: [rawText],
     banner: { js: '#!/usr/bin/env node' },
     define: { ...common.define, __PAGE_ASSETS__: JSON.stringify(pageAssets(new URL('../', import.meta.url))) }, // 下载页面的标题图、图标与字体
   }),
