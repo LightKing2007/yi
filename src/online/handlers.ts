@@ -8,7 +8,7 @@ import { T } from '../i18n';
 import { sfx } from '../audio';
 import { game, screen, Screen, boardView, session } from '../app/state';
 import { logError, native } from '../app/native';
-import { RESUME_WAIT_SECS, type Act, type AskKind, type OverReason, type S2C } from '../shared/protocol';
+import { DRAWN, RESUME_WAIT_SECS, type Act, type AskKind, type OverReason, type S2C } from '../shared/protocol';
 import { Phase, bump, goScreen, myTurn, note, saveUpdate, st } from './state';
 import { send, takePending } from './connection';
 import { move, pass } from './actions';
@@ -17,12 +17,12 @@ import { move, pass } from './actions';
 function replay(acts: Act[]) {
   const g = game,
     mark = g.eventMark();
-  for (const a of acts) {
-    if (a.k === 'M') g.play(a.x, a.y);
-    else if (a.k === 'P') g.pass();
-    else if (a.k === 'U') for (let i = 0; i < a.n; i++) g.undo();
-    else if (a.k === 'K') g.toggleDead(a.x, a.y);
-    else if (a.k === 'R') g.resume();
+  for (const act of acts) {
+    if (act.k === 'M') g.play(act.x, act.y);
+    else if (act.k === 'P') g.pass();
+    else if (act.k === 'U') for (let i = 0; i < act.n; i++) g.undo();
+    else if (act.k === 'K') g.toggleDead(act.x, act.y);
+    else if (act.k === 'R') g.resume();
   }
   boardView.settle();
   g.eventRewind(mark);
@@ -89,7 +89,7 @@ export function applyOver(winner: number, reason: OverReason) {
       g.winner = winner;
     }
   } else g.forfeitEnd(winner); // 认输、超时、掉线、离开、和棋：也放终局动画
-  const me = winner === 3 ? '和棋' : winner === st.myColor ? '你赢了' : '你输了';
+  const me = winner === DRAWN ? '和棋' : winner === st.myColor ? '你赢了' : '你输了';
   const why = WHY[reason] ?? WHY.five;
   note([me], [winner === st.myColor ? why[0] : why[1]]);
   bump();
@@ -113,10 +113,14 @@ export function resumeFailed() {
   note(['这一局已经无法继续，可能是服务器重启过或掉线太久']);
 }
 
+/** 匹配成功时的第二声轻响：比第一声轻，晚这么多毫秒 */
+const FOUND_ECHO_VOLUME = 0.8;
+const FOUND_ECHO_MS = 140;
+
 /** 匹配成功：两声落子般的轻响；窗口不在前台时提醒一下 */
 function alertFound() {
   sfx.clack(1);
-  setTimeout(() => sfx.clack(0.8), 140);
+  setTimeout(() => sfx.clack(FOUND_ECHO_VOLUME), FOUND_ECHO_MS);
   if (document.hidden) {
     const old = document.title;
     document.title = T('找到对手了');

@@ -115,7 +115,7 @@ describe('取消匹配与排位', () => {
 
 describe('好友房间', () => {
   it('开房间得到四位房号；关闭房间回到大厅，房号随即失效', () => {
-    net.createRoom(0, 15, 0, true, 30);
+    net.createRoom({ type: 0, size: 15, hostColor: 0, renju: true, moveTime: 30 });
     expect(net.st.busy).toBe(true);
     pump();
     const code = net.st.code;
@@ -160,7 +160,7 @@ describe('Esc 与界面切换', () => {
     matchUp();
     expect(net.online.handleEscape(Screen.Online)).toBe(true);
     expect(net.st.phase).toBe(net.Phase.Lobby);
-    net.createRoom(0, 15, 0, true, 30);
+    net.createRoom({ type: 0, size: 15, hostColor: 0, renju: true, moveTime: 30 });
     pump();
     expect(net.online.handleEscape(Screen.Online)).toBe(true);
     expect(net.st.phase).toBe(net.Phase.Lobby);

@@ -37,8 +37,8 @@ export const hasSocket = () => ws !== null;
 export const isOpen = () => ws !== null && ws.readyState === WebSocket.OPEN;
 
 function serverUrl() {
-  const q = new URLSearchParams(location.search).get('server'); // 本机测试：?server=ws://127.0.0.1:8443
-  return q || ONLINE_SERVER;
+  const override = new URLSearchParams(location.search).get('server'); // 本机测试：?server=ws://127.0.0.1:8443
+  return override || ONLINE_SERVER;
 }
 
 /** 毫秒与秒的换算 */
@@ -46,17 +46,22 @@ const MS_PER_SEC = 1000;
 
 /** 本机匿名身份的随机字节数（32 位十六进制） */
 const UID_BYTES = 16;
+/** 十六进制的基数 */
+const HEX_RADIX = 16;
+/** 自动生成的昵称在“棋手”后加的三位数：[NICK_SUFFIX_MIN, NICK_SUFFIX_MIN + NICK_SUFFIX_SPAN) */
+const NICK_SUFFIX_MIN = 100;
+const NICK_SUFFIX_SPAN = 900;
 
 /** 本机的匿名身份：第一次联机时生成并存在本地，段位跟着它走；本地的值不合格式时重新生成（服务端会拒绝它） */
 function uid() {
-  const make = () => Array.from(crypto.getRandomValues(new Uint8Array(UID_BYTES)), v => v.toString(16).padStart(2, '0')).join('');
+  const make = () => Array.from(crypto.getRandomValues(new Uint8Array(UID_BYTES)), byte => byte.toString(HEX_RADIX).padStart(2, '0')).join('');
   try {
-    let v = localStorage.getItem('yi.uid');
-    if (!v || !UID_PATTERN.test(v)) {
-      v = make();
-      localStorage.setItem('yi.uid', v);
+    let id = localStorage.getItem('yi.uid');
+    if (!id || !UID_PATTERN.test(id)) {
+      id = make();
+      localStorage.setItem('yi.uid', id);
     }
-    return v;
+    return id;
   } catch {
     return make();
   }
@@ -66,7 +71,7 @@ function uid() {
 export function nick() {
   let n = settings.value.nick.trim();
   if (!n) {
-    n = T('棋手') + (100 + Math.floor(Math.random() * 900));
+    n = T('棋手') + (NICK_SUFFIX_MIN + Math.floor(Math.random() * NICK_SUFFIX_SPAN));
     setSettings({ nick: n });
   }
   return cleanName(n, T('棋手'));
@@ -83,11 +88,11 @@ export function send(m: C2S) {
 
 /** 关闭当前连接（没有时什么也不做）；之后的关闭事件不再触发断线处理 */
 export function netClose() {
-  const s = ws;
+  const sock = ws;
   ws = null;
-  if (s) {
+  if (sock) {
     try {
-      s.close();
+      sock.close();
     } catch {
       /* 忽略 */
     }

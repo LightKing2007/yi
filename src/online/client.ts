@@ -58,20 +58,20 @@ export const online = {
   pass,
   askLeave,
   /** Esc 时先处理联机里的一层（取消匹配、拒绝配对、关房间）；处理了返回 true */
-  handleEscape(s: Screen) {
-    if (s === Screen.Online && st.phase === Phase.Queue) {
+  handleEscape(current: Screen) {
+    if (current === Screen.Online && st.phase === Phase.Queue) {
       unqueue();
       return true;
     }
-    if (s === Screen.Online && st.phase === Phase.Found) {
+    if (current === Screen.Online && st.phase === Phase.Found) {
       confirm(false);
       return true;
     }
-    if (s === Screen.Online && st.phase === Phase.Hosting) {
+    if (current === Screen.Online && st.phase === Phase.Hosting) {
       closeRoom();
       return true;
     }
-    if (s === Screen.Game && st.leaveAsk) {
+    if (current === Screen.Game && st.leaveAsk) {
       st.leaveAsk = false;
       changed();
       return true;

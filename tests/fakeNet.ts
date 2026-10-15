@@ -219,7 +219,7 @@ export function advance(secs: number, peer?: Peer) {
 
 /** 客户端开好友房间，peer 加入，开局（客户端执黑）；moveTime 为每步限时，0 为不限时 */
 export function startGame(moveTime = 30) {
-  net.createRoom(0, 15, 0, true, moveTime);
+  net.createRoom({ type: 0, size: 15, hostColor: 0, renju: true, moveTime });
   pump();
   expect(net.st.code).toMatch(/^\d{4}$/);
   const peer = new Peer();

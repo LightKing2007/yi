@@ -189,7 +189,9 @@ function friendTab() {
             height={46}
             disabled={st.busy}
             style={{ width: '100%', marginTop: '6px' }}
-            onClick={() => net.createRoom(u.fType, u.fType ? u.fSize : 15, u.fColor, u.fType === 0 && renju, u.fTime)}
+            onClick={() =>
+              net.createRoom({ type: u.fType, size: u.fType ? u.fSize : 15, hostColor: u.fColor, renju: u.fType === 0 && renju, moveTime: u.fTime })
+            }
           />
         </>
       ) : (
