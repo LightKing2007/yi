@@ -92,6 +92,28 @@ describe('读取存档', () => {
     expect(fs.readFileSync(file + '.corrupt', 'utf8')).toBe(original);
     expect(logs).toEqual([{ level: 'warn', event: 'store.records-invalid', entry: expect.objectContaining({ file, count: 1, copy: file + '.corrupt' }) }]);
   });
+
+  it('键为 __proto__ 的记录按普通记录读取、原样写回，不改动存档对象的原型（审计发现 A-15）', () => {
+    fs.writeFileSync(
+      file,
+      '{"__proto__": {"name": "甲", "ratings": ' +
+        JSON.stringify(ratings(1300)) +
+        '}, "good": {"name": "乙", "ratings": ' +
+        JSON.stringify(ratings(1400)) +
+        '}}',
+    );
+    const store = new FileStore(file, { log });
+    expect([store.get('__proto__')?.gomoku.points, store.get('good')?.gomoku.points, store.get('name'), store.get('ratings')]).toEqual([
+      1300,
+      1400,
+      undefined,
+      undefined,
+    ]);
+    store.set('good', ratings(1500), '乙');
+    expect(store.flush()).toBe(true);
+    expect(Object.keys(readJson(file)).sort()).toEqual(['__proto__', 'good']);
+    expect(logs).toEqual([]);
+  });
 });
 
 describe('写盘', () => {
