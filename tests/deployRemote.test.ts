@@ -139,6 +139,10 @@ describe('维护模式（OPS-045）', () => {
 });
 
 describe('健康检查与自动回滚（OPS-046）', () => {
+  it('默认重启后至多查 30 次健康检查、每次 1 秒，即 30 秒', () => {
+    expect(read(SCRIPT)).toContain('HEALTH_POLLS=${YI_HEALTH_POLLS:-30}');
+  });
+
   it('重启后 30 秒内健康检查不通过：回滚到上一版本，写 deploy.rolled-back 日志，部署日志记为 rolled-back', () => {
     layout('2.0.4');
     write(at('sim/broken-2.0.5'), '');
@@ -146,7 +150,7 @@ describe('健康检查与自动回滚（OPS-046）', () => {
     expect(result.code).not.toBe(0);
     expect(result.out).toContain('已回滚到 2.0.4');
     expect([link('current'), link('previous'), read(at('sim/running'))]).toEqual(['releases/2.0.4', 'releases/2.0.5', '2.0.4 c204']);
-    expect(calls().filter(line => line === 'sleep 1').length).toBeGreaterThanOrEqual(30);
+    expect(calls().filter(line => line === 'sleep 1').length).toBeGreaterThanOrEqual(3); // 测试中 YI_HEALTH_POLLS=3
     expect(calls()).toContain('systemd-cat -t yi-deploy -p err');
     expect(JSON.parse(read(at('sim/journal')))).toMatchObject({ level: 'error', event: 'deploy.rolled-back', version: '2.0.5', target: '2.0.4' });
     expect(deployLog()).toEqual(['tester deploy 2.0.5 rolled-back']);
