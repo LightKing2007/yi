@@ -29,8 +29,13 @@ function gomoku15(stones: number[] = []) {
   return g;
 }
 const playAll = (g: Game, mv: [number, number][]) => mv.forEach(([x, y]) => g.play(x, y));
-/** 自我对弈中困难每一手的思考时限（毫秒，按注入的时钟计）：每读一次时钟约搜索 1024 个结点 */
-const SELF_PLAY_BUDGET_MS = 200;
+/**
+ * 自我对弈中困难每一手的思考时限（毫秒，按注入的时钟计；时钟每读一次前进 1 毫秒，约每搜索 1024 个结点读一次）。
+ * 取 1 使每一手约搜 1000 个结点即截止，测试的耗时有确定的上限：开启覆盖率后本机约 10 秒，与改动前在 CI 上以真实时钟每手 1.2 秒封顶时相当（37 秒）
+ */
+const SELF_PLAY_BUDGET_MS = 1;
+/** 单个局面中困难的思考时限（毫秒，按注入的时钟计）：只算一手，可以让它搜满 */
+const HARD_SINGLE_BUDGET_MS = 200;
 /** 以 seed 为种子的随机数（TST-020：测试中不用真实的随机数） */
 const seeded = (seed: number) => {
   const rng = new Rng(seed);
@@ -210,6 +215,15 @@ describe('五子棋人机', () => {
       expect(m).toEqual({ x: 11, y: 7 });
     });
   }
+  it('困难 执黑时不下禁手点（三三）', () => {
+    // 不论自我对弈走成什么样，都能测出电脑是否按禁手规则选点
+    let reads = 0;
+    setClock(() => ++reads * 0.001);
+    const g = gomoku15([5, 7, B, 6, 7, B, 7, 5, B, 7, 6, B, 0, 0, W, 14, 14, W, 0, 14, W, 14, 0, W]);
+    g.cur.toMove = B;
+    expect(renjuForbidden(g.cur.b, 15, 7, 7)).toBe(Renju.DoubleThree);
+    expect(gomokuMove(gomokuSnap(g), 2, seeded(1), HARD_SINGLE_BUDGET_MS)).not.toEqual({ x: 7, y: 7 });
+  });
   for (const lv of [0, 1, 2]) {
     it(`${LV[lv]} 优先连五而非防守`, () => {
       for (let rep = 0; rep < (lv ? 1 : 20); rep++) {
