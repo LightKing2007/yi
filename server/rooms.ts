@@ -11,7 +11,7 @@ import type { Log, LogEntry } from './log';
 import type { Metrics } from './metrics';
 import { errorCode } from './metrics';
 import { ConnLimits } from './ratelimit';
-import { CLOSE_CODE, cleanName, newRating, queueRules, type C2S, type QueueMode, type S2C } from '../src/shared/protocol';
+import { CLOSE_CODE, newRating, type C2S, type QueueMode, type S2C } from '../src/shared/protocol';
 import {
   MemoryStore,
   RoomState,
@@ -28,18 +28,15 @@ import {
 } from './roomTypes';
 import { typeKey } from './rating';
 import { MAINTENANCE_TEXT, afterGame, inGame } from './play';
-import { BUSY_TEXT, PENDING_MAX, allow, confirmToken, drop, forget, goOffline, hello, limited, rejectInvalid, tickPlayer, violate } from './hub';
-import { confirm, enqueue, rankedElsewhere, tickMatch, unqueue } from './matchmaking';
-import { byId, colorOf, endAtLimit, freeRoom, leaveRoom, newRoom, roomCode, seat, seatPlayers, tickRoom } from './room';
+import { lobby } from './lobby';
+import { BUSY_TEXT, PENDING_MAX, confirmToken, drop, forget, goOffline, hello, limited, rejectInvalid, tickPlayer } from './hub';
+import { tickMatch, unqueue } from './matchmaking';
+import { byId, colorOf, endAtLimit, freeRoom, newRoom, seat, seatPlayers, tickRoom } from './room';
 
 // 共用的类型已移到 roomTypes.ts（整改项 P2-12）；对外的部分仍从这里导出，引用方不必改动
 export { MemoryStore, type Conn, type Health, type RatingStore, type RoomServerOptions, type Session } from './roomTypes';
 export { PENDING_MAX } from './hub';
 
-const MAX_ROOMS = 1024;
-const JOIN_FAILS = 5; // 一条连接一分钟内最多几次加入失败，超过就暂时不让再试（防止遍历房号）
-/** 统计加入失败次数的时间窗 */
-const JOIN_WINDOW_SECS = 60;
 /** 服务端出现未预期的异常时的提示（v3 以文本下发，附错误编号；协议 v4 起为错误码 server.internal，E5） */
 const INTERNAL_TEXT = '服务器出现问题，请稍后再试';
 
@@ -349,10 +346,6 @@ export class RoomServer {
     if (msg.t === 'error' || msg.t === 'info') this.metrics?.inc('yi_errors_total', { code: errorCode(msg.text) });
     else if (msg.t === 'joinNo') this.metrics?.inc('yi_errors_total', { code: errorCode(msg.reason) });
   }
-  private busy(p: Player) {
-    return !!(p.room || p.match);
-  }
-
   // ---------------- 未预期的异常（API-023、EDGE-002） ----------------
 
   /** 记录一次未预期的异常：完整调用栈与新的错误编号（UUID v4）写入 internal.error 日志；返回错误编号，供下发给客户端对照 */
@@ -413,7 +406,7 @@ export class RoomServer {
   /** 握手之后的消息：先看是不是不在对局中也能发的，再按房间的状态交给对局中或终局后的处理 */
   private handle(p: Player, m: C2S) {
     p.lastSeen = this.now();
-    if (this.lobby(p, m)) return;
+    if (lobby(this.ctx, p, m)) return;
     const r = this.rooms.get(p.room),
       me = r ? colorOf(r, p) : 0;
     if (!r || !me) return;
@@ -422,144 +415,5 @@ export class RoomServer {
       inGame(this.ctx, { r, p, me }, m);
       endAtLimit(this.ctx, r); // 落子、停一手、同意悔棋、标记死子、恢复对局之后都在此检查
     }
-  }
-
-  /** 不在对局中也能发的消息（匹配、房间、改名、心跳）；处理了返回 true */
-  private lobby(p: Player, m: C2S): boolean {
-    switch (m.t) {
-      case 'ping':
-        this.send(p, { t: 'pong' });
-        return true;
-      case 'leave':
-        leaveRoom(this.ctx, p);
-        return true;
-      case 'name':
-        this.rename(p, m.name);
-        return true;
-      case 'queue':
-        if (allow(this.ctx, p, 'queue')) this.queueFor(p, m.mode, m.type, m.size);
-        return true;
-      case 'unqueue':
-        if (allow(this.ctx, p, 'queue')) unqueue(this.ctx, p);
-        return true;
-      case 'confirm':
-        confirm(this.ctx, p, m.ok);
-        return true;
-      case 'create':
-        this.createRoom(p, m);
-        return true;
-      case 'close':
-        this.closeRoom(p);
-        return true;
-      case 'join':
-        this.joinRoom(p, m.code);
-        return true;
-      default:
-        return false;
-    }
-  }
-
-  /**
-   * 改名（不在房间里时）。客户端每次匹配、开房、加入前都会先发一次 name，与当前昵称相同的不算改名，
-   * 不计入频率；真正改名的每 10 秒至多 1 次（API-044）
-   */
-  private rename(p: Player, raw: string) {
-    if (this.busy(p)) return;
-    const name = cleanName(raw, p.name);
-    if (name !== p.name && allow(this.ctx, p, 'name')) p.name = name;
-  }
-
-  private queueFor(p: Player, mode: QueueMode, type: number, size: number) {
-    if (this.maintenance) {
-      this.send(p, { t: 'error', text: MAINTENANCE_TEXT });
-      return;
-    }
-    if (this.busy(p)) {
-      this.send(p, { t: 'error', text: '你已经在一个房间里了' });
-      return;
-    }
-    if (mode === 'ranked' && rankedElsewhere(this.ctx, p)) {
-      this.send(p, { t: 'error', text: '这台设备已经在排位中了' });
-      return;
-    }
-    unqueue(this.ctx, p);
-    enqueue(this.ctx, p, { mode, type, size });
-  }
-
-  private createRoom(p: Player, m: Extract<C2S, { t: 'create' }>) {
-    if (this.maintenance) {
-      this.send(p, { t: 'error', text: MAINTENANCE_TEXT });
-      return;
-    }
-    if (this.busy(p)) {
-      this.send(p, { t: 'error', text: '你已经在一个房间里了' });
-      return;
-    }
-    if (this.rooms.size >= MAX_ROOMS) {
-      this.send(p, { t: 'error', text: '服务器房间已满，请稍后再试' });
-      return;
-    }
-    unqueue(this.ctx, p);
-    // 路数与匹配相同：五子棋只有 15 路，围棋没有 15 路；禁手与每步限时由房主选
-    const { size } = queueRules('match', m.type, m.size);
-    const r = newRoom(this.ctx, 'friend', { type: m.type, size, renju: m.type === 0 && m.renju, moveTime: m.moveTime }, { hostColor: m.hostColor, host: p.id });
-    r.code = roomCode(this.ctx);
-    p.room = r.id;
-    this.send(p, { t: 'created', code: r.code });
-    this.log('info', 'room.created', { msg: `${p.name} 开房间 ${r.code}`, roomId: r.id, playerId: p.id });
-  }
-
-  /** 房主关闭尚未开始的房间 */
-  private closeRoom(p: Player) {
-    const r = this.rooms.get(p.room);
-    if (r && r.state === RoomState.Wait && r.host === p.id) {
-      p.room = 0;
-      freeRoom(this.ctx, r);
-    }
-  }
-
-  private joinRoom(p: Player, code: string) {
-    if (this.maintenance) {
-      this.send(p, { t: 'joinNo', reason: MAINTENANCE_TEXT });
-      return;
-    }
-    const now = this.now();
-    p.joinFails = p.joinFails.filter(t0 => now - t0 < JOIN_WINDOW_SECS);
-    if (p.joinFails.length >= JOIN_FAILS) {
-      this.send(p, { t: 'joinNo', reason: '尝试次数太多，请稍后再试' });
-      violate(this.ctx, p);
-      return;
-    } // E3
-    const r = [...this.rooms.values()].find(room => room.state === RoomState.Wait && room.code === code);
-    if (this.busy(p)) {
-      this.send(p, { t: 'joinNo', reason: '你已经在一个房间里了' });
-      return;
-    }
-    const noRoom = () => {
-      p.joinFails.push(now);
-      this.send(p, { t: 'joinNo', reason: '房号不存在，或房间已经开始' });
-    };
-    if (!r) {
-      noRoom();
-      return;
-    }
-    const host = byId(this.ctx, r.host);
-    if (!host || !host.conn) {
-      freeRoom(this.ctx, r);
-      noRoom();
-      return;
-    }
-    if (host === p) {
-      this.send(p, { t: 'joinNo', reason: '这是你自己的房间' });
-      return;
-    }
-    unqueue(this.ctx, p);
-    const hostColor = r.hostColor === 2 ? this.randomColor() : r.hostColor === 1 ? WHITE : BLACK; // hostColor：0 执黑 1 执白 2 随机
-    seatPlayers(this.ctx, r, [host, p], hostColor);
-  }
-
-  /** 随机分先：黑白各半 */
-  private randomColor() {
-    return this.random() < 1 / 2 ? BLACK : WHITE;
   }
 }

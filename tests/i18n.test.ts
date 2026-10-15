@@ -142,7 +142,7 @@ describe('界面文字的静态扫描（I18N-010）', () => {
     const at = (file: string, text: string) => found.some(hit => hit.file === file && hit.text === text && !exempt(hit));
     expect(at('src/ui/panels.tsx', '单人游戏')).toBe(true);
     expect(at('src/shared/reject.ts', '这里是禁着点，落下后没有气')).toBe(true);
-    expect(at('server/rooms.ts', '房号不存在，或房间已经开始')).toBe(true);
+    expect(at('server/lobby.ts', '房号不存在，或房间已经开始')).toBe(true);
     expect(at('src/ui/info.ts', '对局模式')).toBe(true);
   });
 
