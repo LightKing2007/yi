@@ -1,8 +1,16 @@
 /** 联机服务端：匹配与排位、配对确认、好友房间、段位（以假时钟直接驱动 RoomServer） */
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { MemoryStore } from '../server/rooms';
 import { type S2C } from '../src/shared/protocol';
-import { expectClientAccepts, Client, world, startGame, matchUp } from './serverWorld';
+import { expectClientAccepts, newUid, Client, world, startGame, matchUp } from './serverWorld';
+
+/** 服务端存放段位所用的玩家键：`sha256('yi:' + uid)` 的前 32 位十六进制（DAT-075） */
+const uidHash = (uid: string) =>
+  createHash('sha256')
+    .update('yi:' + uid)
+    .digest('hex')
+    .slice(0, 32);
 
 describe('匹配与排位', () => {
   it('两人进入队列即配对，看到对方后双方接受才开局', () => {
@@ -106,6 +114,27 @@ describe('匹配与排位', () => {
     expect(a.expect('rated')?.delta).toBe(-16);
     expect(b.expect('over')?.reason).toBe('left');
     expect(b.expect('rated')?.rating.points).toBe(1216);
+  });
+
+  it('分差悬殊时 Elo 算出的变化为 0：胜方仍加 1 分、负方仍扣 1 分，执黑执白都一样', () => {
+    const strongPoints = 3000; // 与 1200 相差 1800 分，期望得分约 0.99997，按 K = 32 四舍五入为 0
+    const colors = new Set<number>();
+    for (const strongFirst of [true, false]) {
+      const store = new MemoryStore();
+      const { srv } = world(store);
+      const uid = newUid(),
+        rating = { points: strongPoints, win: 0, loss: 0, draw: 0 };
+      store.set(uidHash(uid), { gomoku: rating, go: { ...rating, points: 1200 } });
+      const strong = new Client(srv, '强', undefined, uid),
+        weak = new Client(srv, '弱');
+      expect(strong.welcome?.ratings.gomoku.points).toBe(strongPoints);
+      const { sa, sb } = strongFirst ? matchUp(strong, weak, 'ranked') : matchUp(weak, strong, 'ranked');
+      colors.add((strongFirst ? sa : sb).color);
+      weak.send({ t: 'resign' });
+      expect(strong.expect('rated')?.delta).toBe(1);
+      expect(weak.expect('rated')?.delta).toBe(-1);
+    }
+    expect(colors).toEqual(new Set([1, 2])); // 两轮中强者分别执黑、执白，两处取整的下限都经过
   });
 });
 
