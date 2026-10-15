@@ -22,7 +22,7 @@
     "ESLint max-depth": 19,
     "ESLint max-lines": 8,
     "ESLint max-lines-per-function": 29,
-    "ESLint max-params": 44,
+    "ESLint max-params": 43,
     "ESLint no-console": 3,
     "ESLint no-control-regex": 1,
     "ESLint no-useless-escape": 1,

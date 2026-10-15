@@ -5,30 +5,13 @@
  * 所以服务端与客户端的判定完全一致。协议见 src/shared/protocol.ts。
  */
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
-import { rejectText } from '../src/shared/reject';
-import { BLACK, GameType, WHITE, other } from '../src/core/types';
+import { BLACK, WHITE, other } from '../src/core/types';
 import { isInvalid, parseC2S, type Invalid } from '../src/shared/parse';
 import type { Log, LogEntry } from './log';
 import type { Metrics } from './metrics';
 import { errorCode } from './metrics';
 import { BAN_SECS, ConnLimits, type LimitedOp } from './ratelimit';
-import {
-  ASK_SECS,
-  CLOSE_CODE,
-  DRAWN,
-  DRAW_LIMIT,
-  GRACE_SECS,
-  HELLO_SECS,
-  IDLE_SECS,
-  UNDO_LIMIT,
-  cleanName,
-  newRating,
-  queueRules,
-  type AskKind,
-  type C2S,
-  type QueueMode,
-  type S2C,
-} from '../src/shared/protocol';
+import { CLOSE_CODE, GRACE_SECS, HELLO_SECS, IDLE_SECS, cleanName, newRating, queueRules, type C2S, type QueueMode, type S2C } from '../src/shared/protocol';
 import {
   MemoryStore,
   RoomState,
@@ -44,26 +27,9 @@ import {
   type Session,
 } from './roomTypes';
 import { typeKey } from './rating';
+import { MAINTENANCE_TEXT, afterGame, inGame } from './play';
 import { confirm, dropMatch, enqueue, rankedElsewhere, tickMatch, unqueue } from './matchmaking';
-import {
-  addAct,
-  bothOnline,
-  broadcast,
-  byId,
-  colorOf,
-  endAtLimit,
-  finish,
-  freeRoom,
-  leaveRoom,
-  newRoom,
-  resolveAsk,
-  resync,
-  roomCode,
-  seat,
-  seatPlayers,
-  startTurn,
-  tickRoom,
-} from './room';
+import { bothOnline, byId, colorOf, endAtLimit, finish, freeRoom, leaveRoom, newRoom, resync, roomCode, seat, seatPlayers, tickRoom } from './room';
 
 // 共用的类型已移到 roomTypes.ts（整改项 P2-12）；对外的部分仍从这里导出，引用方不必改动
 export { MemoryStore, type Conn, type Health, type RatingStore, type RoomServerOptions, type Session } from './roomTypes';
@@ -85,8 +51,6 @@ const TOKEN_BYTES = 16;
 const UID_HASH_CHARS = 32;
 /** 超出频率限制时的提示（v3 以文本下发；协议 v4 起为错误码 rate.limited，E3） */
 const LIMITED_TEXT = '操作过于频繁，请稍后再试';
-/** 维护模式中拒绝开始新的对局时的提示，也是进入维护模式时下发给在线玩家的通知（OPS-045，错误码 server.maintenance） */
-const MAINTENANCE_TEXT = '服务器即将维护，暂不开始新的对局';
 /** 服务端出现未预期的异常时的提示（v3 以文本下发，附错误编号；协议 v4 起为错误码 server.internal，E5） */
 const INTERNAL_TEXT = '服务器出现问题，请稍后再试';
 /** 玩家数或未握手的连接数达到上限时的提示（错误码 server.full，E2） */
@@ -153,6 +117,9 @@ export class RoomServer {
       },
       get matches() {
         return server.matches;
+      },
+      get maintenance() {
+        return server.maintenance;
       },
       metrics: server.metrics,
       get nextRoom() {
@@ -653,9 +620,9 @@ export class RoomServer {
     const r = this.rooms.get(p.room),
       me = r ? colorOf(r, p) : 0;
     if (!r || !me) return;
-    if (r.state === RoomState.Over) this.afterGame(r, p, me, m);
+    if (r.state === RoomState.Over) afterGame(this.ctx, { r, p, me }, m);
     else if (r.state === RoomState.Play) {
-      this.inGame(r, p, me, m);
+      inGame(this.ctx, { r, p, me }, m);
       endAtLimit(this.ctx, r); // 落子、停一手、同意悔棋、标记死子、恢复对局之后都在此检查
     }
   }
@@ -797,158 +764,5 @@ export class RoomServer {
   /** 随机分先：黑白各半 */
   private randomColor() {
     return this.random() < 1 / 2 ? BLACK : WHITE;
-  }
-
-  /** 终局后：只接受再来一局的申请与回应 */
-  private afterGame(r: Room, p: Player, me: number, m: C2S) {
-    if (m.t === 'reply' && m.kind === 'rematch' && r.ask === 'rematch' && r.askFrom !== me) {
-      resolveAsk(this.ctx, r, m.ok);
-      return;
-    }
-    if (m.t !== 'rematch') return;
-    if (this.maintenance) {
-      this.send(p, { t: 'info', text: MAINTENANCE_TEXT });
-      return;
-    }
-    const opp = seat(this.ctx, r, other(me));
-    if (r.kind === 'ranked') this.send(p, { t: 'info', text: '排位赛不能再来一局' });
-    else if (!r.ask && opp?.conn) this.ask(r, me, 'rematch');
-    else this.send(p, { t: 'info', text: r.ask ? '请先等对方回应' : '对方已离开，无法再来一局' });
-  }
-
-  /** 对局中（含点目）的操作 */
-  private inGame(r: Room, p: Player, me: number, m: C2S) {
-    switch (m.t) {
-      case 'move':
-        this.playMove(r, p, me, m.x, m.y);
-        return;
-      case 'pass':
-        this.passTurn(r, me);
-        return;
-      case 'undo':
-        this.askUndo(r, p, me);
-        return;
-      case 'draw':
-        this.askDraw(r, p, me);
-        return;
-      case 'reply':
-        if (m.kind !== 'rematch' && r.ask === m.kind && r.askFrom !== me) resolveAsk(this.ctx, r, m.ok);
-        return;
-      case 'resign':
-        finish(this.ctx, r, { winner: other(me), reason: 'resign' });
-        return;
-      case 'mark':
-        this.markDead(r, m.x, m.y);
-        return;
-      case 'agree':
-        this.agreeScore(r, me);
-        return;
-      case 'resume':
-        this.resumePlay(r);
-        return;
-    }
-  }
-
-  /** 向对方提出申请；等回应时不计时 */
-  private ask(r: Room, me: number, kind: AskKind) {
-    r.ask = kind;
-    r.askFrom = me;
-    r.askUntil = this.now() + ASK_SECS;
-    if (kind !== 'rematch') r.deadline = 0;
-    this.send(seat(this.ctx, r, other(me)), { t: 'ask', kind });
-  }
-
-  private playMove(r: Room, p: Player, me: number, x: number, y: number) {
-    const g = r.g;
-    if (g.scoring || g.cur.toMove !== me) {
-      this.send(p, { t: 'info', text: '还没轮到你' });
-      return;
-    }
-    if (r.ask) {
-      this.send(p, { t: 'info', text: '请先等对方回应申请' });
-      return;
-    }
-    if (!g.play(x, y)) {
-      this.send(p, { t: 'info', text: rejectText(g.lastReject ?? 'occupied') });
-      return;
-    } // 含落在本局棋盘之外
-    addAct(r, { k: 'M', x, y });
-    broadcast(this.ctx, r, { t: 'moved', x, y });
-    if (g.over) finish(this.ctx, r, { winner: g.winner, reason: g.winner === DRAWN ? 'full' : 'five' });
-    else startTurn(this.ctx, r);
-  }
-
-  private passTurn(r: Room, me: number) {
-    const g = r.g;
-    if (g.type !== GameType.Go || g.scoring || g.cur.toMove !== me || r.ask) return;
-    g.pass();
-    addAct(r, { k: 'P' });
-    broadcast(this.ctx, r, { t: 'passed' });
-    r.agreed = [false, false, false];
-    startTurn(this.ctx, r);
-  }
-
-  private askUndo(r: Room, p: Player, me: number) {
-    const g = r.g;
-    if (r.ask || g.scoring) {
-      this.send(p, { t: 'info', text: '现在不能申请悔棋' });
-      return;
-    }
-    if ((r.undoUsed[me] ?? 0) >= UNDO_LIMIT) {
-      this.send(p, { t: 'info', text: '本局悔棋次数已用完' });
-      return;
-    }
-    if (g.hist.length < (g.cur.toMove === me ? 2 : 1)) {
-      this.send(p, { t: 'info', text: '你还没有可以悔的棋' });
-      return;
-    } // 轮到自己时要连对方那一手一起退
-    r.undoUsed[me] = (r.undoUsed[me] ?? 0) + 1;
-    this.ask(r, me, 'undo');
-  }
-
-  private askDraw(r: Room, p: Player, me: number) {
-    if (r.ask) {
-      this.send(p, { t: 'info', text: '请先等对方回应申请' });
-      return;
-    }
-    if ((r.drawUsed[me] ?? 0) >= DRAW_LIMIT) {
-      this.send(p, { t: 'info', text: '本局求和次数已用完' });
-      return;
-    }
-    r.drawUsed[me] = (r.drawUsed[me] ?? 0) + 1;
-    this.ask(r, me, 'draw');
-  }
-
-  /** 点目时标记 / 取消死子（点在空处或本局棋盘之外的忽略） */
-  private markDead(r: Room, x: number, y: number) {
-    const g = r.g;
-    if (!g.scoring || !g.inB(x, y) || !g.b(x, y)) return;
-    g.toggleDead(x, y);
-    addAct(r, { k: 'K', x, y });
-    r.agreed = [false, false, false];
-    broadcast(this.ctx, r, { t: 'marked', x, y });
-  }
-
-  /** 确认点目结果；双方都确认后终局 */
-  private agreeScore(r: Room, me: number) {
-    const g = r.g;
-    if (!g.scoring || r.agreed[me]) return;
-    r.agreed[me] = true;
-    broadcast(this.ctx, r, { t: 'agreed', color: me });
-    if (!r.agreed[BLACK] || !r.agreed[WHITE]) return;
-    g.computeScore();
-    g.confirmScore();
-    finish(this.ctx, r, { winner: g.winner, reason: 'score' });
-  }
-
-  /** 点目有分歧：回到对局 */
-  private resumePlay(r: Room) {
-    const g = r.g;
-    if (!g.scoring) return;
-    g.resume();
-    addAct(r, { k: 'R' });
-    r.agreed = [false, false, false];
-    broadcast(this.ctx, r, { t: 'resumed' });
-    startTurn(this.ctx, r);
   }
 }
