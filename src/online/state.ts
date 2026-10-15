@@ -50,8 +50,8 @@ export const bump = () => {
  * 切换界面（离开对局时棋子飞回棋罐、清盘等由控制器负责）。由控制器在加载时注册（bindNavigation），
  * 联机模块因此不必引用控制器，两者不再互相引用。
  */
-let navigate: (s: Screen) => void = s => {
-  screen.value = s;
+let navigate: (target: Screen) => void = target => {
+  screen.value = target;
 };
 export function bindNavigation(go: (s: Screen) => void) {
   navigate = go;
@@ -132,10 +132,10 @@ export const st = {
   shownOnline: false, // 对局界面显示的是联机对局（离开时面板淡出期间也保持）
 };
 
-/** 版本号比较：a 比 b 新 */
-export function newerVersion(a: string, b: string) {
-  const pa = a.split('.').map(n => parseInt(n, 10) || 0),
-    pb = b.split('.').map(n => parseInt(n, 10) || 0);
+/** 版本号比较：version 比 than 新 */
+export function newerVersion(version: string, than: string) {
+  const pa = version.split('.').map(n => parseInt(n, 10) || 0),
+    pb = than.split('.').map(n => parseInt(n, 10) || 0);
   for (let i = 0; i < Math.max(pa.length, pb.length); i++) if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) > (pb[i] ?? 0);
   return false;
 }

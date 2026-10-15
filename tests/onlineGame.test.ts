@@ -50,7 +50,7 @@ function exchange(peer: Peer, mine: [number, number], theirs: [number, number]) 
 
 /** 客户端开 9 路围棋的好友房间（执黑、不限时），peer 加入 */
 function startGo() {
-  net.createRoom(1, 9, 0, false, 0);
+  net.createRoom({ type: 1, size: 9, hostColor: 0, renju: false, moveTime: 0 });
   pump();
   const peer = new Peer();
   peer.send({ t: 'join', code: net.st.code });

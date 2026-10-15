@@ -118,7 +118,7 @@ describe('断线重连：按关闭码决定是否重连、多久后重连（04-a
   });
 
   it('不在对局中时服务端以 1011 断开：回到多人游戏页，提示服务器出现问题', () => {
-    net.createRoom(0, 15, 0, true, 30);
+    net.createRoom({ type: 0, size: 15, hostColor: 0, renju: true, moveTime: 30 });
     pump();
     lastSocket().cut(CLOSE_CODE.internal);
     pump();

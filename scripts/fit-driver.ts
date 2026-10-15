@@ -140,7 +140,7 @@ function probeNotice() {
 
 /** 围棋好友对局：等待好友、对局、和棋申请、悔棋待回应、离开确认、点目、终局与再来一局的申请；返回提示条检查的条数 */
 async function friendGo(opp: Opponent) {
-  net.createRoom(GameType.Go, FRIEND.size, WHITE, false, FRIEND.moveSecs);
+  net.createRoom({ type: GameType.Go, size: FRIEND.size, hostColor: WHITE, renju: false, moveTime: FRIEND.moveSecs });
   await waitFor(() => net.st.phase === net.Phase.Hosting && net.st.code !== '', '开好房间');
   await sleep(STEP_MS);
   const probed = probeNotice();
