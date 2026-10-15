@@ -188,7 +188,7 @@ CREATE INDEX idx_rating_changes_game_id ON rating_changes (game_id);
 5. 阶段 5 不保存 IP（决定 D5-4）：按 IP 的限流只在内存中统计；`devices.last_ip`、`games.black_ip` 与 `white_ip` 不建；
 6. `meta` 为单数名，沿用 DAT-041 中的表名；键与值的列名避开保留字 `key`、`value`（DAT-014）；
 7. 外键全部为 `ON DELETE RESTRICT`（DAT-030），每个外键列有以它开头的索引（DAT-031）：`games` 的两个用户外键由复合索引覆盖，`rating_changes.user_id` 由 `idx_rating_changes_user_id_changed_at` 覆盖；
-8. DAT-022 的昵称上限为 64 字节（按 16 个字素 × 4 字节），而 `cleanName` 按字素截到 `NAME_MAX` 个：由多个码位组成的字素（如带肤色或组合的表情符号）可使 16 个字素超过 64 字节。阶段 5 第 5 步须使写入的昵称同时满足字节上限（在仓储模块中按字素截短，不得因约束失败而丢弃整条写入），或经项目所有者决定修订 DAT-022。
+8. DAT-022 的昵称上限为 64 字节（按 16 个字素 × 4 字节），而 `cleanName` 按字素截到 `NAME_MAX` 个：由多个码位组成的字素（如带肤色或组合的表情符号）可使 16 个字素超过 64 字节。按阶段 5 开发计划的决定 D5-5，仓储模块写入前再按字素截短到 64 字节以内，不得因约束失败而丢弃整条写入；DAT-022 不变。
 
 5.2.3 棋谱（`games.record`）：内容为 `{ "v": 1, "cfg": …, "moves": [{ "m": …, "ms": … }], "dead": …, "result": … }`，即 `src/core/record.ts` 的 `GameRecord` 加上版本字段 `v`（DAT-024，VER-012：棋谱 JSON 单独编号，读取到高于自身支持的版本时只读不写）。约定如下：
 
