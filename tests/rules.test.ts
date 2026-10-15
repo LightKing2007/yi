@@ -29,6 +29,8 @@ function gomoku15(stones: number[] = []) {
   return g;
 }
 const playAll = (g: Game, mv: [number, number][]) => mv.forEach(([x, y]) => g.play(x, y));
+/** 自我对弈中困难每一手的思考时限（毫秒，按注入的时钟计）：每读一次时钟约搜索 1024 个结点 */
+const SELF_PLAY_BUDGET_MS = 200;
 /** 以 seed 为种子的随机数（TST-020：测试中不用真实的随机数） */
 const seeded = (seed: number) => {
   const rng = new Rng(seed);
@@ -179,6 +181,7 @@ describe('禁手', () => {
 });
 
 describe('五子棋人机', () => {
+  afterEach(() => setClock(null));
   const LV = ['简单', '普通', '困难'];
   for (const lv of [1, 2]) {
     it(`${LV[lv]} 堵活三、堵冲四`, () => {
@@ -227,21 +230,21 @@ describe('五子棋人机', () => {
       }
     });
     it(`${LV[lv]} 自我对弈全部合法（禁手开）`, () => {
+      // 时钟每读一次前进 1 毫秒（TST-020）：困难的搜索按读时钟的次数截止，与机器快慢无关，结果确定。
+      // 单步思考的耗时不在这里断言，由性能基准衡量（TST-041，#139）
+      let reads = 0;
+      setClock(() => ++reads * 0.001);
       const g = gomoku15();
-      let moves = 0,
-        worst = 0;
+      let moves = 0;
       while (!g.over && moves < 80) {
-        const t0 = performance.now();
-        const m = gomokuMove(gomokuSnap(g), lv, seeded(moves + 1));
-        worst = Math.max(worst, performance.now() - t0);
+        const m = gomokuMove(gomokuSnap(g), lv, seeded(moves + 1), SELF_PLAY_BUDGET_MS);
         if (!m) break;
         expect(g.b(m.x, m.y)).toBe(EMPTY);
         expect(g.play(m.x, m.y)).toBe(true);
         moves++;
       }
       expect(moves).toBeGreaterThan(8);
-      // 困难电脑单步思考的上限；CI 的机器比本机慢两三倍，放宽到 4 秒，免得时快时慢地失败
-      if (lv === 2) expect(worst).toBeLessThan(process.env.CI ? 4000 : 1500);
+      if (lv === 2) expect(reads).toBeGreaterThan(0); // 困难的搜索经注入的时钟截止
     }, 60000);
   }
 });
