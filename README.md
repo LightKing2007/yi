@@ -213,7 +213,10 @@ node dist-server/server.cjs --version
 | `YI_DATA` | 段位数据文件的路径 |
 | `YI_LATEST` | 最新客户端版本号，例如 `2.0.2`；客户端版本较旧时，开始菜单及联机对战页面提示有新版本 |
 | `YI_DOWNLOAD` | 新版本的下载地址（`http://` 或 `https://`），提示可点击打开 |
+| `YI_LOG_LEVEL` | 日志级别：`error`、`warn`、`info`（默认）、`debug`（OPS-062） |
 | `YI_FILES` | 安装程序所在目录。设置后，服务端在同一端口提供下载页面 `http://地址:端口/`，列出各平台最新的 `Yi-版本-平台` 安装程序及其 SHA-256 校验值（另有 `/SHA256SUMS`），支持断点续传；每个 IP 同时最多 2 个下载，全服最多 8 个。页面所用的标题图、图标与字体在构建时嵌入服务端（`scripts/page-assets.mjs`），页面不含脚本 |
+
+以上变量与命令行参数由 `server/config.ts` 集中解析并校验（ARC-042）：端口须为 1 至 65535 的整数，`HOST` 须为 IP 地址或主机名，`YI_LATEST` 须为“主版本.次版本.修订号”，`YI_DOWNLOAD` 须为 `http://` 或 `https://` 网址；任一项不合法时，服务端为每一项写一行 `server.config-invalid` 日志（变量名与期望的格式）并以退出码 78 退出。空值与未设置相同。
 
 服务端对同一 IP 的连接数与新建频率、握手时限、每条连接的消息频率、违规累计断开及 HTTP 超时的限制，按 [docs/standards/04-api.md](docs/standards/04-api.md) 第 5 节（API-040 至 API-047）执行，各项数值以常量定义于 `server/ratelimit.ts` 与 `server/host.ts`。
 

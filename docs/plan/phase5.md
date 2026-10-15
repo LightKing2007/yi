@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 性质 | 计划，资料性；实施必须符合 [docs/standards/](../standards/00-general.md)，与规范冲突时以规范为准 |
-| 文件版本 | 1.4 |
+| 文件版本 | 1.5 |
 | 修订日期 | 2026-10-16 |
 | 状态 | 实施中：第 3 章的待决策事项已于 2026-10-16 由项目所有者决定 |
 | 相关文档 | [roadmap.md](roadmap.md) 第 5 章、[remediation.md](remediation.md) 第 6 章（P2-01、P2-02、P2-04、P2-12）、[03-data.md](../standards/03-data.md)、[07-operations.md](../standards/07-operations.md)、[10-edge-cases.md](../standards/10-edge-cases.md) |
@@ -77,7 +77,7 @@
 |---|---|---|---|---|
 | 1 | 准备：拆分 `tests/server.test.ts`（1783 行）；写架构决策记录 0008“服务端持久化采用 `node:sqlite`”；核实服务器的 Node.js 与 SQLite 版本 | P2-12、COD-040、ARC-060、DAT-001 | — | 已完成（#163、#164；2026-10-16 核实服务器为 Node.js v24.21.0、SQLite 3.53.4） |
 | 2 | 修订表结构（文档） | P2-01；DAT-010 至 DAT-034、DAT-071；VER-012 | 1、D5-3、D5-4 | 已完成（P2-01，roadmap.md 第 5.2 节） |
-| 3 | `server/config.ts`：集中解析与校验环境变量与命令行参数 | P2-04；ARC-042 | 1 | 未开始 |
+| 3 | `server/config.ts`：集中解析与校验环境变量与命令行参数 | P2-04；ARC-042 | 1 | 已完成（P2-04） |
 | 4 | 数据库的打开、迁移与结构版本检查 | P2-02；DAT-002、DAT-017、DAT-041、DAT-042、VER-012 | 2、3 | 未开始 |
 | 5 | 仓储模块，段位改由数据库读写，导入 `yi-ratings.json` | DAT-001、DAT-044、DAT-045；D5-1 | 4 | 未开始 |
 | 6 | 对局记录、每手用时与事务内结算 | DAT-024、DAT-040；A8 | 5 | 未开始 |
