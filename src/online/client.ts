@@ -10,9 +10,10 @@ import { T } from '../i18n';
 import { sfx } from '../audio';
 import { game, screen, Screen, boardView, session } from '../app/state';
 import { logError, native } from '../app/native';
-import { GRACE_SECS, PING_SECS, RESUME_WAIT_SECS, SILENT_SECS, type Act, type AskKind, type OverReason, type QueueMode, type S2C } from '../shared/protocol';
+import { GRACE_SECS, PING_SECS, RESUME_WAIT_SECS, SILENT_SECS, type Act, type AskKind, type OverReason, type S2C } from '../shared/protocol';
 import { Phase, bump, changed, goScreen, inGame, myTurn, note, saveUpdate, st } from './state';
-import { connect, disconnect, hasSocket, isOpen, keepPending, lost, netClose, nick, resetRetry, send, setMessageHandler, takePending } from './connection';
+import { connect, disconnect, hasSocket, isOpen, lost, netClose, resetRetry, send, setMessageHandler, takePending } from './connection';
+import { askLeave, closeRoom, confirm, mark, move, pass, undo, unqueue } from './actions';
 
 // 会话的状态已移到 state.ts（整改项 P2-12）；对外的部分仍从这里导出，引用方不必改动
 export { Phase, bindNavigation, inGame, myTurn, netTick, newerVersion, note, ratingOf, st, tr, type Msg } from './state';
@@ -20,6 +21,29 @@ export { Phase, bindNavigation, inGame, myTurn, netTick, newerVersion, note, rat
 // 连接已移到 connection.ts（整改项 P2-12）：收到的消息经这里登记的 handle 处理，两个模块因此不互相引用
 setMessageHandler(handle);
 export { connect, disconnect, setRetryRandom } from './connection';
+
+// 玩家的操作已移到 actions.ts（整改项 P2-12）
+export {
+  agree,
+  askLeave,
+  closeRoom,
+  confirm,
+  createRoom,
+  draw,
+  joinRoom,
+  leave,
+  mark,
+  move,
+  pass,
+  playAgain,
+  queue,
+  rematch,
+  reply,
+  resign,
+  resume,
+  undo,
+  unqueue,
+} from './actions';
 
 // ---------------- 对局中的消息 ----------------
 
@@ -371,142 +395,6 @@ function redrawTick(time: number) {
 /** 页面在后台时 requestAnimationFrame 会停下：心跳、重连另用这个间隔（毫秒）的定时器驱动 */
 const TICK_MS = 250;
 setInterval(() => update(now()), TICK_MS);
-
-// ---------------- 匹配、排位、好友房间 ----------------
-
-/** 开始匹配 / 排位（没连上时先显示“正在寻找”，连上后自动进入队列） */
-export function queue(mode: QueueMode, type: number, size: number) {
-  st.qMode = mode;
-  st.qType = type;
-  st.qSize = size;
-  st.qSince = now();
-  send({ t: 'name', name: nick() });
-  send({ t: 'queue', mode, type, size });
-  st.phase = Phase.Queue;
-  changed();
-}
-
-export function unqueue() {
-  keepPending(m => m.t !== 'queue' && m.t !== 'name');
-  if (isOpen()) send({ t: 'unqueue' });
-  st.phase = hasSocket() ? Phase.Lobby : Phase.Off;
-  changed();
-}
-
-/** 找到对手后：接受 / 拒绝 */
-export function confirm(ok: boolean) {
-  if (st.phase !== Phase.Found) return;
-  send({ t: 'confirm', ok });
-  if (ok) st.accepted = true;
-  else {
-    st.phase = Phase.Lobby;
-    st.opp = null;
-  }
-  changed();
-}
-
-export function createRoom(type: number, size: number, hostColor: number, renju: boolean, moveTime: number) {
-  st.busy = true;
-  send({ t: 'name', name: nick() });
-  send({ t: 'create', type, size, hostColor, renju, moveTime });
-  changed();
-}
-
-export function closeRoom() {
-  send({ t: 'close' });
-  st.phase = Phase.Lobby;
-  st.code = '';
-  changed();
-}
-
-export function joinRoom(code: string) {
-  st.busy = true;
-  send({ t: 'name', name: nick() });
-  send({ t: 'join', code });
-  changed();
-}
-
-// ---------------- 对局中 ----------------
-
-export function move(x: number, y: number) {
-  if (myTurn()) send({ t: 'move', x, y });
-}
-export function pass() {
-  if (myTurn() && game.type === GameType.Go) send({ t: 'pass' });
-}
-export function undo() {
-  if (inGame() && !st.over && !st.askOut && !st.askIn && game.hist.length) {
-    send({ t: 'undo' });
-    st.askOut = 'undo';
-    st.turnEnds = 0;
-    changed();
-  }
-}
-export function draw() {
-  if (inGame() && !st.over && !st.askOut && !st.askIn) {
-    send({ t: 'draw' });
-    st.askOut = 'draw';
-    st.turnEnds = 0;
-    changed();
-  }
-}
-export function resign() {
-  if (inGame() && !st.over) send({ t: 'resign' });
-}
-export function mark(x: number, y: number) {
-  if (game.scoring) send({ t: 'mark', x, y });
-}
-export function agree() {
-  if (game.scoring) send({ t: 'agree' });
-}
-export function resume() {
-  if (game.scoring) send({ t: 'resume' });
-}
-export function rematch() {
-  if (st.over && !st.oppLeft && !st.askOut && st.kind !== 'ranked') {
-    send({ t: 'rematch' });
-    st.askOut = 'rematch';
-    changed();
-  }
-}
-
-/** 回应对方的申请（悔棋 / 求和 / 再来一局） */
-export function reply(ok: boolean) {
-  const k = st.askIn;
-  st.askIn = null;
-  if (k) send({ t: 'reply', kind: k, ok });
-  changed();
-}
-
-/** 离开房间；对局中离开即认输 */
-export function leave() {
-  if (isOpen()) send({ t: 'leave' });
-  st.phase = hasSocket() ? Phase.Lobby : Phase.Off;
-  st.reconnecting = false;
-  st.askIn = st.askOut = null;
-  st.leaveAsk = false;
-  changed();
-}
-
-/** 终局后接着匹配 / 排位同样的棋 */
-export function playAgain() {
-  const mode: QueueMode = st.kind === 'ranked' ? 'ranked' : 'match',
-    type = st.type,
-    size = st.size;
-  leave();
-  goScreen(Screen.Online);
-  queue(mode, type, size);
-}
-
-export function askLeave() {
-  if (st.over || st.phase !== Phase.Playing) {
-    leave();
-    goScreen(Screen.Online);
-  } else {
-    st.leaveAsk = true;
-    changed();
-  }
-}
 
 /** 控制器用的接口 */
 export const online = {
