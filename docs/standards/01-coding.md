@@ -3,8 +3,8 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.5 |
-| 修订日期 | 2026-10-15 |
+| 文件版本 | 1.1.6 |
+| 修订日期 | 2026-10-16 |
 | 规则前缀 | `COD` |
 
 参考：ISO/IEC 5055:2021（可靠性、安全性、性能效率、可维护性四类源码度量）；ISO/IEC 25010:2023 维护性子特性；GB/T 8567—2006 第 5 章。
@@ -68,7 +68,7 @@
 | COD-037 | B | 函数体 ≤ 60 行（不含空行与注释行） | 未满足（11 处） |
 | COD-038 | A | 函数圈复杂度 ≤ 15；协议消息分发函数允许 ≤ 30，但每个分支必须委托给独立函数 | 未知（待 P1-01 测量） |
 | COD-039 | A | 代码块嵌套深度 ≤ 4；函数参数 ≤ 4 个，超过时改用选项对象 | 未知（待 P1-01 测量） |
-| COD-040 | B | 源文件 ≤ 400 行；数据文件（译文表、着色器源码）≤ 1000 行 | 未满足（2026-10-15 以 ESLint 计：`src/core/goAI.ts` 747、`src/audio/synth.worker.ts` 616、`src/ui/online.tsx` 603、`src/app/scenarios.ts` 445、`src/render/gl.ts` 414，以及 `tests/server.test.ts` 1783；整改项 P2-12 已把 `server/rooms.ts` 拆为 9 个文件、`src/online/client.ts` 拆为 6 个文件，最长 361 行） |
+| COD-040 | B | 源文件 ≤ 400 行；数据文件（译文表、着色器源码）≤ 1000 行 | 未满足（2026-10-16 以 ESLint 计：`src/core/goAI.ts` 747、`src/audio/synth.worker.ts` 616、`src/ui/online.tsx` 603、`src/app/scenarios.ts` 445、`src/render/gl.ts` 414；整改项 P2-12 已把 `server/rooms.ts` 拆为 9 个文件、`src/online/client.ts` 拆为 6 个文件，最长 361 行，`tests/server.test.ts` 拆为 7 个测试文件与 1 个公共模块，最长 355 行） |
 | COD-041 | B | 单个文件的 `import` 语句 ≤ 15 条 | 未满足（`src/ui/online.tsx` 17、`src/app/stage.ts` 16） |
 | COD-042 | B | 严禁 10 行以上的重复代码块，由 jscpd 检测，阈值为 10 行、50 个标记 | 未知（待 P1-01 测量） |
 
