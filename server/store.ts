@@ -83,7 +83,8 @@ const stamp = (ms: number) =>
 
 /** 段位存档：内存中保存全部记录，变化后延迟写盘 */
 export class FileStore implements RatingStore {
-  private data: Record<string, Entry> = {};
+  /** 各玩家的记录。用 Map 而不用普通对象：存档中键为 __proto__ 的记录不会改动对象的原型（审计发现 A-15） */
+  private data = new Map<string, Entry>();
   private timer: ReturnType<typeof setTimeout> | undefined;
   private dirty = false;
   private fails = 0;
@@ -103,11 +104,11 @@ export class FileStore implements RatingStore {
   }
 
   get(key: string) {
-    return this.data[key]?.ratings;
+    return this.data.get(key)?.ratings;
   }
 
   set(key: string, ratings: Ratings, name: string) {
-    this.data[key] = { name, ratings: { gomoku: { ...ratings.gomoku }, go: { ...ratings.go } } };
+    this.data.set(key, { name, ratings: { gomoku: { ...ratings.gomoku }, go: { ...ratings.go } } });
     this.dirty = true;
     // 退避重试期间已有定时器，不提前写盘
     this.timer ??= setTimeout(() => this.flush(), FLUSH_DELAY_MS);
@@ -141,7 +142,7 @@ export class FileStore implements RatingStore {
     if (ok) return true;
     const dump = path.join(path.dirname(this.file), `emergency-${stamp(this.now())}.json`);
     try {
-      this.fs.writeFileSync(dump, JSON.stringify(this.data));
+      this.fs.writeFileSync(dump, this.serialize());
       this.log('error', 'store.dumped', { msg: '退出前写盘失败，段位数据已转储', file: this.file, dump });
       return true;
     } catch (err) {
@@ -154,22 +155,22 @@ export class FileStore implements RatingStore {
     let raw: string;
     try {
       raw = this.fs.readFileSync(this.file, 'utf8');
-    } catch (e) {
-      if (errCode(e) === 'ENOENT') return; // 文件不存在：首次运行
-      throw new StoreLoadError(this.file, EXIT_IO_ERROR, `无法读取（${errText(e)}）`);
+    } catch (err) {
+      if (errCode(err) === 'ENOENT') return; // 文件不存在：首次运行
+      throw new StoreLoadError(this.file, EXIT_IO_ERROR, `无法读取（${errText(err)}）`);
     }
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw);
-    } catch (e) {
-      throw new StoreLoadError(this.file, EXIT_DATA_ERROR, `无法解析（${errText(e)}）`);
+    } catch (err) {
+      throw new StoreLoadError(this.file, EXIT_DATA_ERROR, `无法解析（${errText(err)}）`);
     }
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
       throw new StoreLoadError(this.file, EXIT_DATA_ERROR, '顶层不是对象');
     }
     const bad: string[] = [];
     for (const [key, entry] of Object.entries(parsed)) {
-      if (isEntry(entry)) this.data[key] = entry;
+      if (isEntry(entry)) this.data.set(key, entry);
       else bad.push(key);
     }
     if (bad.length > 0) this.keepCorrupt(bad);
@@ -186,26 +187,31 @@ export class FileStore implements RatingStore {
     this.log('warn', 'store.records-invalid', { msg: `段位存档中有记录损坏，已按新玩家处理；首条：${keys[0]}`, file: this.file, count: keys.length, copy });
   }
 
+  /** 存档的 JSON 文本；Object.fromEntries 以定义属性的方式建键，__proto__ 也是普通的键 */
+  private serialize() {
+    return JSON.stringify(Object.fromEntries(this.data));
+  }
+
   /** 写临时文件 → fsync → 上一版另存为 .prev → 原子改名 → fsync 目录（DAT-051、DAT-054） */
   private write() {
     const tmp = this.file + '.tmp';
     try {
       const fd = this.fs.openSync(tmp, 'w');
       try {
-        this.fs.writeSync(fd, JSON.stringify(this.data));
+        this.fs.writeSync(fd, this.serialize());
         this.fs.fsyncSync(fd);
       } finally {
         this.fs.closeSync(fd);
       }
       this.keepPrevious();
       this.fs.renameSync(tmp, this.file);
-    } catch (e) {
+    } catch (err) {
       try {
         this.fs.unlinkSync(tmp);
       } catch {
         /* 临时文件可能尚未创建；残留的临时文件不影响下一次写盘 */
       }
-      throw e;
+      throw err;
     }
     this.syncDir();
   }

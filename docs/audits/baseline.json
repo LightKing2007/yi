@@ -18,7 +18,7 @@
     "ESLint @typescript-eslint/no-non-null-assertion": 40,
     "ESLint @typescript-eslint/only-throw-error": 1,
     "ESLint complexity": 22,
-    "ESLint id-length": 825,
+    "ESLint id-length": 822,
     "ESLint max-depth": 19,
     "ESLint max-lines": 8,
     "ESLint max-lines-per-function": 30,
