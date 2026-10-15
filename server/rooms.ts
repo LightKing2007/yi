@@ -4,10 +4,8 @@
  * 对局规则直接复用 src/core/game.ts：每个房间一份 Game，客户端发来的每一手都在这里校验，
  * 所以服务端与客户端的判定完全一致。协议见 src/shared/protocol.ts。
  */
-import { randomUUID } from 'node:crypto';
-import { BLACK, WHITE } from '../src/core/types';
 import { isInvalid, parseC2S } from '../src/shared/parse';
-import type { Log, LogEntry } from './log';
+import type { Log } from './log';
 import type { Metrics } from './metrics';
 import { errorCode } from './metrics';
 import { ConnLimits } from './ratelimit';
@@ -29,16 +27,14 @@ import {
 import { typeKey } from './rating';
 import { MAINTENANCE_TEXT, afterGame, inGame } from './play';
 import { lobby } from './lobby';
-import { BUSY_TEXT, PENDING_MAX, confirmToken, drop, forget, goOffline, hello, limited, rejectInvalid, tickPlayer } from './hub';
+import { evict, guard, kick, report, scrapMatch, scrapRoom } from './faults';
+import { BUSY_TEXT, PENDING_MAX, confirmToken, goOffline, hello, limited, rejectInvalid, tickPlayer } from './hub';
 import { tickMatch, unqueue } from './matchmaking';
-import { byId, colorOf, endAtLimit, freeRoom, newRoom, seat, seatPlayers, tickRoom } from './room';
+import { byId, colorOf, endAtLimit, freeRoom, newRoom, seatPlayers, tickRoom } from './room';
 
 // 共用的类型已移到 roomTypes.ts（整改项 P2-12）；对外的部分仍从这里导出，引用方不必改动
 export { MemoryStore, type Conn, type Health, type RatingStore, type RoomServerOptions, type Session } from './roomTypes';
 export { PENDING_MAX } from './hub';
-
-/** 服务端出现未预期的异常时的提示（v3 以文本下发，附错误编号；协议 v4 起为错误码 server.internal，E5） */
-const INTERNAL_TEXT = '服务器出现问题，请稍后再试';
 
 export class RoomServer {
   private players = new Set<Player>();
@@ -169,7 +165,7 @@ export class RoomServer {
     try {
       return this.receive(p, raw, conn);
     } catch (err) {
-      this.kick(p, this.report(err, { msg: '处理消息时出现未预期的异常', playerId: p.id || undefined }));
+      kick(this.ctx, p, report(this.ctx, err, { msg: '处理消息时出现未预期的异常', playerId: p.id || undefined }));
       return p;
     }
   }
@@ -205,7 +201,7 @@ export class RoomServer {
     try {
       goOffline(this.ctx, p, conn, code);
     } catch (err) {
-      this.evict(p, this.report(err, { msg: '处理断线时出现未预期的异常', playerId: p.id || undefined }));
+      evict(this.ctx, p, report(this.ctx, err, { msg: '处理断线时出现未预期的异常', playerId: p.id || undefined }));
     }
   }
 
@@ -217,29 +213,32 @@ export class RoomServer {
     const now = this.now();
     for (const m of [...this.matches]) {
       const fault = { msg: '检查配对确认时出现未预期的异常', playerIds: m.side.map(side => side.p.id) };
-      this.guard(
+      guard(
+        this.ctx,
         () => tickMatch(this.ctx, m, now),
         fault,
-        errorId => this.scrapMatch(m, errorId),
+        errorId => scrapMatch(this.ctx, m, errorId),
       );
     }
     for (const r of [...this.rooms.values()]) {
       if (!this.rooms.has(r.id)) continue;
       const fault = { msg: '检查房间时限时出现未预期的异常', roomId: r.id, gameId: r.gameId };
-      this.guard(
+      guard(
+        this.ctx,
         () => tickRoom(this.ctx, r, now),
         fault,
-        errorId => this.scrapRoom(r, errorId),
+        errorId => scrapRoom(this.ctx, r, errorId),
       );
     }
     for (const [key, until] of this.banned) if (now >= until) this.banned.delete(key);
     for (const p of [...this.players]) {
       if (!this.players.has(p)) continue;
       const fault = { msg: '检查玩家时限时出现未预期的异常', playerId: p.id || undefined };
-      this.guard(
+      guard(
+        this.ctx,
         () => tickPlayer(this.ctx, p, now),
         fault,
-        errorId => this.evict(p, errorId),
+        errorId => evict(this.ctx, p, errorId),
       );
     }
   }
@@ -346,63 +345,6 @@ export class RoomServer {
     if (msg.t === 'error' || msg.t === 'info') this.metrics?.inc('yi_errors_total', { code: errorCode(msg.text) });
     else if (msg.t === 'joinNo') this.metrics?.inc('yi_errors_total', { code: errorCode(msg.reason) });
   }
-  // ---------------- 未预期的异常（API-023、EDGE-002） ----------------
-
-  /** 记录一次未预期的异常：完整调用栈与新的错误编号（UUID v4）写入 internal.error 日志；返回错误编号，供下发给客户端对照 */
-  private report(err: unknown, entry: LogEntry): string {
-    const errorId = randomUUID();
-    this.log('error', 'internal.error', { ...entry, errorId, err });
-    return errorId;
-  }
-
-  /** 执行一项定时检查；出现未预期的异常时按 fault 记录，再以 clean 清理出错的那一项 */
-  private guard(work: () => void, fault: LogEntry, clean: (errorId: string) => void) {
-    try {
-      work();
-    } catch (err) {
-      clean(this.report(err, fault));
-    }
-  }
-
-  /** 以服务端内部错误（E5）断开一位玩家：先下发提示与错误编号（不含异常的内容），再按断线处理并以 1011 关闭 */
-  private kick(p: Player, errorId: string) {
-    try {
-      this.send(p, { t: 'error', text: INTERNAL_TEXT, errorId });
-    } catch {
-      // 发送本身抛出说明连接已经出错：异常已记录，不再告知，照常断开
-    }
-    drop(this.ctx, p, CLOSE_CODE.internal);
-  }
-
-  /** 放弃出错的配对：双方不再等待确认，以 1011 断开 */
-  private scrapMatch(m: Match, errorId: string) {
-    this.matches.delete(m); // 出错时可能尚未移除；断开时便不会再处理这个配对
-    for (const side of m.side) this.kick(side.p, errorId);
-  }
-
-  /** 放弃出错的房间：先移除房间（对局不再继续，也不结算段位），再以 1011 断开座位上的玩家；他们重连时收到 resumeFailed */
-  private scrapRoom(r: Room, errorId: string) {
-    freeRoom(this.ctx, r);
-    for (const color of [BLACK, WHITE]) {
-      const p = seat(this.ctx, r, color);
-      if (p) this.kick(p, errorId);
-    }
-  }
-
-  /** 移除出错的玩家：放弃其所在的房间，以 1011 断开（已断开的直接移除）；不再保留席位，免得每次检查都再出错 */
-  private evict(p: Player, errorId: string) {
-    const r = this.rooms.get(p.room);
-    if (r) this.scrapRoom(r, errorId);
-    this.kick(p, errorId);
-    forget(this.ctx, p);
-  }
-
-  // ---------------- 限流与违规（API-042 至 API-045） ----------------
-
-  // ---------------- 房间 ----------------
-
-  // ---------------- 重连令牌（SEC-020、SEC-022） ----------------
-
   /** 握手之后的消息：先看是不是不在对局中也能发的，再按房间的状态交给对局中或终局后的处理 */
   private handle(p: Player, m: C2S) {
     p.lastSeen = this.now();
