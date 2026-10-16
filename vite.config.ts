@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import type { Plugin } from 'vite';
 import { defineConfig } from 'vite';
+import { devCsp } from './scripts/dev-csp.mjs';
 import { pageAssets } from './scripts/page-assets.mjs';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
@@ -34,11 +35,14 @@ const shots = (): Plugin => ({
   },
 });
 
+/** 开发模式：CSP 的 connect-src 另加本机地址（SEC-013，scripts/dev-csp.mjs） */
+const csp = (): Plugin => ({ name: 'yi-dev-csp', apply: 'serve', transformIndexHtml: devCsp });
+
 // 相对路径：打包进 Electron 后从 file:// 载入
 // 例外 COD-055：Vite 只读取配置文件的默认导出
 export default defineConfig({
   base: './',
-  plugins: [shots()],
+  plugins: [shots(), csp()],
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version), // 版本号只写在 package.json 一处
     __PAGE_ASSETS__: JSON.stringify(pageAssets(new URL('./', import.meta.url))), // 只有服务端的下载页面引用（测试中用到）

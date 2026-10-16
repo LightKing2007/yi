@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 性质 | 计划，资料性；实施必须符合 [docs/standards/](../standards/00-general.md)，与规范冲突时以规范为准 |
-| 文件版本 | 1.11 |
+| 文件版本 | 1.12 |
 | 修订日期 | 2026-10-16 |
 | 状态 | 实施中：第 3 章的待决策事项已于 2026-10-16 由项目所有者决定；同日按尚无玩家的前提改为不保留旧数据与旧客户端的兼容，下一版为 3.0.0（[架构决策记录 0009](../adr/0009-no-legacy-compat.md)） |
 | 相关文档 | [roadmap.md](roadmap.md) 第 5 章、[remediation.md](remediation.md) 第 6 章（P2-01、P2-02、P2-04、P2-12）、[03-data.md](../standards/03-data.md)、[07-operations.md](../standards/07-operations.md)、[10-edge-cases.md](../standards/10-edge-cases.md) |
@@ -86,7 +86,7 @@
 | 9 | 日志事件码、监控指标与文档 | OPS-060 至 OPS-075、DOC-003 | 5、6、7 | 未开始 |
 | 6a | 删除旧数据的兼容：`server/store.ts`、`server/db/legacy.ts`、`YI_DATA`、双写，表结构中的 `import` | 架构决策记录 0009 | 6 | 已完成（#175） |
 | 6b | 删除服务端为旧客户端、旧服务端保留的代码：`EXTRA_PORTS`、上线脚本中为 2.0.6 及以前写的分支与 `migrate-layout` | 架构决策记录 0009 | — | 已完成 |
-| 6c | 客户端改连 `wss://yi.lightking.com.cn/ws`，CSP 只放行该地址；`yi.service` 设 `HOST=127.0.0.1` | P2-05；SEC-010 至 SEC-013 | — | 未开始 |
+| 6c | 客户端改连 `wss://yi.lightking.com.cn/ws`，CSP 只放行该地址；`yi.service` 设 `HOST=127.0.0.1` | P2-05；SEC-010 至 SEC-013 | — | 已完成（上线时安装 `yi.service`、关闭 8443） |
 | 10 | 验收、发布 3.0.0 与上线（上线时删除旧段位存档，关闭 8443） | 第 5 章；OPS-040 至 OPS-050 | 1 至 9 | 未开始 |
 
 ### 4.2 第 1 步：准备

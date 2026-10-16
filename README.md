@@ -258,14 +258,14 @@ node dist-server/server.cjs --version
 
 ### 5.5 域名与 TLS
 
-域名 `lightking.com.cn` 的 ICP 备案已于 2026-10-12 通过（渝ICP备2025066996号-2），`yi.lightking.com.cn` 已解析至该服务器。按项目所有者的决定，域名与 TLS 提前于 3.0 启用（路线图第 6 章），过渡期内新旧地址并行。2026-10-13 已完成第 1、2、4 项及第 5 项中的 `YI_DOWNLOAD`；Caddy 为 v2.11.7：
+域名 `lightking.com.cn` 的 ICP 备案已于 2026-10-12 通过（渝ICP备2025066996号-2），`yi.lightking.com.cn` 已解析至该服务器。按项目所有者的决定，域名与 TLS 提前于 3.0 启用（路线图第 6 章），2026-10-13 已完成第 1 至 4 项及第 5 项中的 `YI_DOWNLOAD`；客户端改用 `wss://` 已在代码中完成，随 3.0.0 发布，第 6 项随 3.0.0 上线执行（架构决策记录 0009）；Caddy 为 v2.11.7：
 
 1. Caddy 作为整台服务器的反向代理，监听 80、443 端口并自动申请、续期证书（SEC-010）。Caddy 本身、主配置 `/etc/caddy/Caddyfile`（以 `import /etc/caddy/sites/*.caddy` 引入各站点）、默认拒绝以 IP 或未登记的域名访问、公共响应头由 LightsWeb 仓库管理；
 2. 弈的站点配置为仓库中的 `scripts/server/yi.caddy`，以 `npm run deploy -- install-caddy` 安装：先以整套配置校验，再平滑重载（不中断其他网站与已建立的联机），经 HTTPS 检查下载页面可以访问、`/healthz` 已屏蔽，不通过即恢复原文件；
 3. 服务端按客户端的真实地址限流：经本机代理时取 `X-Forwarded-For` 的最后一项，只信任来自本机的这个头（API-040，`server/clientIp.ts`）；
-4. 阿里云安全组与 UFW 放行 80、443 端口，其中 80 端口仅供证书验证及跳转至 HTTPS；过渡期内 8443 端口保持开放，供旧版客户端直连；
-5. 新版客户端改用 `wss://yi.lightking.com.cn`，`YI_DOWNLOAD` 改为 `https://yi.lightking.com.cn/`，下载页面底部展示备案号；
-6. 3.0 起关闭 8443 端口，并在 `yi.service` 中增加 `Environment=HOST=127.0.0.1`，使服务端仅接受本机反向代理的连接。
+4. 阿里云安全组与 UFW 放行 80、443 端口，其中 80 端口仅供证书验证及跳转至 HTTPS；3.0.0 上线前 8443 端口仍开放，供 2.0.x 客户端直连；
+5. 3.0.0 客户端改用 `wss://yi.lightking.com.cn/ws`，CSP 的 `connect-src` 只放行该地址（SEC-013），`YI_DOWNLOAD` 改为 `https://yi.lightking.com.cn/`，下载页面底部展示备案号；
+6. 3.0.0 上线时以 `install-service` 安装已含 `Environment=HOST=127.0.0.1` 的 `yi.service`，使服务端仅接受本机反向代理的连接，并在安全组与 UFW 中关闭 8443 端口（SEC-011）。
 
 ## 6 多语言
 

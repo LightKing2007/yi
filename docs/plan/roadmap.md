@@ -284,9 +284,9 @@ server/
 |---|---|
 | 域名 | `yi.lightking.com.cn`，A 记录指向服务器 |
 | Caddy | 安装 Caddy，自动申请并续期证书：`yi.lightking.com.cn { reverse_proxy 127.0.0.1:8443 }`。**已实施**（2026-10-13，Caddy v2.11.7）：站点配置为 `scripts/server/yi.caddy`，以 `npm run deploy -- install-caddy` 安装；安全组与 UFW 已放行 80、443；Caddy 与主配置由 LightsWeb 仓库管理（2026-10-13 项目所有者决定），以便同一台服务器承载多个网站 |
-| 服务端只监听本机 | 3.0 服务端设 `HOST=127.0.0.1`；安全组开放 80、443。过渡期若还要服务 2.x 老客户端，可另开一个对外端口，直到强制更新完成 |
-| 客户端地址 | `.env.production`：`VITE_YI_SERVER=wss://yi.lightking.com.cn/ws`，HTTP 接口为 `https://yi.lightking.com.cn/api` |
-| CSP | `index.html` 的 `connect-src` 现在是 `'self' ws: wss:`，改为只允许 `wss://yi.lightking.com.cn https://yi.lightking.com.cn`；开发时由 Vite 注入本机地址 |
+| 服务端只监听本机 | `yi.service` 设 `HOST=127.0.0.1`（6c 已改，随 3.0.0 以 `install-service` 安装）；安全组与 UFW 关闭 8443，只开放 80、443。按架构决策记录 0009 不再为 2.x 客户端保留对外端口 |
+| 客户端地址 | `.env.production`：`VITE_YI_SERVER=wss://yi.lightking.com.cn/ws`（6c 已改，随 3.0.0 发布） |
+| CSP | `index.html` 的 `connect-src` 为 `'self' wss://yi.lightking.com.cn`；开发时由 Vite 插件另加本机地址（6c 已改，`scripts/dev-csp.mjs`） |
 | 真实 IP | 服务端取客户端 IP 时读 `X-Forwarded-For`（只信任来自 127.0.0.1 的这个头），限流和反作弊要用。**已实施**（#115，`server/clientIp.ts`）：取该头的最后一项；带这个头的请求不算本机请求，`/healthz`、`/metrics` 不回应 |
 
 **验收**：`curl -I https://yi.lightking.com.cn` 证书有效；桌面版用新地址可以联机；`ss -lnt` 看到 8443 只监听 127.0.0.1。

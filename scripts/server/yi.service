@@ -14,6 +14,8 @@ WorkingDirectory=/var/lib/yi
 ExecStart=/opt/node/bin/node /opt/yi/current/server.cjs 8443
 EnvironmentFile=/opt/yi/current/env
 Environment=NODE_ENV=production
+# 只接受本机 Caddy 转来的连接，8443 不对外开放（SEC-011）；客户端经 wss://yi.lightking.com.cn/ws 连接
+Environment=HOST=127.0.0.1
 Environment=YI_FILES=/opt/yi/current/download
 Environment=YI_DOWNLOAD=https://yi.lightking.com.cn/
 Restart=always
