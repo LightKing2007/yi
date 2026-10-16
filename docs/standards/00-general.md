@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 文件编号 | YI-STD-001 |
-| 文件版本 | 1.1.52 |
+| 文件版本 | 1.1.53 |
 | 发布日期 | 2026-10-02 |
 | 状态 | 现行；整改项按 [plan/remediation.md](../plan/remediation.md) 的期限实施 |
 | 编制 | LightKing、Claude |
@@ -314,3 +314,4 @@ GB/T 11457—2006 界定的以及下列术语和定义适用于本规范。
 | 1.1.50 | 2026-10-16 | 随阶段 5 第 5 步把段位改由数据库读写，同步 [03-data.md](03-data.md) 中 DAT-001、DAT-002、DAT-041、DAT-042、DAT-044 的“现状”为满足，[07-operations.md](07-operations.md) 第 8 节增加事件码 `db.open-failed`；规定本身不变，规则编号不变 |
 | 1.1.51 | 2026-10-16 | 随阶段 5 第 6 步（对局记录与事务内结算）同步 [03-data.md](03-data.md) 中 DAT-024、DAT-040 的“现状”为满足，[07-operations.md](07-operations.md) 第 8 节增加事件码 `db.games-aborted`、`db.write-failed`；规定本身不变，规则编号不变 |
 | 1.1.52 | 2026-10-16 | 随架构决策记录 0009 删除 JSON 段位存档：[03-data.md](03-data.md) 中 DAT-050 至 DAT-054 的“现状”改为不适用、DAT-001 更新；[07-operations.md](07-operations.md) 删除 `store.*`、`db.legacy-*` 事件码，`server.start` 的字段改为 `dbFile`，指标 `yi_store_write_failures_total` 改为 `yi_db_write_failures_total`；[10-edge-cases.md](10-edge-cases.md) 中存档相关的三个场景改为数据库；规定本身不变，规则编号不变 |
+| 1.1.53 | 2026-10-16 | [07-operations.md](07-operations.md) 中 `db.open-failed` 的说明去掉“与旧存档同步失败”（架构决策记录 0009 已删除同步）；规定本身不变，规则编号不变 |

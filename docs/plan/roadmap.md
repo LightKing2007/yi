@@ -231,10 +231,11 @@ server/
     index.ts            新：打开数据库、PRAGMA 与完整性检查、执行迁移、结构版本检查
     migrations/         新：0001_init.sql、0002_…（DAT-017；随服务端打包进 server.cjs）
     repo.ts             新：全部 SQL 集中于此，预编译一次、参数绑定（DAT-044、DAT-045）
-    legacy.ts           新：与 yi-ratings.json 的同步（见 5.6）
-    ratingStore.ts      新：数据库中的段位存放处，实现 RatingStore 接口，双写旧存档
+    ratingStore.ts      新：数据库中的段位与对局记录存放处，实现 RatingStore 接口
+    startup.ts          新：启动时打开数据库、放弃上次未终局的对局
     backup.ts           新：node server.cjs backup，以 VACUUM INTO 生成快照（见 5.7）
-  store.ts              改：按决定 D5-1 在一个版本周期内继续写入 yi-ratings.json，下一个版本删除
+  record.ts             新：对局记录与每手用时，终局时在事务内结算（DAT-040）
+  store.ts              删除（3.0.0 起不再有 JSON 段位存档，架构决策记录 0009）
 ```
 
 `RoomServer` 保持“与传输无关、时钟可注入”的特点：段位与对局记录经接口注入，测试使用 `:memory:` 数据库。
@@ -493,7 +494,7 @@ src/
   i18n/
 server/
   main.ts config.ts http.ts host.ts hub.ts matchmaking.ts room.ts rating.ts anticheat.ts ratelimit.ts maintenance.ts mail.ts
-  db/{index.ts, migrations/, repo.ts, legacy.ts, ratingStore.ts, backup.ts}
+  db/{index.ts, migrations/, repo.ts, ratingStore.ts, startup.ts, backup.ts}
   admin/{cli.ts, commands/*.ts}
   data/badwords.txt
 electron/          main（单实例、日志）、preload（log、secret.get/set）

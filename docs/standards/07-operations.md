@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.15 |
+| 文件版本 | 1.1.16 |
 | 修订日期 | 2026-10-16 |
 | 规则前缀 | `OPS` |
 
@@ -128,7 +128,7 @@
 | `server.listen-failed` | error | 端口无法监听，服务未启动 | `ports`、`err` |
 | `server.config-invalid` | error | 配置校验失败，拒绝启动 | `variable`、`expected` |
 | `server.maintenance` | info | 进入维护模式（OPS-045） | `games`、`players` |
-| `db.open-failed` | error | 数据库无法打开、已损坏、结构版本过高、迁移或与旧存档同步失败，拒绝启动（DAT-002、DAT-041、VER-012） | `file`、`err` |
+| `db.open-failed` | error | 数据库无法打开、已损坏、结构版本过高或迁移失败，拒绝启动（DAT-002、DAT-041、VER-012） | `file`、`err` |
 | `db.games-aborted` | info | 上次运行时尚未终局的对局已在启动时记为服务端放弃（roadmap.md 第 5.4 节） | `count` |
 | `db.migrated` | info | 数据库结构已升到本程序支持的版本（DAT-041）；已有结构的数据库在迁移前已备份（DAT-042） | `file`、`from`、`to`、`backup` |
 | `db.opened` | info | 数据库已打开，PRAGMA 与完整性检查通过（DAT-002） | `file`、`schemaVersion` |
