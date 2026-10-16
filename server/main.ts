@@ -14,16 +14,10 @@
  * 信号：SIGTERM、SIGINT 以 1001 断开全部连接、落盘后退出（OPS-052）；SIGUSR2 进入维护模式（OPS-045），只能以重启结束。
  */
 import { monitorEventLoopDelay } from 'node:perf_hooks';
-import { EXIT_CONFIG, loadConfig, startEntry } from './config';
-import { startHost } from './host';
+import { EXIT_CONFIG, loadConfig } from './config';
 import { processLogger } from './log';
-import { LAG_RESOLUTION_MS, Metrics, lagSeconds } from './metrics';
-import { startPersistence } from './db/startup';
-
-/** 输出日志汇总行（OPS-063）的间隔 */
-const LOG_FLUSH_MS = 1000;
-/** 指标快照 metrics.snapshot 的间隔（OPS-071） */
-const SNAPSHOT_MS = 60_000;
+import { LAG_RESOLUTION_MS, lagSeconds } from './metrics';
+import { serve } from './serve';
 
 const { config, errors } = loadConfig();
 if (config.version) {
@@ -36,51 +30,28 @@ const logger = processLogger(config, {
   write: line => process.stdout.write(line + '\n'),
   now: Date.now,
 });
-const { log } = logger;
-for (const { variable, expected } of errors) log('error', 'server.config-invalid', { msg: `${variable} 不合法，拒绝启动`, variable, expected });
+for (const { variable, expected } of errors) logger.log('error', 'server.config-invalid', { msg: `${variable} 不合法，拒绝启动`, variable, expected });
 if (errors.length) {
   logger.flush(true);
   process.exit(EXIT_CONFIG);
 }
 
-const { port, extraPorts: extra, host, latest, download, files } = config;
-
-const build = { version: __APP_VERSION__, commit: __APP_COMMIT__ };
-const metrics = new Metrics(build);
-// 事件循环延迟：每次写快照后重新统计，/metrics 与快照中为上一次快照以来的 p99。
-// monitorEventLoopDelay 记录的是相邻两次采样的间隔，含采样周期本身，减去采样周期才是延迟
+// 事件循环延迟：每次写指标快照后重新统计，/metrics 与快照中为上一次快照以来的 p99（server/metrics.ts 的 lagSeconds）
 const lag = monitorEventLoopDelay({ resolution: LAG_RESOLUTION_MS });
 lag.enable();
-const eventLoopLag = () => lagSeconds(lag);
 
-const persistence = startPersistence({ dbFile: config.dbFile, appVersion: __APP_VERSION__, now: Date.now, log });
-if (typeof persistence === 'number') process.exit(persistence); // 失败的原因已写入日志
-const { store } = persistence;
-
-const flusher = setInterval(() => logger.flush(), LOG_FLUSH_MS);
-flusher.unref();
-
-startHost([port, ...extra], { log, store, host, latest, download, files, build, metrics, eventLoopLag })
-  .then(started => {
-    const snapshots = setInterval(() => {
-      log('info', 'metrics.snapshot', { msg: '指标快照', ...metrics.snapshot(started.gauges()) });
-      lag.reset();
-    }, SNAPSHOT_MS);
-    snapshots.unref();
-    log('info', 'server.start', startEntry(config, started.ports));
-    const stop = (signal: NodeJS.Signals) => {
-      log('info', 'server.stop', { msg: '正在关闭', reason: signal });
-      persistence.close();
-      void started.close().then(() => {
-        logger.flush(true);
-        process.exit(0);
-      }); // 关闭不会失败：各端口的 close 回调总会被调用
-    };
-    process.on('SIGINT', stop);
-    process.on('SIGTERM', stop);
-    process.on('SIGUSR2', () => started.server.maintain());
-  })
-  .catch((err: Error) => {
-    log('error', 'server.listen-failed', { msg: `无法在端口 ${[port, ...extra].join('、')} 启动`, ports: [port, ...extra], err });
-    process.exit(1);
-  });
+void serve({
+  config,
+  logger,
+  build: { version: __APP_VERSION__, commit: __APP_COMMIT__ },
+  now: Date.now,
+  exit: code => process.exit(code),
+  onSignal: (signal, handler) => process.on(signal, handler),
+  every: (ms, fn) => {
+    const timer = setInterval(fn, ms);
+    timer.unref();
+    return () => clearInterval(timer);
+  },
+  eventLoopLag: () => lagSeconds(lag),
+  afterSnapshot: () => lag.reset(),
+});
