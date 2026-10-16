@@ -54,7 +54,7 @@
 | P2-02 | 数据库迁移框架与在线备份 | DAT-040 至 DAT-045、DAT-062 | 部分完成（阶段 5 第 4 步：`server/db/index.ts` 打开数据库、PRAGMA 与完整性检查、结构版本检查、按序执行迁移、迁移前备份，`server/db/migrations/` 下的 SQL 文件以文本打包进 `server.cjs`；待实施：接入服务端（第 5 步）、在线备份与每小时备份（第 7 步）） |
 | P2-03 | 协议 v4 错误码体系，`src/shared/errors.ts` | F-17；API-020 至 API-024、[04-api.md](../standards/04-api.md) 第 8 节 | 随阶段 7 |
 | P2-04 | `server/config.ts` 集中解析与校验配置 | ARC-042 | 已完成（阶段 5 第 3 步：`server/config.ts` 解析并校验端口、监听地址、存档路径、最新版本号、下载地址、安装程序目录与日志级别，不合法时逐项写 `server.config-invalid` 并以退出码 78 退出；ESLint 禁止 `server/` 下其他文件读取 `process.env`、`process.argv`；`yi.service` 的 `RestartPreventExitStatus` 加入 78，须以 `install-service` 安装后生效） |
-| P2-05 | TLS 与 CSP 收紧 | F-08；SEC-010 至 SEC-013 | 随阶段 4 |
+| P2-05 | TLS 与 CSP 收紧 | F-08；SEC-010 至 SEC-013 | 部分完成（阶段 5 计划第 6c 步：客户端改连 `wss://yi.lightking.com.cn/ws`，CSP 的 `connect-src` 只放行该地址，开发模式另行注入本机地址；`yi.service` 设 `HOST=127.0.0.1`。待 3.0.0 上线时安装 `yi.service` 并在安全组与 UFW 中关闭 8443） |
 | P2-06 | 指标与告警 | OPS-071 至 OPS-075 | 已完成（#92 `/metrics` 与每分钟的指标快照，随下一个版本上线；D-4 决定暂不建立告警通知；#94 上线后 60 分钟内每分钟自动检查，异常时回滚（OPS-047）） |
 | P2-07 | 性能基准脚本与服务端压测 | TST-041 至 TST-046 | 已完成（`scripts/bench.mjs` 测电脑思考、服务端消息处理、下载页面与打包体积；#95 `scripts/loadtest.mjs` 与“服务端压测”工作流以真实连接压测，2026-10-06 首次实测，TST-045 各项达标。10-edge-cases.md 中“服务器重启后重连风暴”的压测未包括在内） |
 | P2-08 | Electron Fuses | SEC-033 | 已完成（#98：`package.json` 的 `build.electronFuses` 在打包时关闭 `runAsNode`、`NODE_OPTIONS` 与调试参数，开启 `app.asar` 完整性校验与只从 `app.asar` 载入；`scripts/check-fuses.mjs` 在 CI 中核对打包产物，并以未改动的 Electron 为探针。随下一个版本发布生效） |
