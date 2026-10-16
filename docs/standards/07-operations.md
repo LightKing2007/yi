@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.12 |
+| 文件版本 | 1.1.13 |
 | 修订日期 | 2026-10-16 |
 | 规则前缀 | `OPS` |
 
@@ -133,6 +133,7 @@
 | `store.write-recovered` | info | 写盘在失败后恢复成功 | `file`、`attempts` |
 | `store.records-invalid` | warn | 存档中有记录损坏，已按新玩家处理，原文件另存 | `file`、`count`、`copy` |
 | `store.dumped` | error | 退出前写盘失败，段位数据已转储到另一文件 | `file`、`dump` |
+| `db.open-failed` | error | 数据库无法打开、已损坏、结构版本过高、迁移或与旧存档同步失败，拒绝启动（DAT-002、DAT-041、VER-012） | `file`、`err` |
 | `db.legacy-skipped` | warn | 旧段位存档中有记录的键不是设备散列，同步时已跳过（roadmap.md 第 5.6 节） | `count`、`first` |
 | `db.legacy-synced` | info | 启动时旧段位存档与数据库的同步结果：`imported` 表示以文件为准同步进了数据库 | `imported`、`created`、`updated`、`exported` |
 | `db.migrated` | info | 数据库结构已升到本程序支持的版本（DAT-041）；已有结构的数据库在迁移前已备份（DAT-042） | `file`、`from`、`to`、`backup` |

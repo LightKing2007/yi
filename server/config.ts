@@ -26,8 +26,10 @@ export interface ServerConfig {
   extraPorts: number[];
   /** 监听地址（`HOST`），不设时监听所有网卡 */
   host?: string;
-  /** 段位存档的绝对路径（`YI_DATA`，默认为工作目录下的 yi-ratings.json） */
+  /** 段位存档的绝对路径（`YI_DATA`，默认为工作目录下的 yi-ratings.json）；首个数据库版本同时写入（决定 D5-1） */
   dataFile: string;
+  /** 数据库的绝对路径（`YI_DB`，默认为工作目录下的 yi.db） */
+  dbFile: string;
   /** 最新的客户端版本号（`YI_LATEST`） */
   latest?: string;
   /** 新版本的下载地址（`YI_DOWNLOAD`，http 或 https） */
@@ -106,6 +108,7 @@ function collect(argv: string[], env: Env, cwd: string, errors: ConfigError[]) {
     ...ports,
     ...texts,
     dataFile: path.resolve(cwd, given(env.YI_DATA) ?? 'yi-ratings.json'),
+    dbFile: path.resolve(cwd, given(env.YI_DB) ?? 'yi.db'),
     files: files === undefined ? undefined : path.resolve(cwd, files),
     logLevel: logLevel ?? 'info',
     journal: Boolean(env.JOURNAL_STREAM),

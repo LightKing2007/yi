@@ -1,6 +1,6 @@
 /** 联机服务端测试（tests/server*.test.ts）的公共部分：假连接的客户端、以假时钟驱动的服务端与开局的步骤 */
 import { expect } from 'vitest';
-import { MemoryStore, RoomServer, type Conn, type RoomServerOptions, type Session } from '../server/rooms';
+import { MemoryStore, RoomServer, type Conn, type RatingStore, type RoomServerOptions, type Session } from '../server/rooms';
 import { PROTO_VERSION, type C2S, type S2C } from '../src/shared/protocol';
 import { parseS2C } from '../src/shared/parse';
 
@@ -78,7 +78,7 @@ export class Client {
 }
 
 /** 一个以假时钟（从 1000 秒起）驱动的服务端：`advance` 让时间流逝并执行定时检查，`idle` 期间各客户端照常发心跳 */
-export function world(store = new MemoryStore(), opt: RoomServerOptions = {}) {
+export function world(store: RatingStore = new MemoryStore(), opt: RoomServerOptions = {}) {
   let t = 1000;
   const srv = new RoomServer({ now: () => t, random: () => 0.3, store, ...opt });
   const advance = (s: number) => {

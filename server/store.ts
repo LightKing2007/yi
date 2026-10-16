@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Rating, Ratings } from '../src/shared/protocol';
 import type { Log } from './log';
-import type { RatingStore } from './rooms';
 
 /** 每秒的毫秒数 */
 const MS_PER_SEC = 1000;
@@ -84,7 +83,7 @@ const stamp = (ms: number) =>
     .replace(/\.\d+Z$/, 'Z');
 
 /** 段位存档：内存中保存全部记录，变化后延迟写盘 */
-export class FileStore implements RatingStore {
+export class FileStore {
   /** 各玩家的记录。用 Map 而不用普通对象：存档中键为 __proto__ 的记录不会改动对象的原型（审计发现 A-15） */
   private data = new Map<string, Entry>();
   private timer: ReturnType<typeof setTimeout> | undefined;

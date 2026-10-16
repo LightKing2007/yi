@@ -158,6 +158,7 @@ export function hello(ctx: ServerContext, p: Player, m: C2S): Player {
   p.id = ctx.nextPlayer++;
   const token = issueToken(ctx, p);
   p.key = key;
+  ctx.store.seen(p.key, p.name); // 找到或新建游客用户（roadmap.md 第 5.4 节）
   const saved = ctx.store.get(p.key);
   p.ratings = { gomoku: { ...newRating(), ...saved?.gomoku }, go: { ...newRating(), ...saved?.go } };
   ctx.send(p, { t: 'welcome', id: p.id, token, ratings: p.ratings, ...ctx.latest });

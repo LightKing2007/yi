@@ -18,6 +18,8 @@ export interface Conn {
 export interface RatingStore {
   get(key: string): Ratings | undefined;
   set(key: string, r: Ratings, name: string): void;
+  /** 玩家完成握手时调用，记下这台设备与昵称 */
+  seen(key: string, name: string): void;
 }
 
 /** 放在内存中的段位存放处：测试与没有指定存档时使用，进程退出即丢失 */
@@ -29,6 +31,7 @@ export class MemoryStore implements RatingStore {
   set(key: string, r: Ratings) {
     this.m.set(key, r);
   }
+  seen() {} // 内存中不记录设备与昵称
 }
 
 /** 房间的对局设置：棋类、路数、禁手、每步限时（与 queueRules 的结果同形） */

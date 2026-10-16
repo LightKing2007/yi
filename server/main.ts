@@ -4,7 +4,8 @@
  *   PORT          端口
  *   EXTRA_PORTS   另外同时监听的端口，逗号分隔（换端口的过渡期让老版本客户端照常连上，例如 7700）
  *   HOST          监听地址（默认所有网卡，放在反向代理后面时设为 127.0.0.1）
- *   YI_DATA       段位存档（默认当前目录下的 yi-ratings.json）
+ *   YI_DATA       旧段位存档（默认当前目录下的 yi-ratings.json），首个数据库版本同时写入（决定 D5-1）
+ *   YI_DB         数据库（默认当前目录下的 yi.db）
  *   YI_LATEST     最新的客户端版本号（例如 2.0.1），客户端版本较旧时提示更新
  *   YI_DOWNLOAD   新版本的下载地址
  *   YI_FILES      安装包所在的目录：设了就在同一个端口上提供下载页（http://地址:端口/）
@@ -19,7 +20,7 @@ import { EXIT_CONFIG, loadConfig } from './config';
 import { startHost } from './host';
 import { processLogger } from './log';
 import { Metrics, countingLog } from './metrics';
-import { FileStore, StoreLoadError } from './store';
+import { startPersistence } from './db/startup';
 
 /** 输出日志汇总行（OPS-063）的间隔 */
 const LOG_FLUSH_MS = 1000;
@@ -62,15 +63,9 @@ const lag = monitorEventLoopDelay({ resolution: LAG_RESOLUTION_MS });
 lag.enable();
 const eventLoopLag = () => (lag.count ? Math.max(0, lag.percentile(LAG_PERCENTILE) / NS_PER_SEC - LAG_RESOLUTION_MS / MS_PER_SEC) : 0);
 
-let store: FileStore;
-try {
-  store = new FileStore(dataFile, { log: countingLog(log, metrics) });
-} catch (err) {
-  if (!(err instanceof StoreLoadError)) throw err;
-  // 存档损坏时宁可不启动，也不以空数据覆盖原文件（DAT-050）
-  log('error', 'store.load-failed', { msg: err.message, file: dataFile, err });
-  process.exit(err.exitCode);
-}
+const persistence = startPersistence({ dbFile: config.dbFile, dataFile, appVersion: __APP_VERSION__, now: Date.now, log: countingLog(log, metrics) });
+if (typeof persistence === 'number') process.exit(persistence); // 失败的原因已写入日志
+const { store } = persistence;
 
 const flusher = setInterval(() => logger.flush(), LOG_FLUSH_MS);
 flusher.unref();
@@ -86,7 +81,7 @@ startHost([port, ...extra], { log, store, host, latest, download, files, build, 
     log('info', 'server.start', { msg, ports: started.ports, protoRange: [PROTO_VERSION, PROTO_VERSION], dataFile });
     const stop = (signal: NodeJS.Signals) => {
       log('info', 'server.stop', { msg: '正在关闭', reason: signal });
-      store.close();
+      persistence.close();
       void started.close().then(() => {
         logger.flush(true);
         process.exit(0);
