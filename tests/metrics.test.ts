@@ -1,7 +1,6 @@
 /** 服务端的监控指标（server/metrics.ts，OPS-071、OPS-072，07-operations.md 第 9 节）：错误码的对应、Prometheus 文本格式、快照 */
 import { describe, expect, it } from 'vitest';
-import type { LogEntry, LogLevel } from '../server/log';
-import { Metrics, countingLog, errorCode, type Gauges } from '../server/metrics';
+import { Metrics, errorCode, lagSeconds, type Gauges } from '../server/metrics';
 import { PROTO_VERSION } from '../src/shared/protocol';
 import { rejectText } from '../src/shared/reject';
 
@@ -84,15 +83,11 @@ describe('Prometheus 文本格式', () => {
   });
 });
 
-describe('写盘失败的计数', () => {
-  it('store.write-failed 累计一次，日志照常输出', () => {
-    const metrics = new Metrics(build);
-    const seen: [LogLevel, string, LogEntry | undefined][] = [];
-    const log = countingLog((level, event, entry) => seen.push([level, event, entry]), metrics);
-    log('warn', 'store.write-failed', { file: 'x' });
-    log('info', 'store.write-recovered', {});
-    log('error', 'store.write-failed', { file: 'x' });
-    expect(seen.map(([level, event]) => `${level} ${event}`)).toEqual(['warn store.write-failed', 'info store.write-recovered', 'error store.write-failed']);
-    expect(metrics.snapshot(GAUGES).yi_store_write_failures_total).toBe(2);
+describe('事件循环延迟', () => {
+  it('p99 减去 20 毫秒的采样周期，换算为秒；没有样本时为 0，不为负', () => {
+    const histogram = (count: number, p99Ns: number) => ({ count, percentile: (p: number) => (p === 99 ? p99Ns : NaN) });
+    expect(lagSeconds(histogram(10, 25e6))).toBeCloseTo(0.005, 9); // 采样间隔 25 毫秒：延迟 5 毫秒
+    expect(lagSeconds(histogram(10, 15e6))).toBe(0);
+    expect(lagSeconds(histogram(0, 25e6))).toBe(0);
   });
 });

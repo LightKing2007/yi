@@ -38,7 +38,7 @@ function freePort() {
 /** 启动打包好的联机服务端，等到它报告“已启动” */
 async function startGameServer(port) {
   const child = spawn('node', [path.join(ROOT, 'dist-server/server.cjs'), String(port)], {
-    env: { ...process.env, YI_DATA: path.join(tmp, 'yi-ratings.json') },
+    env: { ...process.env, YI_DB: path.join(tmp, 'yi.db') },
     stdio: ['ignore', 'pipe', 'inherit'],
   });
   await new Promise((resolve, reject) => {

@@ -6,9 +6,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { Log } from '../log';
-import { EXIT_DATA_ERROR, EXIT_IO_ERROR } from '../store';
 import { MIGRATIONS, type Migration } from './migrations';
 
+/** 退出码：数据库存在但无法读取、已损坏、结构版本过高或迁移失败（sysexits.h 的 EX_DATAERR） */
+export const EXIT_DATA_ERROR = 65;
+/** 退出码：数据库无法打开（sysexits.h 的 EX_IOERR） */
+export const EXIT_IO_ERROR = 74;
 /** 打开后立即执行的 PRAGMA（DAT-002） */
 const PRAGMAS = ['journal_mode = WAL', 'foreign_keys = ON', 'busy_timeout = 3000', 'synchronous = NORMAL'];
 /** 内存数据库的文件名：测试使用（新建即迁移，不会有需要备份的旧结构） */

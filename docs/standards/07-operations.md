@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.14 |
+| 文件版本 | 1.1.15 |
 | 修订日期 | 2026-10-16 |
 | 规则前缀 | `OPS` |
 
@@ -123,24 +123,16 @@
 
 | 事件码 | 级别 | 说明 | 附加字段 |
 |---|---|---|---|
-| `server.start` | info | 服务启动 | `ports`、`protoRange`、`dataFile` |
+| `server.start` | info | 服务启动 | `ports`、`protoRange`、`dbFile` |
 | `server.stop` | info | 服务停止 | `reason` |
 | `server.listen-failed` | error | 端口无法监听，服务未启动 | `ports`、`err` |
 | `server.config-invalid` | error | 配置校验失败，拒绝启动 | `variable`、`expected` |
 | `server.maintenance` | info | 进入维护模式（OPS-045） | `games`、`players` |
-| `store.load-failed` | error | 存档无法读取或解析，拒绝启动 | `file`、`err` |
-| `store.write-failed` | warn、error | 写盘失败，数据保留在内存中并退避重试：连续第 1、2 次为 warn，第 3 次起为 error（DAT-052） | `file`、`attempts`、`retryMs`；error 级别另含 `err` |
-| `store.write-recovered` | info | 写盘在失败后恢复成功 | `file`、`attempts` |
-| `store.records-invalid` | warn | 存档中有记录损坏，已按新玩家处理，原文件另存 | `file`、`count`、`copy` |
-| `store.dumped` | error | 退出前写盘失败，段位数据已转储到另一文件 | `file`、`dump` |
 | `db.open-failed` | error | 数据库无法打开、已损坏、结构版本过高、迁移或与旧存档同步失败，拒绝启动（DAT-002、DAT-041、VER-012） | `file`、`err` |
 | `db.games-aborted` | info | 上次运行时尚未终局的对局已在启动时记为服务端放弃（roadmap.md 第 5.4 节） | `count` |
-| `db.legacy-skipped` | warn | 旧段位存档中有记录的键不是设备散列，同步时已跳过（roadmap.md 第 5.6 节） | `count`、`first` |
-| `db.legacy-synced` | info | 启动时旧段位存档与数据库的同步结果：`imported` 表示以文件为准同步进了数据库 | `imported`、`created`、`updated`、`exported` |
 | `db.migrated` | info | 数据库结构已升到本程序支持的版本（DAT-041）；已有结构的数据库在迁移前已备份（DAT-042） | `file`、`from`、`to`、`backup` |
 | `db.opened` | info | 数据库已打开，PRAGMA 与完整性检查通过（DAT-002） | `file`、`schemaVersion` |
 | `db.write-failed` | error | 对局记录写入失败（开局、终局或放弃），已回滚；终局写入失败时本局不结算段位，双方收到提示与错误编号（10-edge-cases.md 第 4 节） | `roomId`、`gameId`、`op`、`errorId`、`err` |
-| `store.dump-failed` | error | 退出前写盘与转储都失败，本次运行后的段位变化丢失 | `file`、`dump`、`err` |
 | `player.online` | info | 玩家上线 | `playerId` |
 | `player.offline` | info | 玩家断开 | `playerId`、`code` |
 | `player.resumed` | info | 玩家重连成功 | `playerId`、`roomId` |
@@ -175,6 +167,6 @@
 | `yi_rate_limited_total` | counter | — | 触发限流的次数 |
 | `yi_message_handle_seconds` | histogram | — | 单条消息处理耗时，桶为 0.001、0.005、0.01、0.05、0.1 |
 | `yi_event_loop_lag_seconds` | gauge | — | 事件循环延迟 p99 |
-| `yi_store_write_failures_total` | counter | — | 写盘失败次数 |
+| `yi_db_write_failures_total` | counter | — | 对局记录写入数据库失败的次数（`db.write-failed`） |
 | `yi_downloads_active` | gauge | — | 进行中的下载数 |
 | `process_resident_memory_bytes` | gauge | — | 常驻内存 |

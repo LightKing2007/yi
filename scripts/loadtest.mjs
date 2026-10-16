@@ -136,7 +136,7 @@ async function startServer(tmp) {
   const prefix = (process.env.LOADTEST_SERVER_PREFIX ?? '').split(' ').filter(Boolean);
   const [cmd, ...args] = [...prefix, process.execPath, server, String(port)];
   const child = spawn(cmd, args, {
-    env: { ...process.env, YI_DATA: path.join(tmp, 'ratings.json'), YI_LOG_LEVEL: 'warn' },
+    env: { ...process.env, YI_DB: path.join(tmp, 'yi.db'), YI_LOG_LEVEL: 'warn' },
     stdio: ['ignore', 'pipe', 'inherit'],
   });
   const log = { text: '' };

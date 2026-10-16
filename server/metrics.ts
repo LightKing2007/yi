@@ -4,7 +4,6 @@
  * 并每 60 秒以 metrics.snapshot 事件写入日志。
  */
 import { PROTO_VERSION } from '../src/shared/protocol';
-import type { Log } from './log';
 import { REJECT_TEXTS } from '../src/shared/reject';
 
 /** 单条消息处理耗时的直方图分桶（秒，07-operations.md 第 9 节） */
@@ -48,14 +47,6 @@ export function errorCode(text: string) {
   return REJECT_TEXTS.includes(text) ? 'game.illegal-move' : 'other';
 }
 
-/** 包装日志接口：写盘失败（store.write-failed）时累计 yi_store_write_failures_total，日志照常输出 */
-export function countingLog(log: Log, metrics: Metrics): Log {
-  return (level, event, entry) => {
-    if (event === 'store.write-failed') metrics.inc('yi_store_write_failures_total');
-    log(level, event, entry);
-  };
-}
-
 /** 读取时由调用方给出的仪表 */
 export interface Gauges {
   connections: number;
@@ -76,7 +67,7 @@ const COUNTERS = {
   yi_messages_total: { help: '入站消息数', labels: ['type'] },
   yi_errors_total: { help: '下发的错误码数', labels: ['code'] },
   yi_rate_limited_total: { help: '触发限流的次数', labels: [] },
-  yi_store_write_failures_total: { help: '写盘失败次数', labels: [] },
+  yi_db_write_failures_total: { help: '对局记录写入数据库失败的次数', labels: [] },
 } as const;
 /** 计数器的名称 */
 export type CounterName = keyof typeof COUNTERS;
@@ -179,4 +170,22 @@ export class Metrics {
   snapshot(g: Gauges) {
     return Object.fromEntries(this.samples(g));
   }
+}
+
+/** 事件循环延迟的采样精度（毫秒），即 monitorEventLoopDelay 的 resolution */
+export const LAG_RESOLUTION_MS = 20;
+/** 纳秒换算为秒 */
+const NS_PER_SEC = 1e9;
+/** 毫秒换算为秒 */
+const MS_PER_SEC = 1000;
+/** 事件循环延迟取 p99 */
+const LAG_PERCENTILE = 99;
+
+/**
+ * 事件循环延迟 p99（秒）：monitorEventLoopDelay 记录的是相邻两次采样的间隔，含采样周期本身，减去采样周期才是延迟；
+ * 还没有样本时为 0，不为负
+ */
+export function lagSeconds(histogram: { count: number; percentile(p: number): number }): number {
+  if (!histogram.count) return 0;
+  return Math.max(0, histogram.percentile(LAG_PERCENTILE) / NS_PER_SEC - LAG_RESOLUTION_MS / MS_PER_SEC);
 }

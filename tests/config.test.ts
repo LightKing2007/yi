@@ -1,6 +1,7 @@
 /** 服务端配置（server/config.ts，ARC-042）：默认值、各项的解析与校验、不合法时逐项报出变量名与期望的格式 */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { EXIT_CONFIG, loadConfig, parseConfig } from '../server/config';
+import { EXIT_CONFIG, loadConfig, parseConfig, startEntry } from '../server/config';
+import { PROTO_VERSION } from '../src/shared/protocol';
 
 const CWD = '/srv/yi';
 
@@ -15,7 +16,6 @@ describe('服务端配置的解析', () => {
         port: 8443,
         extraPorts: [],
         host: undefined,
-        dataFile: '/srv/yi/yi-ratings.json',
         dbFile: '/srv/yi/yi.db',
         latest: undefined,
         download: undefined,
@@ -31,7 +31,6 @@ describe('服务端配置的解析', () => {
     const env = {
       EXTRA_PORTS: ' 7700, 8443,7700 ,',
       HOST: '127.0.0.1',
-      YI_DATA: '/var/lib/yi/yi-ratings.json',
       YI_DB: 'state/yi.db',
       YI_LATEST: '2.0.7',
       YI_DOWNLOAD: 'https://yi.lightking.com.cn/',
@@ -45,7 +44,6 @@ describe('服务端配置的解析', () => {
         port: 8443,
         extraPorts: [7700],
         host: '127.0.0.1',
-        dataFile: '/var/lib/yi/yi-ratings.json',
         dbFile: '/srv/yi/state/yi.db',
         latest: '2.0.7',
         download: 'https://yi.lightking.com.cn/',
@@ -65,11 +63,7 @@ describe('服务端配置的优先级与空值', () => {
   });
 
   it('空串与未设置一样', () => {
-    const { config, errors } = parseConfig(
-      [],
-      { PORT: '', HOST: '', YI_LATEST: '', YI_DOWNLOAD: '', YI_FILES: '', YI_DATA: '', YI_DB: '', YI_LOG_LEVEL: '' },
-      CWD,
-    );
+    const { config, errors } = parseConfig([], { PORT: '', HOST: '', YI_LATEST: '', YI_DOWNLOAD: '', YI_FILES: '', YI_DB: '', YI_LOG_LEVEL: '' }, CWD);
     expect(errors).toEqual([]);
     expect(config).toEqual(parseConfig([], {}, CWD).config);
   });
@@ -126,7 +120,7 @@ describe('服务端配置的读取', () => {
   it('loadConfig 读取本进程的命令行参数与环境变量；配置错误的退出码为 78', () => {
     const argv = process.argv;
     process.argv = ['node', 'server.cjs', '9003'];
-    for (const name of ['PORT', 'EXTRA_PORTS', 'HOST', 'YI_DATA', 'YI_DOWNLOAD', 'YI_FILES', 'YI_LOG_LEVEL']) vi.stubEnv(name, ''); // 不受运行测试的环境影响
+    for (const name of ['PORT', 'EXTRA_PORTS', 'HOST', 'YI_DB', 'YI_DOWNLOAD', 'YI_FILES', 'YI_LOG_LEVEL']) vi.stubEnv(name, ''); // 不受运行测试的环境影响
     vi.stubEnv('YI_LATEST', '2.0.8');
     try {
       const { config, errors } = loadConfig();
@@ -137,5 +131,18 @@ describe('服务端配置的读取', () => {
       process.argv = argv;
     }
     expect(EXIT_CONFIG).toBe(78);
+  });
+});
+
+describe('服务启动日志', () => {
+  it('说明文字按配置写出监听地址、最新客户端与安装包目录，并附端口、协议版本范围与数据库文件', () => {
+    const full = parseConfig([], { HOST: '127.0.0.1', YI_LATEST: '3.0.0', YI_FILES: '/opt/yi/current/download' }, CWD).config;
+    expect(startEntry(full, [8443])).toEqual({
+      msg: '弈 联机服务端已启动，地址 127.0.0.1，最新客户端 3.0.0，安装包目录 /opt/yi/current/download',
+      ports: [8443],
+      protoRange: [PROTO_VERSION, PROTO_VERSION],
+      dbFile: '/srv/yi/yi.db',
+    });
+    expect(startEntry(parseConfig([], {}, CWD).config, [9000]).msg).toBe('弈 联机服务端已启动');
   });
 });

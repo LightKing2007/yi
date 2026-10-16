@@ -4,7 +4,7 @@
  */
 import net from 'node:net';
 import path from 'node:path';
-import { PROTO_PORT } from '../src/shared/protocol';
+import { PROTO_PORT, PROTO_VERSION } from '../src/shared/protocol';
 import { parseLogLevel, type LogLevel } from './log';
 
 /** 退出码：配置不合法（sysexits.h 的 EX_CONFIG，ARC-042） */
@@ -26,8 +26,6 @@ export interface ServerConfig {
   extraPorts: number[];
   /** 监听地址（`HOST`），不设时监听所有网卡 */
   host?: string;
-  /** 段位存档的绝对路径（`YI_DATA`，默认为工作目录下的 yi-ratings.json）；首个数据库版本同时写入（决定 D5-1） */
-  dataFile: string;
   /** 数据库的绝对路径（`YI_DB`，默认为工作目录下的 yi.db） */
   dbFile: string;
   /** 最新的客户端版本号（`YI_LATEST`） */
@@ -107,7 +105,6 @@ function collect(argv: string[], env: Env, cwd: string, errors: ConfigError[]) {
   return {
     ...ports,
     ...texts,
-    dataFile: path.resolve(cwd, given(env.YI_DATA) ?? 'yi-ratings.json'),
     dbFile: path.resolve(cwd, given(env.YI_DB) ?? 'yi.db'),
     files: files === undefined ? undefined : path.resolve(cwd, files),
     logLevel: logLevel ?? 'info',
@@ -140,4 +137,12 @@ export function parseConfig(argv: string[], env: Env, cwd: string): ConfigResult
 /** 读取本进程的命令行参数与环境变量并解析：服务端只在此处读取二者 */
 export function loadConfig(): ConfigResult {
   return parseConfig(process.argv.slice(2), process.env, process.cwd());
+}
+
+/** 服务启动日志（`server.start`）的内容：说明文字、实际监听的端口、支持的协议版本范围与数据库文件 */
+export function startEntry(config: ServerConfig, ports: number[]) {
+  const where = config.host ? `，地址 ${config.host}` : '';
+  const latest = config.latest ? `，最新客户端 ${config.latest}` : '';
+  const files = config.files ? `，安装包目录 ${config.files}` : '';
+  return { msg: `弈 联机服务端已启动${where}${latest}${files}`, ports, protoRange: [PROTO_VERSION, PROTO_VERSION], dbFile: config.dbFile };
 }
