@@ -4,7 +4,6 @@
 #   sh deploy-remote.sh install 版本号 [--allow-downgrade] [--no-restart] 建版本目录、切换、重启并检查，不通过即自动回滚
 #   sh deploy-remote.sh restart                                         重启（有对局时先进入维护模式），不通过即自动回滚
 #   sh deploy-remote.sh rollback                                        立即换回上一版本并重启（再执行一次又换回来）
-#   sh deploy-remote.sh migrate                                         由旧的目录结构改为版本目录（只做一次，不重启）
 #   sh deploy-remote.sh status                                          打出线上的版本、对局数、是否维护中与连接数
 #   sh deploy-remote.sh service                                         安装同目录下的 yi.service（SEC-045），重启并检查，不通过即恢复原文件
 #   sh deploy-remote.sh offsite                                         安装异地加密备份（P1-13）：程序、单元文件与配置，并立即上传一次
@@ -81,7 +80,7 @@ fail() { say "✗ $1"; exit 1; }
 # 追加一行部署日志（OPS-048）：时间 操作者 操作 版本 结果
 record() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $WHO $1 $2 $3" >>"$STATE/deploy.log"; }
 
-# 健康检查（API-061）：打出“版本号 提交号 活跃对局数 是否维护中”；连不上或没有 /healthz（2.0.4 及以前）时返回非零
+# 健康检查（API-061）：打出“版本号 提交号 活跃对局数 是否维护中”；连不上时返回非零
 health() {
   "$NODE" -e 'fetch("http://127.0.0.1:" + process.argv[1] + "/healthz")
     .then(r => (r.ok ? r.json() : Promise.reject(r.status)))
@@ -94,10 +93,9 @@ linked() { if [ -L "$ROOT/$1" ]; then basename "$(readlink "$ROOT/$1")"; fi; }
 # 版本目录 $1 中服务端的提交号（server.cjs --version 打出“版本号（提交号）”）
 commit_of() { "$NODE" "$ROOT/releases/$1/server.cjs" --version | sed 's/.*（\(.*\)）.*/\1/'; }
 
-# 有活跃对局时进入维护模式，等对局结束，至多 30 分钟（OPS-045）。线上版本没有健康检查时不发信号：
-# 2.0.4 及以前的服务端没有处理 SIGUSR2，收到即退出
+# 有活跃对局时进入维护模式，等对局结束，至多 30 分钟（OPS-045）。连不上健康检查（服务端未在运行）时无从得知对局数，直接重启
 drain() {
-  h=$(health) || { say "线上的服务端没有健康检查，无法得知对局数，直接重启"; return 0; }
+  h=$(health) || { say "连不上线上服务端的健康检查，无法得知对局数，直接重启"; return 0; }
   set -- $h
   [ "$3" -eq 0 ] && return 0
   say "有 ${3} 局正在进行：进入维护模式，不再开始新的对局，等现有对局结束后重启（至多 30 分钟）"
@@ -137,20 +135,11 @@ swap() {
   ln -sfn "releases/$prev" "$ROOT/current"
 }
 
-# 回滚后的检查：上一版本若没有健康检查（2.0.4 及以前），以服务处于运行状态为准
-rolled_back() {
-  restarted && return 0
-  health >/dev/null && return 1
-  sleep 1
-  systemctl is-active --quiet yi && say "（上一版本没有健康检查，以服务处于运行状态为准）"
-}
-
 # 重启并检查；不通过时自动回滚到上一版本，写 deploy.rolled-back 日志（OPS-046）。$1 为部署日志中的操作名
 finish() {
   ver=$(linked current)
   drain
   if restarted; then
-    rm -rf "$ROOT/server.cjs" "$ROOT/server.cjs.prev" "$ROOT/download" # 旧的目录结构留下的文件（migrate 之后的第一次上线）
     record "$1" "$ver" ok
     say "✓ $ver 已上线，健康检查通过"
     start_watch "$ver"
@@ -167,7 +156,7 @@ auto_rollback() {
   prev=$(linked current)
   printf '{"ts":"%s","level":"error","event":"deploy.rolled-back","msg":"%s，已自动回滚","version":"%s","target":"%s","reason":"%s"}\n' \
     "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" "$4" "$2" "$prev" "$3" | systemd-cat -t yi-deploy -p err
-  if rolled_back; then r=rolled-back; else r=fail; fi
+  if restarted; then r=rolled-back; else r=fail; fi
   record "$1" "$2" "$r"
   [ "$r" = rolled-back ] || fail "回滚到 ${prev} 后仍不正常，请立即查看 journalctl -u yi"
   fail "已回滚到 ${prev}，${2} 留作 previous"
@@ -206,7 +195,7 @@ sample() {
   head -n 1 "$WATCH_DIR/$1" | cut -d' ' -f2
 }
 
-# 入站消息总数（/metrics 的 yi_messages_total 各项之和）；连不上或没有 /metrics（2.0.6 及以前）时打出空串
+# 入站消息总数（/metrics 的 yi_messages_total 各项之和）；连不上时打出空串
 messages_total() {
   "$NODE" -e 'fetch("http://127.0.0.1:" + process.argv[1] + "/metrics")
     .then(r => (r.ok ? r.text() : Promise.reject(r.status)))
@@ -240,9 +229,9 @@ cmd_watch() {
   fi
 }
 
-# 检查能否上线 $1：已改为版本目录、不是线上版本、不低于线上版本（除非 --allow-downgrade）
+# 检查能否上线 $1：是版本目录的结构、不是线上版本、不低于线上版本（除非 --allow-downgrade）
 check_version() {
-  [ -L "$ROOT/current" ] || fail '服务器还是旧的目录结构，先执行 npm run deploy -- migrate-layout'
+  [ -L "$ROOT/current" ] || fail "服务器上没有版本目录（$ROOT/current），不是按 OPS-043 部署的结构"
   cur=$(linked current)
   [ "$1" != "$cur" ] || fail "线上已是 $1"
   if version_lt "$1" "$cur" && [ "$2" != 1 ]; then fail "$1 低于线上的 ${cur}，确需降级时加 --allow-downgrade（OPS-042）"; fi
@@ -260,7 +249,7 @@ cmd_status() {
     set -- $h
     say "线上 ${1}（${2}）：${3} 局正在进行$([ "$4" = true ] && echo '，维护模式中')"
   else
-    say "线上 $(linked current)：没有健康检查"
+    say "线上 $(linked current)：连不上健康检查"
   fi
   say "服务器上现在有 $(ss -Htn state established "( sport = :$PORT )" | wc -l | tr -d ' ') 条连接（正在下棋或下载的人）"
 }
@@ -303,45 +292,13 @@ cmd_rollback() {
   swap || fail '没有上一版本可以换回'
   v=$(linked current)
   say "换回 ${v}，立即重启（不等待对局结束，OPS-044）"
-  if rolled_back; then
+  if restarted; then
     record rollback "$v" ok
     say "✓ 已回滚到 $v"
   else
     record rollback "$v" fail
     fail "回滚到 ${v} 后健康检查不通过，请立即查看 journalctl -u yi"
   fi
-}
-
-# 改为版本目录：当前的服务端与安装程序复制为 releases/版本号/，YI_LATEST 移入其中的 env；
-# yi.service 改为经 current 读取三者，下一次重启起生效。原来的文件在下一次上线成功后删除
-cmd_migrate() {
-  [ ! -e "$ROOT/current" ] || fail '已是版本目录的结构'
-  [ -f "$ROOT/server.cjs" ] && [ -d "$ROOT/download" ] || fail "没有 $ROOT/server.cjs 或 $ROOT/download/"
-  built=$("$NODE" "$ROOT/server.cjs" --version)
-  v=${built%%（*}
-  latest=$(sed -n 's/^Environment=YI_LATEST=//p' "$UNIT_FILE")
-  [ -n "$latest" ] || fail "$UNIT_FILE 中没有 YI_LATEST"
-  awk '
-    /^Environment=YI_LATEST=/ { next }
-    /^Environment=YI_FILES=/ { print "Environment=YI_FILES=/opt/yi/current/download"; next }
-    /^ExecStart=/ { sub(/ \/opt\/yi\/server\.cjs/, " /opt/yi/current/server.cjs"); print; print "EnvironmentFile=/opt/yi/current/env"; next }
-    { print }' "$UNIT_FILE" >"$UNIT_FILE.new"
-  grep -q '^ExecStart=.* /opt/yi/current/server\.cjs' "$UNIT_FILE.new" && grep -q '^Environment=YI_FILES=/opt/yi/current/download$' "$UNIT_FILE.new" ||
-    { rm -f "$UNIT_FILE.new"; fail "$UNIT_FILE 的 ExecStart 或 YI_FILES 与预期不符，未改动"; }
-  dest=$ROOT/releases/$v
-  rm -rf "$dest.new"
-  mkdir -p "$ROOT/releases" "$dest.new"
-  cp -p "$ROOT/server.cjs" "$dest.new/server.cjs"
-  cp -pR "$ROOT/download" "$dest.new/download"
-  echo "YI_LATEST=$latest" >"$dest.new/env"
-  mv "$dest.new" "$dest"
-  ln -sfn "releases/$v" "$ROOT/current"
-  cp -p "$UNIT_FILE" "$ROOT/yi.service.before-migrate"
-  diff -u "$UNIT_FILE" "$UNIT_FILE.new" || true
-  mv "$UNIT_FILE.new" "$UNIT_FILE"
-  systemctl daemon-reload
-  record config 'P1-09 migrate-layout' ok # 与 install-backup 等配置修改的记录格式一致
-  say "✓ 已改为版本目录：current → releases/${v}；yi.service 下一次重启起生效（原文件备份为 $ROOT/yi.service.before-migrate）"
 }
 
 # 安装 yi.service（SEC-045）：先校验并离线评分，评分高于 SCORE_MAX 时不装；装好后按上线的方式重启（有对局时先进入维护模式）并做健康检查，
@@ -367,7 +324,7 @@ cmd_service() {
   say '✗ 重启后 30 秒内健康检查没有通过：恢复原来的 yi.service'
   cp -p "$ROOT/yi.service.prev" "$UNIT_FILE"
   systemctl daemon-reload
-  if rolled_back; then r=restored; else r=fail; fi
+  if restarted; then r=restored; else r=fail; fi
   record config 'P1-11 install-service' "$r"
   [ "$r" = restored ] || fail '恢复原来的 yi.service 后仍不正常，请立即查看 journalctl -u yi'
   fail '已恢复原来的 yi.service'
@@ -540,11 +497,10 @@ case "$cmd" in
   install) locked install "$@" && { [ -z "$from" ] || receive "$from"; } && cmd_install "$1" "$allow" "$restart" ;;
   restart) locked restart "$@" && finish restart ;;
   rollback) locked rollback "$@" && cmd_rollback ;;
-  migrate) locked migrate "$@" && cmd_migrate ;;
   service) locked service "$@" && cmd_service ;;
   offsite) locked offsite "$@" && cmd_offsite ;;
   watch) locked watch "$@" && cmd_watch ;;
   caddy) locked caddy "$@" && cmd_caddy ;;
   deploy-user) locked deploy-user "$@" && cmd_deploy_user ;;
-  *) fail "用法：sh deploy-remote.sh preflight|install|restart|rollback|migrate|status|service|offsite|watch|caddy|deploy-user" ;;
+  *) fail "用法：sh deploy-remote.sh preflight|install|restart|rollback|status|service|offsite|watch|caddy|deploy-user" ;;
 esac

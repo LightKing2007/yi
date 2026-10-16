@@ -118,22 +118,18 @@ gh release view v2.0.3 --web
 npm run deploy -- 2.0.5
 ```
 
-上线、`restart`、`rollback`、`status` 以部署用户 `deploy` 登录，经 sudo 执行服务器上 root 所有的 `/usr/local/sbin/yi-deploy`（SEC-044）。它是 `scripts/server/deploy-remote.sh` 的副本，二者不一致时上线脚本在上传前中止；该脚本有改动时，须先以 root 执行 `npm run deploy -- install-deploy-user` 更新，这一步安装以 root 身份运行的配置，须经项目所有者同意。其余 `install-*` 与 `migrate-layout` 同样以 root 执行。
+上线、`restart`、`rollback`、`status` 以部署用户 `deploy` 登录，经 sudo 执行服务器上 root 所有的 `/usr/local/sbin/yi-deploy`（SEC-044）。它是 `scripts/server/deploy-remote.sh` 的副本，二者不一致时上线脚本在上传前中止；该脚本有改动时，须先以 root 执行 `npm run deploy -- install-deploy-user` 更新，这一步安装以 root 身份运行的配置，须经项目所有者同意。其余 `install-*` 同样以 root 执行。
 
-6.2 服务器上的文件按版本存放（OPS-043）：`/opt/yi/releases/版本号/` 下为服务端 `server.cjs`、安装程序目录 `download/` 与记录 `YI_LATEST` 的 `env`；`/opt/yi/current`、`/opt/yi/previous` 为指向当前与上一版本目录的符号链接，`yi.service` 经 `current` 读取三者。服务器上只保留这两个版本。由旧的目录结构改为版本目录只需一次，不重启服务端，自下一次重启起生效：
-
-```bash
-npm run deploy -- migrate-layout
-```
+6.2 服务器上的文件按版本存放（OPS-043）：`/opt/yi/releases/版本号/` 下为服务端 `server.cjs`、安装程序目录 `download/` 与记录 `YI_LATEST` 的 `env`；`/opt/yi/current`、`/opt/yi/previous` 为指向当前与上一版本目录的符号链接，`yi.service` 经 `current` 读取三者。服务器上只保留这两个版本。
 
 6.3 上线脚本依次完成：
 
-1. 从该 Release 下载安装程序、服务端与 `SHA256SUMS`，按 `SHA256SUMS` 核对；2.0.4 及以前的 Release 没有 `SHA256SUMS`，不能以本脚本上线；
+1. 从该 Release 下载安装程序、服务端与 `SHA256SUMS`，按 `SHA256SUMS` 核对；
 2. 上传前检查：服务器已改为版本目录；版本号不低于线上版本，低于时必须加 `--allow-downgrade`，与线上相同时中止（OPS-042）；磁盘可用空间不少于上传量的两倍。随后显示线上的版本号、活跃对局数与连接数；
 3. 询问上线后是否立即重启。加 `--restart` 参数时不询问，直接重启；
 4. 传到服务器后，在服务器上以 `flock /run/yi-deploy.lock` 加锁执行其余步骤（OPS-041），另一个上线过程持有锁时中止。再核对一次 `SHA256SUMS`，任一不符即中止，线上的文件保持不动（OPS-031）；
 5. 建立新版本目录，`current` 指向新版本，`previous` 指向原来的版本，删除更早的版本目录；
-6. 重启前读取 `/healthz` 中的活跃对局数：为 0 时立即重启；不为 0 时进入维护模式，等待对局结束后重启，至多 30 分钟，超时后强制重启（OPS-045）。线上版本没有 `/healthz`（2.0.4 及以前）时，不进入维护模式，直接重启；
+6. 重启前读取 `/healthz` 中的活跃对局数：为 0 时立即重启；不为 0 时进入维护模式，等待对局结束后重启，至多 30 分钟，超时后强制重启（OPS-045）。连不上 `/healthz`（服务端未在运行）时无从得知对局数，直接重启；
 7. 重启后 30 秒内，`/healthz` 返回的版本号与提交号须等于新版本，否则自动回滚到上一版本，写 `deploy.rolled-back` 日志（OPS-046）；
 8. 在 `/var/lib/yi/deploy.log` 追加一行（OPS-048），结果为 `ok`、`installed`（未重启）、`rolled-back` 或 `fail`。本次上线的完整输出保存在 `/var/lib/yi/deploy-last.log`；
 9. 上线成功后，建立定时器 `yi-watch`，60 分钟内每分钟检查一次：5 分钟内重启 ≥ 3 次、健康检查连续 3 次失败、5 分钟内服务端内部错误（`internal.error`）占消息 ≥ 1%（少于 100 条消息时不计），任一满足即自动回滚，写 `deploy.rolled-back` 日志，部署日志的操作者记为 `watch`（OPS-047）。查看检查是否仍在进行：`ssh deploy@47.108.181.240 systemctl list-timers yi-watch.timer`。手动回滚时自动停止检查。

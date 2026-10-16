@@ -78,11 +78,11 @@ export async function serve(deps: ServeDeps): Promise<void> {
   deps.onSignal('SIGUSR2', () => started.server.maintain());
 }
 
-/** 监听主端口与另外的端口；失败时写 server.listen-failed 日志并返回 undefined */
+/** 监听端口；失败时写 server.listen-failed 日志并返回 undefined */
 async function listen(deps: ServeDeps, store: RatingStore, metrics: Metrics): Promise<Host | undefined> {
   const { config } = deps;
   const { host, latest, download, files } = config;
-  const ports = [config.port, ...config.extraPorts];
+  const ports = [config.port];
   try {
     return await startHost(ports, { log: deps.logger.log, store, host, latest, download, files, build: deps.build, metrics, eventLoopLag: deps.eventLoopLag });
   } catch (err) {

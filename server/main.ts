@@ -2,7 +2,6 @@
  * 弈 · 联机服务端：node server.cjs [端口]（默认 8443）；node server.cjs --version 只打出版本号与提交号。
  * 环境变量（由 server/config.ts 解析并校验，不合法时写 server.config-invalid 并以退出码 78 退出，ARC-042）：
  *   PORT          端口
- *   EXTRA_PORTS   另外同时监听的端口，逗号分隔（换端口的过渡期让老版本客户端照常连上，例如 7700）
  *   HOST          监听地址（默认所有网卡，放在反向代理后面时设为 127.0.0.1）
  *   YI_DB         数据库（默认当前目录下的 yi.db）
  *   YI_LATEST     最新的客户端版本号（例如 2.0.1），客户端版本较旧时提示更新

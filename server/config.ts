@@ -22,8 +22,6 @@ export interface ServerConfig {
   version: boolean;
   /** 主端口：命令行第一个参数，其次 `PORT`，默认 8443 */
   port: number;
-  /** 另外同时监听的端口（`EXTRA_PORTS`，逗号分隔），已去掉与主端口相同的 */
-  extraPorts: number[];
   /** 监听地址（`HOST`），不设时监听所有网卡 */
   host?: string;
   /** 数据库的绝对路径（`YI_DB`，默认为工作目录下的 yi.db） */
@@ -66,21 +64,12 @@ const given = (value: string | undefined) => (value ? value : undefined);
 /** 记下一项校验失败 */
 type Fail = (variable: string, expected: string) => void;
 
-/** 主端口与另外监听的端口 */
+/** 监听的端口：命令行第一个参数，其次 `PORT`，默认 8443 */
 function parsePorts(argv: string[], env: Env, fail: Fail) {
   const portText = argv[0] ?? given(env.PORT);
   const port = portText === undefined ? PROTO_PORT : parsePort(portText);
   if (port === null) fail(argv[0] === undefined ? 'PORT' : '命令行参数（端口）', '1 至 65535 的整数');
-  const extraPorts: number[] = [];
-  for (const item of (env.EXTRA_PORTS ?? '')
-    .split(',')
-    .map(text => text.trim())
-    .filter(Boolean)) {
-    const n = parsePort(item);
-    if (n === null) fail('EXTRA_PORTS', '以逗号分隔的端口号，每个为 1 至 65535 的整数');
-    else if (n !== port && !extraPorts.includes(n)) extraPorts.push(n);
-  }
-  return { port: port ?? PROTO_PORT, extraPorts };
+  return { port: port ?? PROTO_PORT };
 }
 
 /** 监听地址、最新版本号与下载地址：未设置时为 undefined */

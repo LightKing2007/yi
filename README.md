@@ -203,7 +203,6 @@ node dist-server/server.cjs --version
 | 变量 | 说明 |
 |---|---|
 | `PORT` | 端口，亦可在命令行参数中指定，默认为 8443 |
-| `EXTRA_PORTS` | 同时监听的其他端口，以逗号分隔；用于更换端口的过渡期，使旧版客户端仍可连接，例如 `7700` |
 | `HOST` | 监听地址，默认为全部网卡；置于反向代理之后时应设为 `127.0.0.1` |
 | `YI_DB` | 数据库文件的路径，默认为运行目录下的 `yi.db` |
 | `YI_LATEST` | 最新客户端版本号，例如 `2.0.2`；客户端版本较旧时，开始菜单及联机对战页面提示有新版本 |
@@ -217,7 +216,7 @@ node dist-server/server.cjs --version
 
 ### 5.3 线上部署
 
-线上服务器为 47.108.181.240（域名 `yi.lightking.com.cn`，Ubuntu 24.04），部署结构如下。服务端与安装程序按版本存放，为执行 `npm run deploy -- migrate-layout`（整改项 P1-09，只需一次）之后的结构：
+线上服务器为 47.108.181.240（域名 `yi.lightking.com.cn`，Ubuntu 24.04），部署结构如下。服务端与安装程序按版本存放（整改项 P1-09，OPS-043）：
 
 | 位置 | 内容 |
 |---|---|
@@ -306,7 +305,7 @@ src/
                       check.ts 取值校验函数（联机消息与本地存储共用）；reject.ts 不合法着法的提示文字
   ui/                 Preact 界面：panels（菜单、对局、设置、更多）、online（联机对战）、widgets、styles.css、info（“更多”页面的文字）
   i18n/               多语言
-server/               rooms.ts 队列、配对、房间、对局与段位（与传输无关）；ratelimit.ts 限流与违规累计；db/ 数据库（打开与迁移、仓储、段位与对局记录）；record.ts 对局记录与每手用时；host.ts 接入 WebSocket（可同时监听多个端口）；
+server/               rooms.ts 队列、配对、房间、对局与段位（与传输无关）；ratelimit.ts 限流与违规累计；db/ 数据库（打开与迁移、仓储、段位与对局记录）；record.ts 对局记录与每手用时；serve.ts 服务端的运行（启动、关闭、信号）；main.ts 入口（读取配置后调用 serve.ts）；host.ts 接入 WebSocket（可同时监听多个端口）；
                       files.ts 同一端口上的下载服务（page.ts 页面、pageStyle.ts 样式）；main.ts 入口
 electron/             桌面版主进程（窗口、单实例、匹配成功时的任务栏提醒、错误日志）及预加载脚本
 tests/                vitest：rules（规则与人机）、record（规则层与棋谱）、session（会话与座位）、protocol（消息校验与昵称清洗）、server（联机服务端）、ratelimit（限流）、
