@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.6 |
+| 文件版本 | 1.1.7 |
 | 修订日期 | 2026-10-16 |
 | 规则前缀 | `COD` |
 
@@ -32,7 +32,7 @@
 | COD-013 | A | 类、接口、类型别名、枚举、Preact 组件 | PascalCase；严禁 `I`、`T` 等匈牙利前缀（泛型参数除外） | `BoardView`、`Seat`、`UpdateNote` | 满足 |
 | COD-014 | A | 函数、方法、变量、参数、属性 | lowerCamelCase | `rankIndex`、`lastSeen` | 满足 |
 | COD-015 | A | 模块级不可变常量（原始值、冻结表） | UPPER_SNAKE_CASE；表示时间、大小的常量必须以单位结尾：`_MS`、`_SECS`、`_BYTES`、`_PX` | `GRACE_SECS`、`MAX_MSG_BYTES` | 部分满足（`MAX_MSG`、`LOG_MAX` 无单位） |
-| COD-016 | A | 环境变量 | `YI_` 前缀加 UPPER_SNAKE_CASE。存量的 `PORT`、`HOST`、`EXTRA_PORTS` 允许保留，严禁新增无前缀变量 | `YI_LATEST` | 部分满足 |
+| COD-016 | A | 环境变量 | `YI_` 前缀加 UPPER_SNAKE_CASE。存量的 `PORT`、`HOST` 允许保留，严禁新增无前缀变量 | `YI_LATEST` | 部分满足 |
 | COD-017 | A | `localStorage` 键 | `yi.` 前缀加 lowerCamelCase | `yi.settings` | 满足 |
 | COD-018 | A | 协议消息类型 `t`、消息字段 | lowerCamelCase | `resumeFailed` | 满足 |
 | COD-019 | A | 枚举性字符串值（错误码、终局原因、禁着原因） | kebab-case；错误码另加领域前缀，见 [04-api.md](04-api.md) 第 3 节 | `off-board`、`room.full` | 满足 |

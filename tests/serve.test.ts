@@ -85,18 +85,6 @@ describe('服务端的运行', () => {
     await expect(fetch(`http://127.0.0.1:${port}/healthz`)).rejects.toThrow();
     expect(fs.existsSync(path.join(dir, 'yi.db-wal'))).toBe(false); // 最后一个连接关闭时 SQLite 做检查点并删除 WAL 文件
   });
-
-  it('同时监听 EXTRA_PORTS 中的端口', async () => {
-    const probe = net.createServer();
-    await new Promise<void>(resolve => probe.listen(0, '127.0.0.1', resolve));
-    const extra = (probe.address() as net.AddressInfo).port;
-    await new Promise<void>(resolve => probe.close(() => resolve()));
-    const run = harness(0, { EXTRA_PORTS: String(extra) });
-    await serve(run.deps);
-    expect((run.lines.at(-1)?.ports as number[]).slice(1)).toEqual([extra]);
-    run.signals.get('SIGTERM')?.();
-    await exited(run.exits);
-  });
 });
 
 describe('服务端运行时出错', () => {

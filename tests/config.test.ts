@@ -14,7 +14,6 @@ describe('服务端配置的解析', () => {
       config: {
         version: false,
         port: 8443,
-        extraPorts: [],
         host: undefined,
         dbFile: '/srv/yi/yi.db',
         latest: undefined,
@@ -27,9 +26,8 @@ describe('服务端配置的解析', () => {
     });
   });
 
-  it('线上的配置逐项解析：相对路径按工作目录解析，另外的端口去掉重复与主端口', () => {
+  it('线上的配置逐项解析：相对路径按工作目录解析', () => {
     const env = {
-      EXTRA_PORTS: ' 7700, 8443,7700 ,',
       HOST: '127.0.0.1',
       YI_DB: 'state/yi.db',
       YI_LATEST: '2.0.7',
@@ -42,7 +40,6 @@ describe('服务端配置的解析', () => {
       config: {
         version: false,
         port: 8443,
-        extraPorts: [7700],
         host: '127.0.0.1',
         dbFile: '/srv/yi/state/yi.db',
         latest: '2.0.7',
@@ -77,11 +74,6 @@ describe('服务端配置的校验', () => {
     }
     expect(failed(['65535'], {})).toEqual([]);
     expect(failed(['1'], {})).toEqual([]);
-  });
-
-  it('另外的端口中有一个不合法即报错，不再悄悄忽略', () => {
-    expect(failed([], { EXTRA_PORTS: '7700,abc' })).toEqual(['EXTRA_PORTS']);
-    expect(failed([], { EXTRA_PORTS: '70000' })).toEqual(['EXTRA_PORTS']);
   });
 
   it('监听地址为 IP 地址或主机名', () => {
@@ -120,7 +112,7 @@ describe('服务端配置的读取', () => {
   it('loadConfig 读取本进程的命令行参数与环境变量；配置错误的退出码为 78', () => {
     const argv = process.argv;
     process.argv = ['node', 'server.cjs', '9003'];
-    for (const name of ['PORT', 'EXTRA_PORTS', 'HOST', 'YI_DB', 'YI_DOWNLOAD', 'YI_FILES', 'YI_LOG_LEVEL']) vi.stubEnv(name, ''); // 不受运行测试的环境影响
+    for (const name of ['PORT', 'HOST', 'YI_DB', 'YI_DOWNLOAD', 'YI_FILES', 'YI_LOG_LEVEL']) vi.stubEnv(name, ''); // 不受运行测试的环境影响
     vi.stubEnv('YI_LATEST', '2.0.8');
     try {
       const { config, errors } = loadConfig();

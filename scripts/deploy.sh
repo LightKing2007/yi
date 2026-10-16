@@ -5,7 +5,6 @@
 #   npm run deploy -- 2.0.5 --allow-downgrade  版本低于线上时须加（OPS-042）
 #   npm run deploy -- restart                  重启以完成上线（上线时选了不重启）
 #   npm run deploy -- rollback                 立即换回上一版本并重启（再执行一次又换回来）
-#   npm run deploy -- migrate-layout           服务器由旧的目录结构改为版本目录（只做一次，不重启）
 #   npm run deploy -- status                   查看线上的版本、对局数、是否维护中与连接数（健康检查，API-061）
 #   npm run deploy -- install-service          安装或更新 scripts/server/yi.service（加固选项见 SEC-045），重启并检查，不通过即恢复原文件
 #   npm run deploy -- install-offsite          安装异地加密备份（P1-13）：询问 OSS 的存储桶、地域、访问密钥与 age 公钥，立即上传一次；
@@ -17,7 +16,7 @@
 #   npm run deploy -- install-deploy-user      建立或更新部署用户 deploy、/usr/local/sbin/yi-deploy 与 sudo 白名单（SEC-044）；
 #                                              scripts/server/deploy-remote.sh 改动后须重新执行，否则日常上线会因版本不一致而中止
 # 身份（SEC-044）：上线、restart、rollback、status 以部署用户 deploy 登录，经 sudo 执行服务器上 root 所有的 yi-deploy；
-# 各 install-* 与 migrate-layout 安装以 root 身份运行的配置，以 root 登录执行，每次须经项目所有者同意
+# 各 install-* 安装以 root 身份运行的配置，以 root 登录执行，每次须经项目所有者同意
 # 安装程序和服务端都取自同一个 Release 的附件，与标签上的代码一一对应；下载后与传到服务器后各按 Release 的 SHA256SUMS 核对一次（OPS-031）。
 # 服务器上的步骤在 scripts/server/deploy-remote.sh：加锁、版本目录、维护模式、健康检查与自动回滚、部署日志（OPS-041 至 OPS-048）。
 set -eu
@@ -106,10 +105,6 @@ case "${1:-}" in
     daily "$1"
     exit 0
     ;;
-  migrate-layout)
-    remote migrate
-    exit 0
-    ;;
   install-service)
     remote service "$HERE/yi.service"
     exit 0
@@ -183,7 +178,7 @@ if [ "${1:-}" = install-journald ]; then
 fi
 
 V=${1:-}
-echo "$V" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || fail '用法：npm run deploy -- 版本号 [--restart] [--allow-downgrade]，或 npm run deploy -- restart、rollback、status、migrate-layout、install-service、install-caddy、install-deploy-user、install-offsite、install-backup、install-journald'
+echo "$V" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || fail '用法：npm run deploy -- 版本号 [--restart] [--allow-downgrade]，或 npm run deploy -- restart、rollback、status、install-service、install-caddy、install-deploy-user、install-offsite、install-backup、install-journald'
 shift
 ALLOW=
 RESTART=

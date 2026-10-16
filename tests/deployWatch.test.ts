@@ -42,6 +42,7 @@ describe('建立上线后的检查', () => {
     fs.rmSync(at('state/watch'), { recursive: true });
     run(['restart']);
     expect(calls().some(line => line.startsWith('systemd-run'))).toBe(false);
+    fs.rmSync(at('sim/broken-2.0.6')); // 2.0.6 修好后再手动换回，回滚本身才会成功
     write(at('state/watch/started'), `${START} 2.0.5\n`);
     expect(run(['rollback'])).toMatchObject({ code: 0 });
     expect(watching()).toBe(false);

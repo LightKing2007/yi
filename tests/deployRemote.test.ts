@@ -96,11 +96,11 @@ describe('上线前的检查：加锁、版本、校验和、目录结构', () =
     expect([link('current'), fs.existsSync(at('opt/releases/2.0.5'))]).toEqual(['releases/2.0.4', false]);
   });
 
-  it('还是旧的目录结构时中止，提示先执行 migrate-layout', () => {
+  it('不是版本目录的结构时中止', () => {
     write(at('opt/server.cjs'), '2.0.4 c204');
     const result = run(['install', '2.0.5'], incoming('2.0.5'));
     expect(result.code).not.toBe(0);
-    expect(result.out).toContain('npm run deploy -- migrate-layout');
+    expect(result.out).toContain('服务器上没有版本目录');
   });
 });
 
@@ -129,7 +129,7 @@ describe('维护模式（OPS-045）', () => {
     expect(read(SCRIPT)).toContain('WAIT_POLLS=${YI_WAIT_POLLS:-180}');
   });
 
-  it('线上的服务端没有健康检查（2.0.4 及以前）时不发 SIGUSR2，直接重启', () => {
+  it('连不上线上服务端的健康检查（服务端未在运行）时不发 SIGUSR2，直接重启', () => {
     layout('2.0.4');
     write(at('sim/nohealth-2.0.4'), '');
     write(at('sim/games'), '1');
@@ -186,14 +186,6 @@ describe('回滚（OPS-044）', () => {
     expect(deployLog()).toEqual(['tester rollback 2.0.4 ok', 'tester rollback 2.0.5 ok']);
   });
 
-  it('上一版本没有健康检查时，以服务处于运行状态为准', () => {
-    layout('2.0.5', '2.0.4');
-    write(at('sim/nohealth-2.0.4'), '');
-    const result = run(['rollback']);
-    expect(result).toMatchObject({ code: 0 });
-    expect(result.out).toContain('以服务处于运行状态为准');
-  });
-
   it('上一版本的健康检查能连上但版本不符时，回滚记为 fail', () => {
     layout('2.0.5', '2.0.4');
     write(at('sim/commit-override'), 'other');
@@ -207,67 +199,6 @@ describe('回滚（OPS-044）', () => {
     const result = run(['rollback']);
     expect(result.code).not.toBe(0);
     expect(result.out).toContain('没有上一版本可以换回');
-  });
-});
-
-describe('改为版本目录（migrate）', () => {
-  const UNIT = [
-    '[Service]',
-    'ExecStart=/opt/node/bin/node /opt/yi/server.cjs 8443',
-    'Environment=NODE_ENV=production',
-    'Environment=YI_LATEST=2.0.4',
-    'Environment=YI_FILES=/opt/yi/download',
-    'Restart=always',
-    '',
-  ].join('\n');
-  const legacy = () => {
-    write(at('opt/server.cjs'), '2.0.4 c204');
-    write(at('opt/server.cjs.prev'), '2.0.3 c203');
-    write(at('opt/download/Yi-2.0.4-win-x64-setup.exe'), 'win 2.0.4');
-    write(at('yi.service'), UNIT);
-  };
-
-  it('复制为 releases/版本号/，YI_LATEST 移入 env，yi.service 改为经 current 读取；不重启', () => {
-    legacy();
-    const result = run(['migrate']);
-    expect(result).toMatchObject({ code: 0 });
-    expect(link('current')).toBe('releases/2.0.4');
-    expect(read(at('opt/releases/2.0.4/server.cjs'))).toBe('2.0.4 c204');
-    expect(read(at('opt/releases/2.0.4/download/Yi-2.0.4-win-x64-setup.exe'))).toBe('win 2.0.4');
-    expect(read(at('opt/releases/2.0.4/env'))).toBe('YI_LATEST=2.0.4\n');
-    expect(read(at('yi.service'))).toBe(
-      [
-        '[Service]',
-        'ExecStart=/opt/node/bin/node /opt/yi/current/server.cjs 8443',
-        'EnvironmentFile=/opt/yi/current/env',
-        'Environment=NODE_ENV=production',
-        'Environment=YI_FILES=/opt/yi/current/download',
-        'Restart=always',
-        '',
-      ].join('\n'),
-    );
-    expect(read(at('opt/yi.service.before-migrate'))).toBe(UNIT);
-    expect(calls().filter(line => line.startsWith('systemctl'))).toEqual(['systemctl daemon-reload']);
-    expect(deployLog()).toEqual(['tester config P1-09 migrate-layout ok']);
-    expect(run(['migrate']).out).toContain('已是版本目录的结构');
-  });
-
-  it('yi.service 与预期不符时中止，什么也不改', () => {
-    legacy();
-    const odd = UNIT.replace('/opt/yi/server.cjs', '/srv/yi/server.cjs');
-    write(at('yi.service'), odd);
-    const result = run(['migrate']);
-    expect(result.code).not.toBe(0);
-    expect([read(at('yi.service')), link('current'), fs.existsSync(at('yi.service.new'))]).toEqual([odd, '', false]);
-  });
-
-  it('改为版本目录后的第一次上线：成功后删除旧的目录结构留下的文件，原来的版本留作 previous', () => {
-    legacy();
-    run(['migrate']);
-    fs.copyFileSync(at('opt/current/server.cjs'), at('sim/running'));
-    expect(run(['install', '2.0.5'], incoming('2.0.5'))).toMatchObject({ code: 0 });
-    expect(['server.cjs', 'server.cjs.prev', 'download'].map(name => fs.existsSync(at('opt', name)))).toEqual([false, false, false]);
-    expect(link('previous')).toBe('releases/2.0.4');
   });
 });
 

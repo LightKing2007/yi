@@ -84,7 +84,7 @@ describe('部署用户经 sudo 执行 yi-deploy', () => {
   beforeEach(() => layout('2.0.4'));
 
   it('只允许 preflight、install、restart、rollback、status；安装配置的命令须以 root 执行', () => {
-    for (const cmd of ['service', 'caddy', 'offsite', 'migrate', 'watch', 'deploy-user']) {
+    for (const cmd of ['service', 'caddy', 'offsite', 'watch', 'deploy-user']) {
       const result = run([cmd], SCRIPT, '', AS_DEPLOY);
       expect([cmd, result.code]).not.toEqual([cmd, 0]);
       expect(result.out).toContain(`部署用户不能执行 ${cmd}`);
