@@ -6,7 +6,7 @@ import { Game } from '../src/core/game';
 import { BLACK, GameType, WHITE, other } from '../src/core/types';
 import { ACTS_MAX, DRAWN, MOVES_MAX, type Act, type GameKind, type Opponent, type OverReason, type S2C } from '../src/shared/protocol';
 import { oppInfo } from './matchmaking';
-import { rate } from './rating';
+import { markTurn, recordEnd, recordStart } from './record';
 import { RoomState, type Player, type Room, type RoomRules, type RoomSeat, type ServerContext } from './roomTypes';
 
 /** 房号为四位数：[CODE_MIN, CODE_MIN + CODE_SPAN) */
@@ -80,6 +80,9 @@ export function newRoom(ctx: ServerContext, kind: GameKind, rules: RoomRules, se
     result: null,
     limitNote: null,
     rated: [null, null, null],
+    recordId: 0,
+    turnAt: 0,
+    turnPly: -1,
   };
   ctx.rooms.set(r.id, r);
   return r;
@@ -94,6 +97,7 @@ export function seatPlayers(ctx: ServerContext, r: Room, [first, second]: [Playe
   r.who[secondColor] = second;
   first.room = second.room = r.id;
   newRoomGame(ctx, r);
+  recordStart(ctx, r);
   sendStart(ctx, r);
   startTurn(ctx, r);
   ctx.log('info', 'game.start', {
@@ -120,6 +124,7 @@ export function roomCode(ctx: ServerContext) {
 
 /** 新的一手开始：重新计时并通知双方 */
 export function startTurn(ctx: ServerContext, r: Room) {
+  markTurn(ctx, r);
   const timed = r.moveTime > 0 && !r.g.scoring;
   r.deadline = timed && bothOnline(ctx, r) ? ctx.now() + r.moveTime : 0;
   r.paused = timed && !r.deadline ? r.moveTime : 0;
@@ -131,8 +136,8 @@ export function bothOnline(ctx: ServerContext, r: Room) {
   return !!(seat(ctx, r, BLACK)?.conn && seat(ctx, r, WHITE)?.conn);
 }
 
-/** 结束对局；rated 为 false 时排位赛也不结算段位 */
-export function finish(ctx: ServerContext, r: Room, { winner, reason }: { winner: number; reason: OverReason }, rated = true) {
+/** 结束对局并写入对局记录；atLimit 为真表示因达到上限而结束（记为 limit），排位赛也不结算段位 */
+export function finish(ctx: ServerContext, r: Room, { winner, reason }: { winner: number; reason: OverReason }, atLimit = false) {
   if (r.state !== RoomState.Play) return;
   r.state = RoomState.Over;
   r.ask = null;
@@ -142,7 +147,7 @@ export function finish(ctx: ServerContext, r: Room, { winner, reason }: { winner
   broadcast(ctx, r, { t: 'over', winner, reason });
   ctx.log('info', 'game.over', { msg: `房间 ${r.id} 结束`, roomId: r.id, gameId: r.gameId, winner, reason, moves: r.g.moves.length });
   ctx.metrics?.inc('yi_games_finished_total', { kind: r.kind, reason });
-  if (r.kind === 'ranked' && rated) rate(ctx, r, winner);
+  recordEnd(ctx, r, { winner, reason, stored: atLimit ? 'limit' : reason, rated: r.kind === 'ranked' && !atLimit });
 }
 
 /**
@@ -154,7 +159,7 @@ export function endAtLimit(ctx: ServerContext, r: Room) {
     acts = r.acts.length;
   const note = moves >= MOVES_MAX ? MOVES_LIMIT_TEXT : acts >= ACTS_MAX ? ACTS_LIMIT_TEXT : null;
   if (!note || r.state !== RoomState.Play) return;
-  finish(ctx, r, { winner: DRAWN, reason: 'draw' }, false);
+  finish(ctx, r, { winner: DRAWN, reason: 'draw' }, true);
   r.limitNote = note;
   broadcast(ctx, r, { t: 'info', text: note });
   ctx.log('warn', 'game.limit', { msg: `房间 ${r.id} 达到上限，按和棋结束`, roomId: r.id, gameId: r.gameId, moves, acts });

@@ -5,6 +5,7 @@
 import { BLACK, GameType, WHITE, other } from '../src/core/types';
 import { rejectText } from '../src/shared/reject';
 import { ASK_SECS, DRAWN, DRAW_LIMIT, UNDO_LIMIT, type AskKind, type C2S } from '../src/shared/protocol';
+import { stampMove } from './record';
 import { addAct, broadcast, finish, resolveAsk, seat, startTurn } from './room';
 import type { Player, Room, ServerContext } from './roomTypes';
 
@@ -92,6 +93,7 @@ export function playMove(ctx: ServerContext, { r, p, me }: Actor, x: number, y: 
     ctx.send(p, { t: 'info', text: rejectText(g.lastReject ?? 'occupied') });
     return;
   } // 含落在本局棋盘之外
+  stampMove(ctx, r);
   addAct(r, { k: 'M', x, y });
   broadcast(ctx, r, { t: 'moved', x, y });
   if (g.over) finish(ctx, r, { winner: g.winner, reason: g.winner === DRAWN ? 'full' : 'five' });
@@ -103,6 +105,7 @@ export function passTurn(ctx: ServerContext, r: Room, me: number) {
   const g = r.g;
   if (g.type !== GameType.Go || g.scoring || g.cur.toMove !== me || r.ask) return;
   g.pass();
+  stampMove(ctx, r);
   addAct(r, { k: 'P' });
   broadcast(ctx, r, { t: 'passed' });
   r.agreed = [false, false, false];

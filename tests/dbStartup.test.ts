@@ -61,6 +61,21 @@ describe('启动时的持久化', () => {
     run.close();
   });
 
+  it('上次运行时尚未终局的对局在启动时记为服务端放弃', () => {
+    const first = openDatabase(dbFile, { now: () => 1, appVersion: 'test' });
+    const repo = new Repo(first);
+    const black = repo.ensure(HASH_A, '甲', 1),
+      white = repo.ensure('b'.repeat(32), '乙', 1);
+    repo.insertGame({ kind: 'match', type: 'go', size: 19, blackUserId: black, whiteUserId: white }, 1);
+    first.close();
+    const run = start();
+    expect(logs).toContain('db.games-aborted');
+    run.close();
+    const db = new DatabaseSync(dbFile);
+    expect(db.prepare('SELECT winner, end_reason, ended_at FROM games').get()).toEqual({ winner: 'draw', end_reason: 'aborted', ended_at: 1000 });
+    db.close();
+  });
+
   it('旧存档损坏时拒绝启动（退出码 65），原文件不动', () => {
     fs.writeFileSync(dataFile, '{ 坏掉的存档');
     const err = failure(start);
@@ -115,7 +130,8 @@ describe('入口调用的启动函数', () => {
 describe('联机服务端在数据库上读写段位', () => {
   it('握手即建游客用户；排位结算写入数据库，重新握手读回', () => {
     const db = openDatabase(MEMORY, { now: () => 1, appVersion: 'test' });
-    const store = new DbRatingStore(new Repo(db), { now: () => 2 });
+    const legacy = new Map<string, Ratings>();
+    const store = new DbRatingStore(new Repo(db), { now: () => 2, legacy: { set: (key, ratings) => legacy.set(key, ratings) } });
     const { srv } = world(store);
     const first = new Client(srv, '甲'),
       second = new Client(srv, '乙');
@@ -126,7 +142,8 @@ describe('联机服务端在数据库上读写段位', () => {
     expect(white.expect('rated')?.rating.points).toBe(1216);
     const again = new Client(srv, '胜者', undefined, white.uid);
     expect(again.welcome?.ratings.gomoku.points).toBe(1216);
-    expect(db.prepare('SELECT count(*) AS n FROM ratings').get()?.n).toBe(4);
+    expect(db.prepare('SELECT count(*) AS n FROM ratings').get()?.n).toBe(2); // 只写这一局的棋类
+    expect([...legacy.values()].map(ratings => ratings.gomoku.points).sort()).toEqual([1184, 1216]); // 结算后双写旧存档（决定 D5-1）
     expect(db.prepare("SELECT name FROM users WHERE name = '胜者'").all()).toHaveLength(1); // 同一台设备，改名而不新建用户
     db.close();
   });

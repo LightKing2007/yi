@@ -53,6 +53,9 @@ export function openPersistence(opt: PersistenceOptions): Persistence {
     db.close();
     throw new DbOpenError(opt.dbFile, EXIT_DATA_ERROR, `与旧段位存档 ${opt.dataFile} 同步失败（${err instanceof Error ? err.message : String(err)}），已回滚`);
   }
+  // 上次运行时尚未终局的对局（服务端重启、维护模式超时后强制重启）记为服务端放弃
+  const aborted = repo.abortGames(opt.now());
+  if (aborted) opt.log?.('info', 'db.games-aborted', { msg: `上次运行时有 ${aborted} 局尚未终局，已记为服务端放弃`, count: aborted });
   return {
     store: new DbRatingStore(repo, { now: opt.now, legacy }),
     close() {
