@@ -29,7 +29,7 @@ interface Entry {
 /** 存档读写用到的文件系统函数；测试中以假实现替换，模拟磁盘写满等故障 */
 export type StoreFs = Pick<
   typeof fs,
-  'readFileSync' | 'writeFileSync' | 'openSync' | 'writeSync' | 'fsyncSync' | 'closeSync' | 'renameSync' | 'copyFileSync' | 'unlinkSync'
+  'readFileSync' | 'writeFileSync' | 'openSync' | 'writeSync' | 'fsyncSync' | 'closeSync' | 'renameSync' | 'copyFileSync' | 'unlinkSync' | 'statSync'
 >;
 
 /** 存档的可选依赖 */
@@ -40,6 +40,8 @@ export interface StoreOptions {
   fs?: StoreFs;
   /** 当前时刻（Unix 毫秒），用于应急转储的文件名，默认为 `Date.now` */
   now?: () => number;
+  /** 每次写盘成功后调用，参数为文件写好后的修改时间（毫秒）；数据库版本以此判断文件是否被其他程序改过（server/db/legacy.ts） */
+  onWritten?: (mtimeMs: number) => void;
 }
 
 /** 存档存在但无法读取或解析。调用方必须以 `exitCode` 退出，严禁以空数据继续运行（DAT-050） */
@@ -91,6 +93,7 @@ export class FileStore implements RatingStore {
   private readonly fs: StoreFs;
   private readonly log: Log;
   private readonly now: () => number;
+  private readonly onWritten: (mtimeMs: number) => void;
 
   /** 读取存档。文件不存在时视为首次运行；存在但无法读取或解析时抛出 `StoreLoadError` */
   constructor(
@@ -100,11 +103,27 @@ export class FileStore implements RatingStore {
     this.fs = opt.fs ?? fs;
     this.log = opt.log ?? (() => {});
     this.now = opt.now ?? Date.now;
+    this.onWritten = opt.onWritten ?? (() => {});
     this.load();
   }
 
   get(key: string) {
     return this.data.get(key)?.ratings;
+  }
+
+  /** 全部有效记录：键 → 昵称与段位 */
+  entries(): IterableIterator<[string, Entry]> {
+    return this.data.entries();
+  }
+
+  /** 存档文件的修改时间（毫秒）；文件不存在时为 undefined */
+  mtime(): number | undefined {
+    try {
+      return this.fs.statSync(this.file).mtimeMs;
+    } catch (err) {
+      if (errCode(err) === 'ENOENT') return undefined;
+      throw err;
+    }
   }
 
   set(key: string, ratings: Ratings, name: string) {
@@ -126,6 +145,8 @@ export class FileStore implements RatingStore {
       return false;
     }
     this.dirty = false;
+    const mtime = this.mtime();
+    if (mtime !== undefined) this.onWritten(mtime);
     if (this.fails > 0) this.log('info', 'store.write-recovered', { msg: `段位存档在失败 ${this.fails} 次后写入成功`, file: this.file, attempts: this.fails });
     this.fails = 0;
     return true;
