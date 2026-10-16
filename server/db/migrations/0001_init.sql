@@ -64,12 +64,12 @@ CREATE INDEX idx_games_ended_at ON games (ended_at);
 -- 段位变化明细：每一次段位分的变化一行，可以精确回滚
 CREATE TABLE rating_changes (
   id             INTEGER PRIMARY KEY,
-  game_id        INTEGER REFERENCES games (id) ON DELETE RESTRICT,   -- NULL 表示不是由对局引起（导入、回滚、管理操作）
+  game_id        INTEGER REFERENCES games (id) ON DELETE RESTRICT,   -- NULL 表示不是由对局引起（回滚、管理操作）
   user_id        INTEGER NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
   game_type      TEXT NOT NULL CHECK (game_type IN ('gomoku', 'go')),
   points_before  INTEGER NOT NULL CHECK (points_before >= 0),
   points_after   INTEGER NOT NULL CHECK (points_after >= 0),
-  cause          TEXT NOT NULL CHECK (cause IN ('game', 'import', 'rollback', 'admin')),
+  cause          TEXT NOT NULL CHECK (cause IN ('game', 'rollback', 'admin')),
   changed_at     INTEGER NOT NULL,
   CHECK ((cause = 'game') = (game_id IS NOT NULL))
 ) STRICT;

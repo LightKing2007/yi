@@ -15,7 +15,7 @@ export type GameType = keyof Ratings;
 export const GAME_TYPES: readonly GameType[] = ['gomoku', 'go'];
 
 /** 段位变化的原因（`rating_changes.cause`） */
-export type ChangeCause = 'game' | 'import' | 'rollback' | 'admin';
+export type ChangeCause = 'game' | 'rollback' | 'admin';
 
 /** 按字素截短到 64 字节以内（决定 D5-5），不拆开任何一个字素；为空时取默认昵称 */
 export function clipNameBytes(name: string): string {
@@ -64,13 +64,6 @@ export interface StoredGame {
   ended: boolean;
 }
 
-/** 数据库中的一名玩家：设备散列、昵称与段位 */
-export interface StoredPlayer {
-  uidHash: string;
-  name: string;
-  ratings: Ratings;
-}
-
 /** 预编译的语句 */
 function statements(db: DatabaseSync) {
   return {
@@ -87,10 +80,6 @@ function statements(db: DatabaseSync) {
     ),
     recordChange: db.prepare(
       'INSERT INTO rating_changes (game_id, user_id, game_type, points_before, points_after, cause, changed_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    ),
-    players: db.prepare(
-      'SELECT d.uid_hash, u.id AS user_id, u.name FROM devices d JOIN users u ON u.id = d.user_id ' +
-        'WHERE u.kind = ? AND EXISTS (SELECT 1 FROM ratings r WHERE r.user_id = u.id)',
     ),
     insertGame: db.prepare('INSERT INTO games (kind, game_type, board_size, black_user_id, white_user_id, started_at) VALUES (?, ?, ?, ?, ?, ?)'),
     gameOf: db.prepare('SELECT game_type, black_user_id, white_user_id, ended_at FROM games WHERE id = ?'),
@@ -163,11 +152,6 @@ export class Repo {
   /** 写一条段位变化明细；`gameId` 只在原因为 game 时给出 */
   recordChange(change: { userId: number; type: GameType; before: number; after: number; cause: ChangeCause; gameId?: number }, now: number) {
     this.sql.recordChange.run(change.gameId ?? null, change.userId, change.type, change.before, change.after, change.cause, now);
-  }
-
-  /** 有段位记录的全部游客：设备散列、昵称与段位 */
-  guests(): StoredPlayer[] {
-    return this.sql.players.all('guest').map(row => ({ uidHash: String(row.uid_hash), name: String(row.name), ratings: this.ratingsOf(Number(row.user_id)) }));
   }
 
   /** 写入一局的开局信息，返回对局编号 */

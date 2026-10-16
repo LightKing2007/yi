@@ -6,6 +6,7 @@ import { MEMORY, openDatabase } from '../server/db';
 import { DbRatingStore } from '../server/db/ratingStore';
 import { Repo } from '../server/db/repo';
 import type { LogEntry, LogLevel } from '../server/log';
+import { Metrics } from '../server/metrics';
 import { replay, type GameRecord } from '../src/core/record';
 import { MOVES_MAX, type C2S, type S2C } from '../src/shared/protocol';
 import { Client, matchUp, play, startGame, world } from './serverWorld';
@@ -250,14 +251,15 @@ describe('对局记录写入失败（10-edge-cases.md 第 4 节）', () => {
   const setup = () => {
     const store = new BrokenStore();
     const logs: { event: string; entry: LogEntry }[] = [];
-    const env = world(store, { log: (_level, event, entry = {}) => logs.push({ event, entry }) });
+    const metrics = new Metrics({ version: 'test', commit: '' });
+    const env = world(store, { metrics, log: (_level, event, entry = {}) => logs.push({ event, entry }) });
     const jia = new Client(env.srv, '甲'),
       yi = new Client(env.srv, '乙');
-    return { ...env, store, logs, jia, yi };
+    return { ...env, store, logs, metrics, jia, yi };
   };
 
   it('终局写入失败：写 db.write-failed，向双方下发提示与同一错误编号；不结算段位，不断开连接', () => {
-    const { store, logs, jia, yi } = setup();
+    const { store, logs, metrics, jia, yi } = setup();
     matchUp(jia, yi, 'ranked');
     store.brokenFinish = true;
     jia.send({ t: 'resign' });
@@ -270,6 +272,10 @@ describe('对局记录写入失败（10-edge-cases.md 第 4 节）', () => {
       expect(client.has('rated')).toBe(false);
       expect(client.closed).toBe(false);
     }
+    expect(
+      metrics.snapshot({ connections: 0, playersOnline: 0, rooms: [], queue: [], downloadsActive: 0, eventLoopLagSeconds: 0, residentMemoryBytes: 0 })
+        .yi_db_write_failures_total,
+    ).toBe(1);
   });
 
   it('开局写入失败：对局照常进行；终局时因没有记录而不结算段位，同样下发提示', () => {

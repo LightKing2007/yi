@@ -41,6 +41,7 @@ export function toRecord(r: Room, winner: number, reason: OverReason): GameRecor
 function writeFailed(ctx: ServerContext, r: Room, op: string, err: unknown) {
   const errorId = randomUUID();
   ctx.log('error', 'db.write-failed', { msg: `房间 ${r.id} 的对局记录写入失败（${op}）`, roomId: r.id, gameId: r.gameId, op, errorId, err });
+  ctx.metrics?.inc('yi_db_write_failures_total');
   for (const p of [r.who[BLACK], r.who[WHITE]]) if (p) ctx.send(p, { t: 'error', text: INTERNAL_TEXT, errorId });
 }
 
