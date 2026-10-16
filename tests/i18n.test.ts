@@ -26,6 +26,7 @@ const SKIPPED_FILES: Record<string, string> = {
   'server/log.ts': '日志模块本身，文字只写入服务端日志',
   'server/metrics.ts': '监控指标的说明文字只出现在 /metrics（仅本机）中；错误文本只作为对应错误码的键，不下发',
   'server/main.ts': '服务端入口，文字只写入服务端日志',
+  'server/serve.ts': '服务端运行时的日志文字，只写入服务端日志',
   'server/config.ts': '配置校验失败时的期望格式与服务启动的说明，只写入服务端日志',
   'server/db/index.ts': '数据库无法打开或迁移失败的诊断信息，只写入服务端日志',
   'server/page.ts': '下载页面只有中文，标点由 I18N-011 检查',
