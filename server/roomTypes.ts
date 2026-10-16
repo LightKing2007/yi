@@ -3,10 +3,22 @@
  * 只有类型与最简单的内存存放处，不含任何逻辑；RoomServer 及拆出的各模块都从这里引用。
  */
 import type { Game } from '../src/core/game';
+import type { GameRecord } from '../src/core/record';
 import type { Log } from './log';
 import type { Metrics } from './metrics';
 import type { ConnLimits } from './ratelimit';
-import type { Act, AskKind, GameKind, OverReason, QueueMode, Rating, Ratings, S2C, queueRules } from '../src/shared/protocol';
+import {
+  newRating,
+  type Act,
+  type AskKind,
+  type GameKind,
+  type OverReason,
+  type QueueMode,
+  type Rating,
+  type Ratings,
+  type S2C,
+  type queueRules,
+} from '../src/shared/protocol';
 
 /** 一条连接：服务端只需要能发消息、能关掉。close 带关闭码（CLOSE_CODE）时按协议关闭，不带时直接切断 */
 export interface Conn {
@@ -14,17 +26,71 @@ export interface Conn {
   close(code?: number): void;
 }
 
-/** 段位分的存放处（独立服务端存到文件，测试里放内存） */
+/** 服务端出现未预期的异常、或数据库写入失败时的提示（v3 以文本下发，附错误编号；协议 v4 起为错误码 server.internal，E5） */
+export const INTERNAL_TEXT = '服务器出现问题，请稍后再试';
+
+/** 对局的一方：设备散列与昵称 */
+export interface GameSide {
+  key: string;
+  name: string;
+}
+
+/** 开局时写入对局记录的信息 */
+export interface GameStart {
+  kind: GameKind;
+  type: keyof Ratings;
+  size: number;
+  black: GameSide;
+  white: GameSide;
+}
+
+/** 存放处中的终局原因：协议的终局原因之外，limit 为达到 API-046 的上限，aborted 为服务端放弃的对局（roadmap.md 第 5.2.2 条） */
+export type StoredEndReason = OverReason | 'limit' | 'aborted';
+
+/** 终局时写入对局记录的信息 */
+export interface GameEnd {
+  /** 棋谱（不含版本字段，存放处写入时加上） */
+  record: GameRecord;
+  /** 1 黑胜、2 白胜、3 和棋 */
+  winner: number;
+  reason: StoredEndReason;
+}
+
+/** 一方的结算结果 */
+export interface RatedSide {
+  /** 结算前（存放处中重新读取的）段位分 */
+  before: number;
+  rating: Rating;
+  delta: number;
+}
+
+/** 双方的结算结果 */
+export interface RatedPair {
+  black: RatedSide;
+  white: RatedSide;
+}
+
+/** 排位结算：由结算前（存放处中重新读取的）双方段位算出结算结果 */
+export type Settle = (black: Rating, white: Rating) => RatedPair;
+
+/** 段位与对局记录的存放处（独立服务端存到数据库，测试里放内存） */
 export interface RatingStore {
   get(key: string): Ratings | undefined;
   set(key: string, r: Ratings, name: string): void;
   /** 玩家完成握手时调用，记下这台设备与昵称 */
   seen(key: string, name: string): void;
+  /** 开局：写入对局记录，返回存放处中的对局编号 */
+  startGame(start: GameStart): number;
+  /** 终局：在一个事务内写入棋谱与结果；给出 settle 时重新读取双方段位、结算并写入段位与变化明细，返回结算结果（DAT-040） */
+  finishGame(id: number, end: GameEnd, settle?: Settle): RatedPair | undefined;
+  /** 服务端放弃了这一局（异常隔离）：记为 aborted、和棋、不计段位 */
+  abortGame(id: number): void;
 }
 
-/** 放在内存中的段位存放处：测试与没有指定存档时使用，进程退出即丢失 */
+/** 放在内存中的段位存放处：测试使用，进程退出即丢失；对局记录只保留双方，用于结算 */
 export class MemoryStore implements RatingStore {
   private m = new Map<string, Ratings>();
+  private games = new Map<number, GameStart>();
   get(key: string) {
     return this.m.get(key);
   }
@@ -32,6 +98,22 @@ export class MemoryStore implements RatingStore {
     this.m.set(key, r);
   }
   seen() {} // 内存中不记录设备与昵称
+  startGame(start: GameStart) {
+    this.games.set(this.games.size + 1, start);
+    return this.games.size;
+  }
+  finishGame(id: number, _end: GameEnd, settle?: Settle) {
+    const game = this.games.get(id);
+    if (!game || !settle) return undefined;
+    const ratingsOf = (side: GameSide) => this.m.get(side.key) ?? { gomoku: newRating(), go: newRating() };
+    const black = ratingsOf(game.black),
+      white = ratingsOf(game.white);
+    const rated = settle(black[game.type], white[game.type]);
+    this.m.set(game.black.key, { ...black, [game.type]: rated.black.rating });
+    this.m.set(game.white.key, { ...white, [game.type]: rated.white.rating });
+    return rated;
+  }
+  abortGame() {} // 内存中不保留终局
 }
 
 /** 房间的对局设置：棋类、路数、禁手、每步限时（与 queueRules 的结果同形） */
@@ -117,6 +199,9 @@ export interface Room {
   result: { winner: number; reason: OverReason } | null; // 终局结果（掉线期间结束的，重连时补发）
   limitNote: string | null; // 因达到上限而结束时的说明（重连时随终局结果补发）
   rated: ({ type: number; rating: Rating; delta: number } | null)[]; // 排位结算，按执子颜色
+  recordId: number; // 存放处中这一局的对局编号；0 表示没有记录（写入失败）
+  turnAt: number; // 这一手开始的时刻（秒），用于每手用时
+  turnPly: number; // 这一手开始时的手数；悔棋或落子使手数变化时重新计时
 }
 
 /** RoomServer 的可选依赖：时钟、随机数、日志、段位存放处、新版本信息与监控指标，测试中可替换 */

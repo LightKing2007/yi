@@ -1,15 +1,21 @@
 /** 联机服务端：未预期的异常的隔离（API-023、EDGE-002）与对局上限（API-046） */
 import { describe, expect, it } from 'vitest';
 import { MemoryStore } from '../server/rooms';
+import type { GameEnd, GameStart, Settle } from '../server/roomTypes';
 import type { LogEntry, LogLevel } from '../server/log';
-import { ACTS_MAX, CLOSE_CODE, CONFIRM_SECS, GRACE_SECS, MOVES_MAX, type C2S, type Ratings, type S2C } from '../src/shared/protocol';
+import { ACTS_MAX, CLOSE_CODE, CONFIRM_SECS, GRACE_SECS, MOVES_MAX, type C2S, type S2C } from '../src/shared/protocol';
 import { Client, world, startGame, matchUp } from './serverWorld';
 
+/** 对局记录的写入可以出错的存放处（模拟数据库写满或拒绝写入） */
 class BrokenStore extends MemoryStore {
   broken = false;
-  override set(key: string, ratings: Ratings) {
-    if (this.broken) throw new Error(`写段位失败：${key}`);
-    super.set(key, ratings);
+  override startGame(start: GameStart) {
+    if (this.broken) throw new Error('写对局记录失败：开局');
+    return super.startGame(start);
+  }
+  override finishGame(id: number, end: GameEnd, settle?: Settle) {
+    if (this.broken) throw new Error('写对局记录失败：终局');
+    return super.finishGame(id, end, settle);
   }
 }
 /** 错误编号的格式：UUID v4 */
@@ -44,16 +50,16 @@ function expectKicked(client: Client, errorId: unknown) {
 
 describe('未预期的异常：处理消息与断线（API-023、EDGE-002）', () => {
   it('处理消息时抛出：只以 1011 断开发消息的连接，日志记下调用栈与错误编号并下发给它，其余房间照常对局', () => {
-    const { srv, store, fault } = faulty();
+    const { srv, fault } = faulty();
     const [jia, yi, bing, ding] = ['甲', '乙', '丙', '丁'].map(name => new Client(srv, name)) as [Client, Client, Client, Client];
     matchUp(jia, yi, 'ranked');
     const { sa } = startGame(bing, ding);
-    store.broken = true;
+    breakSend(jia, 'over');
     expect(() => jia.send({ t: 'resign' })).not.toThrow();
     const { level, entry } = fault();
     expect(level).toBe('error');
     expect(entry).toMatchObject({ msg: '处理消息时出现未预期的异常', playerId: jia.id, errorId: expect.stringMatching(UUID_V4) });
-    expect((entry.err as Error).stack).toContain('写段位失败');
+    expect((entry.err as Error).message).toBe('发送失败：over');
     expectKicked(jia, entry.errorId);
     expect(yi.closed).toBe(false);
     const [blk, wht] = sa.color === 1 ? [bing, ding] : [ding, bing];
@@ -79,11 +85,11 @@ describe('未预期的异常：处理消息与断线（API-023、EDGE-002）', (
 
 describe('未预期的异常：定时检查（API-023、EDGE-002）', () => {
   it('检查房间时限时抛出：放弃该房间，座位上的两人以 1011 断开、重连时得知对局已不在；同一次检查中其他房间照常判超时', () => {
-    const { srv, store, fault, advance } = faulty();
+    const { srv, fault, advance } = faulty();
     const [jia, yi, bing, ding] = ['甲', '乙', '丙', '丁'].map(name => new Client(srv, name)) as [Client, Client, Client, Client];
     matchUp(jia, yi, 'ranked'); // 五子棋排位每步限时 30 秒，先开局的房间先检查
     startGame(bing, ding, { moveTime: 30 });
-    store.broken = true;
+    breakSend(jia, 'over'); // 判超时后下发终局结果时出错
     advance(31);
     const { entry } = fault();
     expect(entry).toMatchObject({ msg: '检查房间时限时出现未预期的异常', roomId: 1 });
@@ -96,12 +102,12 @@ describe('未预期的异常：定时检查（API-023、EDGE-002）', () => {
   });
 
   it('检查玩家时限时抛出：移除该玩家并放弃其房间，对手以 1011 断开，此后不再重复出错', () => {
-    const { srv, store, fault, idle } = faulty();
+    const { srv, fault, idle } = faulty();
     const jia = new Client(srv, '甲'),
       yi = new Client(srv, '乙');
     matchUp(jia, yi, 'ranked');
-    yi.drop(); // 掉线保留期满时判负，结算段位时出错
-    store.broken = true;
+    yi.drop(); // 掉线保留期满时判负，向对手下发终局结果时出错
+    breakSend(jia, 'over');
     idle(GRACE_SECS + 1, jia);
     const { entry } = fault();
     expect(entry).toMatchObject({ msg: '检查玩家时限时出现未预期的异常', playerId: yi.id });

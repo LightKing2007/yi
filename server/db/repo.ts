@@ -37,6 +37,33 @@ const toRating = (row: Record<string, unknown>): Rating => ({
   draw: Number(row.draw_count),
 });
 
+/** 开局时写入的对局信息（用户编号已找到） */
+export interface NewGame {
+  kind: 'match' | 'ranked' | 'friend';
+  type: GameType;
+  size: number;
+  blackUserId: number;
+  whiteUserId: number;
+}
+
+/** 终局时写入的对局信息 */
+export interface EndedGame {
+  /** 棋谱的 JSON（含版本字段 v） */
+  record: string;
+  moveCount: number;
+  winner: 'black' | 'white' | 'draw';
+  reason: string;
+  rated: boolean;
+}
+
+/** 数据库中一局的双方与棋类 */
+export interface StoredGame {
+  type: GameType;
+  blackUserId: number;
+  whiteUserId: number;
+  ended: boolean;
+}
+
 /** 数据库中的一名玩家：设备散列、昵称与段位 */
 export interface StoredPlayer {
   uidHash: string;
@@ -65,6 +92,13 @@ function statements(db: DatabaseSync) {
       'SELECT d.uid_hash, u.id AS user_id, u.name FROM devices d JOIN users u ON u.id = d.user_id ' +
         'WHERE u.kind = ? AND EXISTS (SELECT 1 FROM ratings r WHERE r.user_id = u.id)',
     ),
+    insertGame: db.prepare('INSERT INTO games (kind, game_type, board_size, black_user_id, white_user_id, started_at) VALUES (?, ?, ?, ?, ?, ?)'),
+    gameOf: db.prepare('SELECT game_type, black_user_id, white_user_id, ended_at FROM games WHERE id = ?'),
+    endGame: db.prepare(
+      'UPDATE games SET record = ?, move_count = ?, winner = ?, end_reason = ?, is_rated = ?, ended_at = ? WHERE id = ? AND ended_at IS NULL',
+    ),
+    abortGames: db.prepare("UPDATE games SET winner = 'draw', end_reason = 'aborted', ended_at = ? WHERE ended_at IS NULL"),
+    abortGame: db.prepare("UPDATE games SET winner = 'draw', end_reason = 'aborted', ended_at = ? WHERE id = ? AND ended_at IS NULL"),
     metaText: db.prepare('SELECT meta_text FROM meta WHERE meta_name = ?'),
     setMeta: db.prepare('INSERT INTO meta (meta_name, meta_text) VALUES (?, ?) ON CONFLICT (meta_name) DO UPDATE SET meta_text = excluded.meta_text'),
   } satisfies Record<string, StatementSync>;
@@ -134,6 +168,29 @@ export class Repo {
   /** 有段位记录的全部游客：设备散列、昵称与段位 */
   guests(): StoredPlayer[] {
     return this.sql.players.all('guest').map(row => ({ uidHash: String(row.uid_hash), name: String(row.name), ratings: this.ratingsOf(Number(row.user_id)) }));
+  }
+
+  /** 写入一局的开局信息，返回对局编号 */
+  insertGame(game: NewGame, now: number): number {
+    return Number(this.sql.insertGame.run(game.kind, game.type, game.size, game.blackUserId, game.whiteUserId, now).lastInsertRowid);
+  }
+
+  /** 一局的双方与棋类；没有这一局时为 undefined */
+  gameOf(id: number): StoredGame | undefined {
+    const row = this.sql.gameOf.get(id);
+    if (row === undefined) return undefined;
+    return { type: row.game_type as GameType, blackUserId: Number(row.black_user_id), whiteUserId: Number(row.white_user_id), ended: row.ended_at !== null };
+  }
+
+  /** 写入一局的终局；已经终局的不再改写，返回是否写入 */
+  endGame(id: number, game: EndedGame, now: number): boolean {
+    return Number(this.sql.endGame.run(game.record, game.moveCount, game.winner, game.reason, game.rated ? 1 : 0, now, id).changes) === 1;
+  }
+
+  /** 把尚未终局的一局记为服务端放弃（aborted、和棋）；id 不给出时为全部尚未终局的，返回改写的局数 */
+  abortGames(now: number, id?: number): number {
+    const result = id === undefined ? this.sql.abortGames.run(now) : this.sql.abortGame.run(now, id);
+    return Number(result.changes);
   }
 
   /** 元数据的值；没有时为 undefined */

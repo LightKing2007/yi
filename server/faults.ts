@@ -8,10 +8,8 @@ import { CLOSE_CODE } from '../src/shared/protocol';
 import { drop, forget } from './hub';
 import type { LogEntry } from './log';
 import { freeRoom, seat } from './room';
-import type { Match, Player, Room, ServerContext } from './roomTypes';
-
-/** 服务端出现未预期的异常时的提示（v3 以文本下发，附错误编号；协议 v4 起为错误码 server.internal，E5） */
-const INTERNAL_TEXT = '服务器出现问题，请稍后再试';
+import { recordAbort } from './record';
+import { INTERNAL_TEXT, type Match, type Player, type Room, type ServerContext } from './roomTypes';
 
 /** 记录一次未预期的异常：完整调用栈与新的错误编号（UUID v4）写入 internal.error 日志；返回错误编号，供下发给客户端对照 */
 export function report(ctx: ServerContext, err: unknown, entry: LogEntry): string {
@@ -47,6 +45,7 @@ export function scrapMatch(ctx: ServerContext, m: Match, errorId: string) {
 
 /** 放弃出错的房间：先移除房间（对局不再继续，也不结算段位），再以 1011 断开座位上的玩家；他们重连时收到 resumeFailed */
 export function scrapRoom(ctx: ServerContext, r: Room, errorId: string) {
+  recordAbort(ctx, r); // 尚未写入终局的（含终局途中出错的）记为服务端放弃，已终局的不改写
   freeRoom(ctx, r);
   for (const color of [BLACK, WHITE]) {
     const p = seat(ctx, r, color);
