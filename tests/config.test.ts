@@ -16,6 +16,7 @@ describe('服务端配置的解析', () => {
         extraPorts: [],
         host: undefined,
         dataFile: '/srv/yi/yi-ratings.json',
+        dbFile: '/srv/yi/yi.db',
         latest: undefined,
         download: undefined,
         files: undefined,
@@ -31,6 +32,7 @@ describe('服务端配置的解析', () => {
       EXTRA_PORTS: ' 7700, 8443,7700 ,',
       HOST: '127.0.0.1',
       YI_DATA: '/var/lib/yi/yi-ratings.json',
+      YI_DB: 'state/yi.db',
       YI_LATEST: '2.0.7',
       YI_DOWNLOAD: 'https://yi.lightking.com.cn/',
       YI_FILES: 'download',
@@ -44,6 +46,7 @@ describe('服务端配置的解析', () => {
         extraPorts: [7700],
         host: '127.0.0.1',
         dataFile: '/var/lib/yi/yi-ratings.json',
+        dbFile: '/srv/yi/state/yi.db',
         latest: '2.0.7',
         download: 'https://yi.lightking.com.cn/',
         files: '/srv/yi/download',
@@ -53,14 +56,20 @@ describe('服务端配置的解析', () => {
       errors: [],
     });
   });
+});
 
+describe('服务端配置的优先级与空值', () => {
   it('命令行中的端口优先于 PORT；没有命令行参数时用 PORT', () => {
     expect(parseConfig(['9001'], { PORT: '9002' }, CWD).config.port).toBe(9001);
     expect(parseConfig([], { PORT: '9002' }, CWD).config.port).toBe(9002);
   });
 
   it('空串与未设置一样', () => {
-    const { config, errors } = parseConfig([], { PORT: '', HOST: '', YI_LATEST: '', YI_DOWNLOAD: '', YI_FILES: '', YI_DATA: '', YI_LOG_LEVEL: '' }, CWD);
+    const { config, errors } = parseConfig(
+      [],
+      { PORT: '', HOST: '', YI_LATEST: '', YI_DOWNLOAD: '', YI_FILES: '', YI_DATA: '', YI_DB: '', YI_LOG_LEVEL: '' },
+      CWD,
+    );
     expect(errors).toEqual([]);
     expect(config).toEqual(parseConfig([], {}, CWD).config);
   });
