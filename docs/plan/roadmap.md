@@ -229,7 +229,8 @@ server/
     index.ts            新：打开数据库、PRAGMA 与完整性检查、执行迁移、结构版本检查
     migrations/         新：0001_init.sql、0002_…（DAT-017；随服务端打包进 server.cjs）
     repo.ts             新：全部 SQL 集中于此，预编译一次、参数绑定（DAT-044、DAT-045）
-    importLegacy.ts     新：导入 yi-ratings.json（见 5.6）
+    legacy.ts           新：与 yi-ratings.json 的同步（见 5.6）
+    ratingStore.ts      新：数据库中的段位存放处，实现 RatingStore 接口，双写旧存档
     backup.ts           新：node server.cjs backup，以 VACUUM INTO 生成快照（见 5.7）
   store.ts              改：按决定 D5-1 在一个版本周期内继续写入 yi-ratings.json，下一个版本删除
 ```
@@ -253,12 +254,13 @@ server/
 
 ### 5.6 老数据迁移
 
-`yi-ratings.json` 的结构是 `{ [uid_hash]: { name, ratings } }`。首次启动时，如果数据库中没有用户且找到这个文件：
+`yi-ratings.json` 的结构是 `{ [uid_hash]: { name, ratings } }`。按决定 D5-1，首个数据库版本在一个版本周期内同时写入这个文件（双写），使回滚到 2.0.7 时段位不丢；为使回滚之后再次上线时也不丢回滚期间的段位，每次启动按文件的修改时间同步（`server/db/legacy.ts`）：
 
-1. 在一个事务内导入：每一项建一个 `guest` 用户，名字沿用，`devices` 写入这个 `uid_hash`；
-2. 写入 `ratings`，同时每种棋写一条 `rating_changes`（`cause = 'import'`，`points_before` 为初始分 1200）；
-3. 逐条校验，校验失败的记录写 `warn` 并跳过，原文件不动；导入失败时回滚事务并拒绝启动；
-4. 按决定 D5-1，原文件不改名：首个数据库版本在一个版本周期内继续写入它，使回滚到 2.0.7 时段位不丢；下一个版本停止写入，并把原文件改名为 `yi-ratings.json.imported`，不删除。
+1. 数据库版本每次写好这个文件，把文件的修改时间记入 `meta`（`legacy_json_mtime`）；
+2. 启动时文件的修改时间与记下的不同（第一次启动，或回滚期间由 2.0.7 写过）：以文件为准，在一个事务内把有差异的记录同步进数据库——没有的用户新建 `guest` 用户与设备行，段位有差异的覆盖写入，每写一种棋记一条 `rating_changes`（`cause = 'import'`）——并记下修改时间；失败时回滚事务并拒绝启动；
+3. 修改时间相同：文件只由数据库版本写过，以数据库为准；进程被强制结束时文件的写盘可能落后于数据库，把落后的记录补写到文件；
+4. 逐条校验：段位不合法的记录由 `server/store.ts` 按新玩家处理并另存 `.corrupt`；键不是设备散列的（如被篡改的 `__proto__`）写 `warn` 并跳过，原文件不动；
+5. 下一个版本停止写入这个文件，并把它改名为 `yi-ratings.json.imported`，不删除。
 
 ### 5.7 备份
 
@@ -493,7 +495,7 @@ src/
   i18n/
 server/
   main.ts config.ts http.ts host.ts hub.ts matchmaking.ts room.ts rating.ts anticheat.ts ratelimit.ts maintenance.ts mail.ts
-  db/{index.ts, schema.sql, migrations/, repo.ts, importLegacy.ts}
+  db/{index.ts, migrations/, repo.ts, legacy.ts, ratingStore.ts, backup.ts}
   admin/{cli.ts, commands/*.ts}
   data/badwords.txt
 electron/          main（单实例、日志）、preload（log、secret.get/set）

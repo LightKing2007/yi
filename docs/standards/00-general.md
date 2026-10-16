@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 文件编号 | YI-STD-001 |
-| 文件版本 | 1.1.48 |
+| 文件版本 | 1.1.49 |
 | 发布日期 | 2026-10-02 |
 | 状态 | 现行；整改项按 [plan/remediation.md](../plan/remediation.md) 的期限实施 |
 | 编制 | LightKing、Claude |
@@ -310,3 +310,4 @@ GB/T 11457—2006 界定的以及下列术语和定义适用于本规范。
 | 1.1.46 | 2026-10-16 | 随整改项 P2-01 修订 [plan/roadmap.md](../plan/roadmap.md) 第 5.2 节的表结构，同步 [03-data.md](03-data.md) 中 DAT-012 至 DAT-016、DAT-020、DAT-022 至 DAT-025、DAT-030、DAT-031、DAT-071 的“现状”；规定本身不变，规则编号不变 |
 | 1.1.47 | 2026-10-16 | 随整改项 P2-04 建立 `server/config.ts`，同步 [02-architecture.md](02-architecture.md) 的 ARC-042 的“现状”为满足，并写明以 ESLint 检查；规定本身不变，规则编号不变 |
 | 1.1.48 | 2026-10-16 | 随阶段 5 第 4 步（整改项 P2-02 的前半）实现数据库的打开与迁移：同步 [03-data.md](03-data.md) 中 DAT-002、DAT-017、DAT-041、DAT-042 的“现状”，[07-operations.md](07-operations.md) 第 8 节增加事件码 `db.migrated`、`db.opened`；规定本身不变，规则编号不变 |
+| 1.1.49 | 2026-10-16 | 随阶段 5 第 5 步（仓储与旧存档的同步）同步 [03-data.md](03-data.md) 中 DAT-001、DAT-044、DAT-045 的“现状”，[07-operations.md](07-operations.md) 第 8 节增加事件码 `db.legacy-skipped`、`db.legacy-synced`；规定本身不变，规则编号不变 |

@@ -148,6 +148,42 @@ describe('写盘', () => {
   });
 });
 
+describe('供数据库版本使用的接口（server/db/legacy.ts）', () => {
+  it('列出全部有效记录；存档不存在时修改时间为 undefined', () => {
+    const store = new FileStore(file);
+    expect(store.mtime()).toBeUndefined();
+    store.set('a', ratings(1210), '甲');
+    expect([...store.entries()]).toEqual([['a', { name: '甲', ratings: ratings(1210) }]]);
+  });
+
+  it('每次写盘成功后以文件写好后的修改时间调用 onWritten；没有变化、写盘失败时不调用', () => {
+    const { disk, fs: fsx } = fullableFs();
+    const written: number[] = [];
+    const store = new FileStore(file, { fs: fsx, onWritten: mtime => written.push(mtime) });
+    expect(store.flush()).toBe(true);
+    expect(written).toEqual([]);
+    store.set('a', ratings(1210), '甲');
+    vi.advanceTimersByTime(2000);
+    expect(written).toEqual([fs.statSync(file).mtimeMs]);
+    expect(store.mtime()).toBe(written[0]);
+    disk.full = true;
+    store.set('a', ratings(1220), '甲');
+    expect(store.flush()).toBe(false);
+    expect(written).toHaveLength(1);
+    store.close();
+  });
+
+  it('读取修改时间时出现文件不存在以外的错误则抛出', () => {
+    const broken = {
+      ...fs,
+      statSync: () => {
+        throw Object.assign(new Error('EACCES'), { code: 'EACCES' });
+      },
+    } as unknown as StoreFs;
+    expect(() => new FileStore(file, { fs: broken }).mtime()).toThrow('EACCES');
+  });
+});
+
 describe('写盘失败', () => {
   it('磁盘写满时不抛出异常，保留内存中的数据，按 1、2、4 秒退避重试，连续 3 次失败写 error 日志，恢复后写入', () => {
     fs.writeFileSync(file, JSON.stringify({ a: { name: '甲', ratings: ratings(1200) } }));
