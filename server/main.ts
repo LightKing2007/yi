@@ -1,9 +1,11 @@
 /**
- * 弈 · 联机服务端：node server.cjs [端口]（默认 8443）；node server.cjs --version 只打出版本号与提交号。
+ * 弈 · 联机服务端：node server.cjs [端口]（默认 8443）；node server.cjs --version 只打出版本号与提交号；
+ * node server.cjs backup 备份数据库后退出（server/backupCommand.ts）。
  * 环境变量（由 server/config.ts 解析并校验，不合法时写 server.config-invalid 并以退出码 78 退出，ARC-042）：
  *   PORT          端口
  *   HOST          监听地址（默认所有网卡，放在反向代理后面时设为 127.0.0.1）
  *   YI_DB         数据库（默认当前目录下的 yi.db）
+ *   YI_BACKUP_DIR 备份目录（默认数据库所在目录下的 backup/）
  *   YI_LATEST     最新的客户端版本号（例如 2.0.1），客户端版本较旧时提示更新
  *   YI_DOWNLOAD   新版本的下载地址
  *   YI_FILES      安装包所在的目录：设了就在同一个端口上提供下载页（http://地址:端口/）
@@ -13,6 +15,7 @@
  * 信号：SIGTERM、SIGINT 以 1001 断开全部连接、落盘后退出（OPS-052）；SIGUSR2 进入维护模式（OPS-045），只能以重启结束。
  */
 import { monitorEventLoopDelay } from 'node:perf_hooks';
+import { runBackup } from './backupCommand';
 import { EXIT_CONFIG, loadConfig } from './config';
 import { processLogger } from './log';
 import { LAG_RESOLUTION_MS, lagSeconds } from './metrics';
@@ -33,6 +36,11 @@ for (const { variable, expected } of errors) logger.log('error', 'server.config-
 if (errors.length) {
   logger.flush(true);
   process.exit(EXIT_CONFIG);
+}
+if (config.command === 'backup') {
+  const code = runBackup({ config, log: logger.log, now: Date.now });
+  logger.flush(true);
+  process.exit(code);
 }
 
 // 事件循环延迟：每次写指标快照后重新统计，/metrics 与快照中为上一次快照以来的 p99（server/metrics.ts 的 lagSeconds）

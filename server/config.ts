@@ -20,12 +20,16 @@ const HOSTNAME = /^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-
 export interface ServerConfig {
   /** 只打出版本号与提交号后退出（`--version`） */
   version: boolean;
+  /** 要执行的命令：serve 运行服务端（默认）；backup 备份数据库后退出（命令行第一个参数为 `backup`） */
+  command: 'serve' | 'backup';
   /** 主端口：命令行第一个参数，其次 `PORT`，默认 8443 */
   port: number;
   /** 监听地址（`HOST`），不设时监听所有网卡 */
   host?: string;
   /** 数据库的绝对路径（`YI_DB`，默认为工作目录下的 yi.db） */
   dbFile: string;
+  /** 备份目录的绝对路径（`YI_BACKUP_DIR`，默认为数据库所在目录下的 backup/） */
+  backupDir: string;
   /** 最新的客户端版本号（`YI_LATEST`） */
   latest?: string;
   /** 新版本的下载地址（`YI_DOWNLOAD`，http 或 https） */
@@ -83,18 +87,21 @@ function parseTexts(env: Env, fail: Fail) {
   return { host, latest, download };
 }
 
-/** 解析各项，不合法的记入 errors 并取默认值 */
-function collect(argv: string[], env: Env, cwd: string, errors: ConfigError[]) {
+/** 解析各项，不合法的记入 errors 并取默认值；backup 命令不监听端口，不解析端口 */
+function collect({ argv, env, cwd, command }: { argv: string[]; env: Env; cwd: string; command: ServerConfig['command'] }, errors: ConfigError[]) {
   const fail: Fail = (variable, expected) => errors.push({ variable, expected });
-  const ports = parsePorts(argv, env, fail),
+  const ports = command === 'backup' ? { port: PROTO_PORT } : parsePorts(argv, env, fail),
     texts = parseTexts(env, fail);
   const logLevel = parseLogLevel(env.YI_LOG_LEVEL);
   if (logLevel === null) fail('YI_LOG_LEVEL', 'error、warn、info、debug 之一');
   const files = given(env.YI_FILES);
+  const dbFile = path.resolve(cwd, given(env.YI_DB) ?? 'yi.db');
+  const backupDir = given(env.YI_BACKUP_DIR);
   return {
     ...ports,
     ...texts,
-    dbFile: path.resolve(cwd, given(env.YI_DB) ?? 'yi.db'),
+    dbFile,
+    backupDir: backupDir === undefined ? path.join(path.dirname(dbFile), 'backup') : path.resolve(cwd, backupDir),
     files: files === undefined ? undefined : path.resolve(cwd, files),
     logLevel: logLevel ?? 'info',
     journal: Boolean(env.JOURNAL_STREAM),
@@ -112,14 +119,17 @@ function isWebUrl(text: string) {
 }
 
 /**
- * 解析配置（纯函数，便于测试）。argv 为 `process.argv.slice(2)`：`--version` 只打出版本号；其余第一个参数为端口。
+ * 解析配置（纯函数，便于测试）。argv 为 `process.argv.slice(2)`：`--version` 只打出版本号；第一个参数为 `backup` 时备份数据库；
+ * 否则第一个参数为端口。
  * 相对路径以 cwd 为基准解析为绝对路径
  */
 export function parseConfig(argv: string[], env: Env, cwd: string): ConfigResult {
   const version = argv.includes('--version');
   const args = argv.filter(arg => arg !== '--version');
+  const command = args[0] === 'backup' ? 'backup' : 'serve';
   const errors: ConfigError[] = [];
-  const config = { version, ...collect(args, env, cwd, errors) };
+  if (command === 'backup' && args.length > 1) errors.push({ variable: '命令行参数', expected: 'backup 之后不带其他参数' });
+  const config = { version, command, ...collect({ argv: args, env, cwd, command }, errors) } as const;
   return { config, errors: version ? [] : errors };
 }
 

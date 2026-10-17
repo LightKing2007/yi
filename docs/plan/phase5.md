@@ -3,8 +3,8 @@
 | 项目 | 内容 |
 |---|---|
 | 性质 | 计划，资料性；实施必须符合 [docs/standards/](../standards/00-general.md)，与规范冲突时以规范为准 |
-| 文件版本 | 1.12 |
-| 修订日期 | 2026-10-16 |
+| 文件版本 | 1.13 |
+| 修订日期 | 2026-10-17 |
 | 状态 | 实施中：第 3 章的待决策事项已于 2026-10-16 由项目所有者决定；同日按尚无玩家的前提改为不保留旧数据与旧客户端的兼容，下一版为 3.0.0（[架构决策记录 0009](../adr/0009-no-legacy-compat.md)） |
 | 相关文档 | [roadmap.md](roadmap.md) 第 5 章、[remediation.md](remediation.md) 第 6 章（P2-01、P2-02、P2-04、P2-12）、[03-data.md](../standards/03-data.md)、[07-operations.md](../standards/07-operations.md)、[10-edge-cases.md](../standards/10-edge-cases.md) |
 | 维护方式 | 每完成一步，在第 4 章的“状态”列注明 PR 编号；计划调整时修订本文件并递增文件版本 |
@@ -81,7 +81,7 @@
 | 4 | 数据库的打开、迁移与结构版本检查 | P2-02；DAT-002、DAT-017、DAT-041、DAT-042、VER-012 | 2、3 | 已完成（#170） |
 | 5 | 仓储模块，段位改由数据库读写（原含导入 `yi-ratings.json` 与双写，已由 6a 删除） | DAT-001、DAT-044、DAT-045 | 4 | 已完成（#171、#172） |
 | 6 | 对局记录、每手用时与事务内结算 | DAT-024、DAT-040；A8 | 5 | 已完成 |
-| 7 | 在线备份、每小时备份、异地备份与恢复演练 | P2-02；DAT-060 至 DAT-065 | 4 | 未开始 |
+| 7 | 在线备份、每小时备份、异地备份与恢复演练 | P2-02；DAT-060 至 DAT-065 | 4 | 已完成（代码与规程；上线后安装备份、更新异地备份并演练恢复，见第 4.11.2 条） |
 | 8 | 按 IP 统计加入房间的失败次数 | API-044；A6 | 3 | 未开始 |
 | 9 | 日志事件码、监控指标与文档 | OPS-060 至 OPS-075、DOC-003 | 5、6、7 | 未开始 |
 | 6a | 删除旧数据的兼容：`server/store.ts`、`server/db/legacy.ts`、`YI_DATA`、双写，表结构中的 `import` | 架构决策记录 0009 | 6 | 已完成（#175） |
@@ -153,11 +153,11 @@
 
 ### 4.8 第 7 步：备份（P2-02 的后半）
 
-4.8.1 服务端新增 `node server.cjs backup`：以 `VACUUM INTO` 生成一致的快照（DAT-062），附 SHA-256 校验和（DAT-064）。`scripts/server/backup.sh` 改为调用该命令；`yi-backup.timer` 由每日改为每小时（DAT-060 的 RPO ≤ 1 小时），本地保留份数按服务器磁盘的实测余量确定，并保持 DAT-061 的“每日一份、保留 7 份”。
+4.8.1 服务端新增 `node server.cjs backup`（`server/db/backup.ts`、`server/backupCommand.ts`）：以 `VACUUM INTO` 生成一致的快照（DAT-062），做完整性检查并统计各表的条数，附 SHA-256 校验和（DAT-064），结果写 `db.backup-done`、`db.backup-skipped` 或 `db.backup-failed` 日志。`yi-backup.service` 直接执行线上版本的该命令，`scripts/server/backup.sh` 删除；`yi-backup.timer` 由每日改为每小时（DAT-060 的 RPO ≤ 1 小时）。本地保留最新的 24 份与最近 7 天各一份（DAT-061）：2026-10-17 实测服务器磁盘可用 34 GB，数据库即使增长到 100 MB，31 份也只占约 3 GB。
 
-4.8.2 `scripts/offsite.ts` 改为上传数据库快照；对象命名、生命周期规则与加密方式不变（DAT-063）。
+4.8.2 `scripts/offsite.ts` 改为上传数据库快照，生命周期规则、访问密钥的权限与加密方式不变（DAT-063）。每小时上传一次，日备的对象名由时间改为日期（`daily/yi-年月日.db.age`），当天每次覆盖为最新的一份，使 `daily/` 仍为每日一份、保留 30 份；月备为 `monthly/yi-年月.db.age`。本机的 `decrypt` 改为对解出的数据库做完整性检查，打出各表的条数与 SHA-256。
 
-4.8.3 上线新版本后按 DAT-065 演练一次恢复：从异地备份下载、解密、`integrity_check`、核对条数与校验和，结果记入 `docs/audits/`。
+4.8.3 上线新版本后按 DAT-065 演练一次恢复：从异地备份下载、解密、`integrity_check`、核对条数与校验和，结果记入 `docs/audits/`。步骤见 [ops.md](../procedures/ops.md) 第 3.4 条；服务器上的恢复步骤（第 3.2 条）已在本机以打包后的 `server.cjs` 演练：运行中备份、移走数据库与 WAL 文件、以备份替换后启动，条数与备份时一致。
 
 4.8.4 改动 `yi-backup.timer`、`yi-offsite.service` 须经项目所有者同意，以 root 执行相应的安装命令（SEC-044）。
 
@@ -175,7 +175,7 @@
 
 4.11.1 验收按第 5 章进行。发版按 [release.md](../procedures/release.md)：`npm run release` → 人工确认草稿 → `npm run deploy`，上线时间按 OPS-050（北京时间 23:00 至次日 05:00），须经项目所有者同意。
 
-4.11.2 上线顺序：开启维护模式并等待对局结束 → 由项目所有者把旧段位存档 `yi-ratings.json` 下载一份到本机（DAT-066）→ 上线（启动时新建数据库并执行迁移）→ 健康检查（OPS-046）→ 删除服务器上的旧段位存档及其本地备份（架构决策记录 0009）→ 按上线后检查清单检查。
+4.11.2 上线顺序：开启维护模式并等待对局结束 → 由项目所有者把旧段位存档 `yi-ratings.json` 下载一份到本机（DAT-066）→ 上线（启动时新建数据库并执行迁移）→ 健康检查（OPS-046）→ 删除服务器上的旧段位存档及其本地备份（架构决策记录 0009）→ 以 root 执行 `npm run deploy -- install-backup`（线上低于 3.0.0 时中止）与 `npm run deploy -- install-offsite --keep-config`，各立即备份或上传一次 → 按 [ops.md](../procedures/ops.md) 第 3.4 条演练恢复（第 4.8.3 条）→ 按上线后检查清单检查。
 
 ## 5 验收
 

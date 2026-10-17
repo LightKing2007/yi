@@ -1,26 +1,29 @@
 /**
- * 段位存档的异地加密备份（DAT-061 第二层、DAT-063；整改项 P1-13）。
- *   服务器上（打包为 /opt/yi/offsite.cjs，由 yi-offsite.service 在每日本地备份成功后运行）：
- *     node offsite.cjs upload       取本地最新的一份备份，核对 .sha256，以 age 加密后上传到阿里云 OSS
+ * 数据库的异地加密备份（DAT-061 第二层、DAT-063；整改项 P1-13，阶段 5 第 7 步改为上传数据库）。
+ *   服务器上（打包为 /opt/yi/offsite.cjs，由 yi-offsite.service 在每小时的本地备份成功后运行）：
+ *     node offsite.cjs upload       取本地最新的一份备份（server/db/backup.ts 写入），核对 .sha256，以 age 加密后上传到阿里云 OSS
  *   本机（npm run offsite -- …）：
  *     keygen 私钥文件               生成 age 密钥：私钥写入该文件（只留在本机，严禁放到服务器上），打出公钥
- *     decrypt 备份.age 私钥文件 输出  解密从 OSS 下载的备份，确认为合法 JSON 后写出
+ *     decrypt 备份.age 私钥文件 输出  解密从 OSS 下载的备份，写出后做完整性检查，打出各表的条数与 SHA-256
  *   私钥文件与解密的输出都须在项目目录以外（checkOutside）。
- * 上传的对象：daily/yi-ratings-时间.json.age（OSS 生命周期规则保留 30 日）与 monthly/yi-ratings-年月.json.age
- * （每日覆盖为当月最新的一份，保留 365 日，即 12 份月备）。访问密钥只有这两个前缀的 PutObject 权限。
+ * 上传的对象：daily/yi-年月日.db.age（当天每小时覆盖为最新的一份，OSS 生命周期规则保留 30 日，即 30 份日备）与
+ * monthly/yi-年月.db.age（覆盖为当月最新的一份，保留 365 日，即 12 份月备）；日期为 UTC。访问密钥只有这两个前缀的 PutObject 权限。
  * 请求以 OSS V4 签名（OSS4-HMAC-SHA256），带 Content-MD5 由 OSS 核对内容；不引入阿里云的 SDK。
  */
 import { createHash, createHmac } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { Decrypter, Encrypter, generateIdentity, identityToRecipient } from 'age-encryption';
 
 /** 上传的请求超时 */
 const UPLOAD_TIMEOUT_MS = 60_000;
 /** HTTP 200 */
 const HTTP_OK = 200;
-/** 备份文件名：backup.sh 写入的 yi-ratings-UTC时间.json */
-const BACKUP_NAME = /^yi-ratings-(\d{8}T\d{6}Z)\.json$/;
+/** 备份文件名：server/db/backup.ts 写入的 yi-UTC时间.db */
+const BACKUP_NAME = /^yi-(\d{8}T\d{6}Z)\.db$/;
+/** SQLite 数据库文件开头的 16 个字节 */
+const SQLITE_MAGIC = 'SQLite format 3\0';
 /** 不编码的字符（RFC 3986 的非保留字符），与 OSS 的 SDK 一致 */
 const UNRESERVED = /[A-Za-z0-9\-._~]/;
 /** 百分号编码的进制与位数 */
@@ -122,14 +125,14 @@ export function signV4(input: SignInput): Record<string, string> {
   return { ...headers, authorization: `OSS4-HMAC-SHA256 Credential=${input.config.accessKeyId}/${scope},Signature=${signature}` };
 }
 
-/** 一份备份对应的两个对象名：日备与当月的月备 */
+/** 一份备份对应的两个对象名：当天的日备与当月的月备 */
 export function objectKeys(file: string) {
   const stamp = BACKUP_NAME.exec(path.basename(file))?.[1];
   if (!stamp) throw new Error(`不是备份文件：${file}`);
-  return [`daily/yi-ratings-${stamp}.json.age`, `monthly/yi-ratings-${stamp.slice(0, MONTH_LEN)}.json.age`];
+  return [`daily/yi-${stamp.slice(0, DATE_LEN)}.db.age`, `monthly/yi-${stamp.slice(0, MONTH_LEN)}.db.age`];
 }
 
-/** 目录中最新的一份备份，并核对其 .sha256（backup.sh 写入，DAT-064）；没有或不符时抛出 */
+/** 目录中最新的一份备份，并核对其 .sha256（DAT-064）；没有或不符时抛出 */
 export function latestBackup(dir: string) {
   const names = fs
     .readdirSync(dir)
@@ -150,13 +153,45 @@ export async function encrypt(data: Uint8Array, recipient: string) {
   return encrypter.encrypt(data);
 }
 
-/** 以私钥 identity 解密，并确认内容为合法 JSON；返回原文 */
+/** 以私钥 identity 解密，并确认内容为 SQLite 数据库；返回原文 */
 export async function decrypt(data: Uint8Array, identity: string) {
   const decrypter = new Decrypter();
   decrypter.addIdentity(identity);
-  const text = await decrypter.decrypt(data, 'text');
-  JSON.parse(text);
-  return text;
+  const bytes = await decrypter.decrypt(data);
+  if (Buffer.from(bytes.subarray(0, SQLITE_MAGIC.length)).toString('latin1') !== SQLITE_MAGIC) throw new Error('解出的内容不是 SQLite 数据库');
+  return bytes;
+}
+
+/**
+ * 只读打开数据库文件，做完整性检查并统计各表的条数（表名取自 sqlite_master，本脚本由 node 直接运行，不引用 server/ 的模块）；
+ * 未通过时抛出
+ */
+export function inspect(file: string): Record<string, number> {
+  const db = new DatabaseSync(file, { readOnly: true });
+  try {
+    const result = db.prepare('PRAGMA integrity_check').all();
+    if (result.length !== 1 || result[0]?.integrity_check !== 'ok') throw new Error(`${file} 未通过完整性检查`);
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all();
+    return Object.fromEntries(tables.map(({ name }) => [String(name), Number(db.prepare(`SELECT count(*) AS n FROM "${String(name)}"`).get()?.n)]));
+  } finally {
+    db.close();
+  }
+}
+
+/** 本机的 decrypt：解密后写出（不覆盖已有文件，权限 600），做完整性检查；未通过时删除写出的文件并抛出。返回说明 */
+export async function decryptToFile(input: string, identityFile: string, out: string) {
+  const bytes = await decrypt(fs.readFileSync(input), fs.readFileSync(identityFile, 'utf8').trim());
+  fs.writeFileSync(out, bytes, { flag: 'wx', mode: 0o600 });
+  try {
+    const counts = inspect(out);
+    const rows = Object.entries(counts)
+      .map(([table, n]) => `${table} ${n}`)
+      .join('，');
+    return `已解密为 ${out}，完整性检查通过；各表条数：${rows}；SHA-256 ${createHash('sha256').update(bytes).digest('hex')}`;
+  } catch (err) {
+    fs.rmSync(out, { force: true });
+    throw err;
+  }
 }
 
 /**
@@ -219,7 +254,7 @@ export async function keygen(out: string) {
 }
 
 /**
- * 本机写出的文件（私钥、解密出的段位数据明文）不得在项目目录内，以免被误提交；在目录内时抛出。
+ * 本机写出的文件（私钥、解密出的数据库明文）不得在项目目录内，以免被误提交；在目录内时抛出。
  * npm run 在项目根目录执行，写相对路径时文件正落在仓库中
  */
 export function checkOutside(file: string, projectRoot: string) {
@@ -240,9 +275,7 @@ async function main(argv: string[]) {
     console.log(`私钥已写入 ${first}，请妥善保存在本机或密码管理器中，严禁放到服务器上（DAT-063）。\n公钥（安装异地备份时填写）：${recipient}`);
   } else if (cmd === 'decrypt' && args.length === DECRYPT_ARGS && first !== undefined && second !== undefined && third !== undefined) {
     checkOutside(third, projectRoot);
-    const text = await decrypt(fs.readFileSync(first), fs.readFileSync(second, 'utf8').trim());
-    fs.writeFileSync(third, text, { flag: 'wx', mode: 0o600 });
-    console.log(`已解密为 ${third}（${Object.keys(JSON.parse(text)).length} 条记录）`);
+    console.log(await decryptToFile(first, second, third));
   } else {
     throw new Error('用法：upload | keygen 私钥文件 | decrypt 备份.age 私钥文件 输出文件');
   }

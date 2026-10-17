@@ -223,15 +223,15 @@ node dist-server/server.cjs --version
 | `/opt/node/` | Node.js 24 官方二进制包（自 npmmirror 下载并校验后解压，不改动系统软件包） |
 | `/opt/yi/releases/版本号/` | 一个版本的服务端 `server.cjs`、下载页面上的安装程序 `download/` 与最新版本号 `env`（`YI_LATEST=版本号`），属主为 root，服务端只读；只保留当前与上一版本（OPS-043） |
 | `/opt/yi/current`、`/opt/yi/previous` | 指向当前与上一版本目录的符号链接，由 `npm run deploy` 切换；回滚即互换两者（OPS-044） |
-| `/var/lib/yi/` | 段位数据，属主为系统用户 `yi`（`useradd --system --no-create-home --shell /usr/sbin/nologin yi`） |
-| `/etc/systemd/system/yi.service` | 常驻服务，开机自启，异常退出后 3 秒自动重启；因段位存档损坏退出（退出码 65、74）时不重启；源文件为仓库中的 `scripts/server/yi.service` |
+| `/var/lib/yi/` | 数据库 `yi.db` 及其备份，属主为系统用户 `yi`（`useradd --system --no-create-home --shell /usr/sbin/nologin yi`） |
+| `/etc/systemd/system/yi.service` | 常驻服务，开机自启，异常退出后 3 秒自动重启；因数据库损坏或无法打开退出（退出码 65、74）时不重启；源文件为仓库中的 `scripts/server/yi.service` |
 | `/etc/ssh/sshd_config.d/00-yi-hardening.conf` | SSH 仅允许 Ed25519 密钥登录，禁止口令登录（SEC-040）；原配置备份为 `/etc/ssh/sshd_config.bak-20261002` |
 | UFW | 主机防火墙，默认拒绝入站，仅放行 TCP 22、80、443、8443，与阿里云安全组一致（SEC-041）；80、443 供 Caddy 使用（2026-10-13 起），8443 供 2.x 客户端直连，3.0 起关闭 |
 | `/etc/fail2ban/jail.local` | SSH 10 分钟内失败 5 次封禁 1 小时（SEC-042）。Ubuntu 24.04 的 SSH 单元名为 `ssh.service`，须以 `journalmatch = _SYSTEMD_UNIT=ssh.service + _COMM=sshd` 指明，否则 fail2ban 读不到任何日志 |
 | `/var/lib/yi/deploy.log` | 上线、回滚及配置修改的记录，每次操作追加一行（OPS-048）；最近一次上线的完整输出在 `deploy-last.log` |
-| `/opt/yi/backup.sh`、`/etc/systemd/system/yi-backup.{service,timer}` | 每日本地备份，每天北京时间 04:30 前后运行（DAT-060、DAT-061），源文件为仓库中的 `scripts/server/`，由 `npm run deploy -- install-backup` 安装 |
-| `/var/lib/yi/backup/` | 段位存档的备份 `yi-ratings-UTC时间.json` 及其 `.sha256` 校验和，保留最近 7 份（DAT-064） |
-| `/opt/yi/offsite.cjs`、`/etc/systemd/system/yi-offsite.service`、`/etc/yi/offsite.env` | 异地加密备份（DAT-061 第二层、DAT-063）：每日本地备份成功后，以 age 加密最新的一份并上传到阿里云 OSS；`offsite.env` 内含 OSS 的存储桶与只能写入的访问密钥（属主 root:yi，权限 640），解密用的私钥只在维护者本机。源文件为仓库中的 `scripts/offsite.ts` 与 `scripts/server/yi-offsite.service`，由 `npm run deploy -- install-offsite` 安装 |
+| `/etc/systemd/system/yi-backup.{service,timer}` | 每小时的本地备份（DAT-060 至 DAT-062），每小时第 7 分钟执行 `node /opt/yi/current/server.cjs backup`；源文件为仓库中的 `scripts/server/`，由 `npm run deploy -- install-backup` 在 3.0.0 上线后安装。此前的每日备份脚本 `/opt/yi/backup.sh` 备份旧的段位存档，安装时删除 |
+| `/var/lib/yi/backup/` | 数据库的备份 `yi-UTC时间.db` 及其 `.sha256` 校验和，保留最新的 24 份与最近 7 天各一份（DAT-061、DAT-064）；启动迁移前的备份 `pre-migrate-版本号-时间.db`（DAT-042） |
+| `/opt/yi/offsite.cjs`、`/etc/systemd/system/yi-offsite.service`、`/etc/yi/offsite.env` | 异地加密备份（DAT-061 第二层、DAT-063）：每次本地备份成功后，以 age 加密最新的一份并上传到阿里云 OSS；`offsite.env` 内含 OSS 的存储桶与只能写入的访问密钥（属主 root:yi，权限 640），解密用的私钥只在维护者本机。源文件为仓库中的 `scripts/offsite.ts` 与 `scripts/server/yi-offsite.service`，由 `npm run deploy -- install-offsite` 安装 |
 | `/etc/systemd/journald.conf.d/yi.conf` | journald 的保留策略：日志总量至多 1 GB，保留 90 日（OPS-065），源文件为仓库中的 `scripts/server/journald-yi.conf`，由 `npm run deploy -- install-journald` 安装 |
 | `/etc/caddy/sites/yi.caddy` | Caddy 中弈的站点配置：`yi.lightking.com.cn` 以 HTTPS 转发到本机 8443，屏蔽 `/healthz` 与 `/metrics`（API-061），不开访问日志（DAT-073）；源文件为仓库中的 `scripts/server/yi.caddy`，由 `npm run deploy -- install-caddy` 安装。Caddy 本身与主配置 `/etc/caddy/Caddyfile` 由 LightsWeb 仓库管理 |
 | 部署用户 `deploy`、`/usr/local/sbin/yi-deploy`、`/etc/sudoers.d/yi-deploy` | 日常运维的身份（SEC-044）：`npm run deploy` 的上线、`restart`、`rollback`、`status` 以 `deploy` 登录，只能经 sudo 执行 root 所有的 `yi-deploy`（`scripts/server/deploy-remote.sh` 的副本，只接受这几个命令），上传的文件由它以 `deploy` 的身份读出后使用；`deploy` 属 `systemd-journal` 组，可直接查看日志。白名单的源文件为 `scripts/server/sudoers-yi-deploy`，三者由 `npm run deploy -- install-deploy-user` 以 root 安装；其余 `install-*` 以 root 执行 |
@@ -247,13 +247,8 @@ node dist-server/server.cjs --version
 - **修改服务配置**：修改仓库中的 `scripts/server/yi.service`，经 PR 合并后执行 `npm run deploy -- install-service`；严禁在服务器上直接改动该文件。
 - **防火墙**：阿里云安全组与主机防火墙 UFW 均仅放行 TCP 22、8443 端口，两者须保持一致（SEC-041）。
 - **重启**：以 `npm run deploy -- restart` 进行：有对局时先进入维护模式，等对局结束后重启，并以健康检查核对；严禁直接执行 `systemctl restart yi`。
-- **备份**：备份在 `/var/lib/yi/backup/`。立即备份一次：`systemctl start yi-backup`；查看结果：`journalctl -u yi-backup -n 5`，失败记录为 error 级，可用 `journalctl -u yi-backup -p err` 筛出。异地备份见整改项 P1-13。
-- **从备份恢复**：恢复会丢失备份时刻之后的段位变化，并须重启服务端，应在无人对局时进行：
-  1. `systemctl stop yi`；
-  2. 核对备份：`cd /var/lib/yi/backup && sha256sum -c yi-ratings-时间.json.sha256`；
-  3. 先留存现有存档（DAT-066）：`cp -p /var/lib/yi/yi-ratings.json /var/lib/yi/yi-ratings.json.before-restore`；
-  4. `install -o yi -g yi -m 600 /var/lib/yi/backup/yi-ratings-时间.json /var/lib/yi/yi-ratings.json`；
-  5. `systemctl start yi`，以 `journalctl -u yi -n 1` 确认已启动，并在 `/var/lib/yi/deploy.log` 中追加一行记录。
+- **备份**：备份在 `/var/lib/yi/backup/`。立即备份一次：`systemctl start yi-backup`；查看结果：`journalctl -u yi-backup -n 5`，成功为 `db.backup-done`（附校验和与各表的条数），失败为 error 级的 `db.backup-failed`，可用 `journalctl -u yi-backup -p err` 筛出。
+- **从备份恢复**：恢复会丢失备份时刻之后的变化，并须停止服务端，应在无人对局时进行；步骤见 [运维规程](docs/procedures/ops.md) 第 3.2 条，从异地备份恢复见第 3.3 条。
 - **旧版服务端**：1.x 版本的 C 语言服务端（端口 7700）已停用并清理，1.x 客户端不再支持联机。
 
 ### 5.5 域名与 TLS
@@ -305,7 +300,7 @@ src/
                       check.ts 取值校验函数（联机消息与本地存储共用）；reject.ts 不合法着法的提示文字
   ui/                 Preact 界面：panels（菜单、对局、设置、更多）、online（联机对战）、widgets、styles.css、info（“更多”页面的文字）
   i18n/               多语言
-server/               rooms.ts 队列、配对、房间、对局与段位（与传输无关）；ratelimit.ts 限流与违规累计；db/ 数据库（打开与迁移、仓储、段位与对局记录）；record.ts 对局记录与每手用时；serve.ts 服务端的运行（启动、关闭、信号）；main.ts 入口（读取配置后调用 serve.ts）；host.ts 接入 WebSocket（可同时监听多个端口）；
+server/               rooms.ts 队列、配对、房间、对局与段位（与传输无关）；ratelimit.ts 限流与违规累计；db/ 数据库（打开与迁移、仓储、段位与对局记录、备份）；backupCommand.ts 备份命令（node server.cjs backup）；record.ts 对局记录与每手用时；serve.ts 服务端的运行（启动、关闭、信号）；main.ts 入口（读取配置后调用 serve.ts）；host.ts 接入 WebSocket（可同时监听多个端口）；
                       files.ts 同一端口上的下载服务（page.ts 页面、pageStyle.ts 样式）；main.ts 入口
 electron/             桌面版主进程（窗口、单实例、匹配成功时的任务栏提醒、错误日志）及预加载脚本
 tests/                vitest：rules（规则与人机）、record（规则层与棋谱）、session（会话与座位）、protocol（消息校验与昵称清洗）、server（联机服务端）、ratelimit（限流）、
