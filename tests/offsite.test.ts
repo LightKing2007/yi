@@ -1,12 +1,26 @@
-/** 异地加密备份（scripts/offsite.ts，DAT-061、DAT-063）：OSS V4 签名、对象名、备份的选取与核对、加密与上传 */
+/** 异地加密备份（scripts/offsite.ts，DAT-061、DAT-063）：OSS V4 签名、对象名、备份的选取与核对、加密与上传、解密与检查 */
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { generateIdentity, identityToRecipient } from 'age-encryption';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { checkOutside, decrypt, keygen, latestBackup, objectKeys, ossError, putObject, readConfig, signV4, upload } from '../scripts/offsite';
+import {
+  checkOutside,
+  decrypt,
+  decryptToFile,
+  encrypt,
+  keygen,
+  latestBackup,
+  objectKeys,
+  ossError,
+  putObject,
+  readConfig,
+  signV4,
+  upload,
+} from '../scripts/offsite';
 import { must } from './must';
 
 let dir = '';
@@ -19,10 +33,21 @@ afterEach(() => {
 
 const md5 = (data: Uint8Array) => createHash('md5').update(data);
 /** 写一份备份及其 .sha256；sum 给定时写入该值（模拟不符） */
-function backup(stamp: string, text: string, sum?: string) {
-  const name = `yi-ratings-${stamp}.json`;
-  fs.writeFileSync(path.join(dir, name), text);
-  fs.writeFileSync(path.join(dir, name + '.sha256'), `${sum ?? createHash('sha256').update(text).digest('hex')}  ${name}\n`);
+function backup(stamp: string, data: string | Uint8Array, sum?: string) {
+  const name = `yi-${stamp}.db`;
+  fs.writeFileSync(path.join(dir, name), data);
+  fs.writeFileSync(path.join(dir, name + '.sha256'), `${sum ?? createHash('sha256').update(data).digest('hex')}  ${name}\n`);
+}
+/** 一个真实的 SQLite 数据库文件的内容：表 users 中有 rows 行 */
+function sqliteBytes(rows: number) {
+  const file = path.join(dir, `.source-${rows}.db`);
+  const db = new DatabaseSync(file);
+  db.exec('CREATE TABLE users (name TEXT)');
+  for (let i = 0; i < rows; i++) db.prepare('INSERT INTO users VALUES (?)').run(`棋手${i}`);
+  db.close();
+  const bytes = fs.readFileSync(file);
+  fs.rmSync(file);
+  return bytes;
 }
 const CONFIG = { bucket: 'yi-backup-test', region: 'cn-hangzhou', accessKeyId: 'LTAItestkey0001', accessKeySecret: 'secretsecretsecret01' };
 
@@ -57,17 +82,21 @@ describe('OSS V4 签名覆盖的请求头', () => {
 });
 
 describe('备份的选取与对象名', () => {
-  it('取最新的一份并核对 .sha256；对象名为日备与当月的月备', () => {
-    backup('20261003T203000Z', '{"old":1}');
-    backup('20261004T203000Z', '{"new":1}');
+  it('取最新的一份并核对 .sha256，不理会迁移前的备份；对象名为当天的日备与当月的月备', () => {
+    backup('20261003T203000Z', 'old');
+    backup('20261004T203000Z', 'new');
+    fs.writeFileSync(path.join(dir, 'pre-migrate-3.0.0-20261005T000000Z.db'), 'pre');
     const found = latestBackup(dir);
-    expect([path.basename(found.file), String(found.data)]).toEqual(['yi-ratings-20261004T203000Z.json', '{"new":1}']);
-    expect(objectKeys(found.file)).toEqual(['daily/yi-ratings-20261004T203000Z.json.age', 'monthly/yi-ratings-202610.json.age']);
+    expect([path.basename(found.file), String(found.data)]).toEqual(['yi-20261004T203000Z.db', 'new']);
+    expect(objectKeys(found.file)).toEqual(['daily/yi-20261004.db.age', 'monthly/yi-202610.db.age']);
+    expect(objectKeys('/x/yi-20261004T213000Z.db')).toEqual(['daily/yi-20261004.db.age', 'monthly/yi-202610.db.age']); // 同一天的下一份覆盖日备
+    expect(() => objectKeys('/x/yi-ratings-20261004T203000Z.json')).toThrow('不是备份文件');
+    expect(() => objectKeys('/x/pre-migrate-3.0.0-20261005T000000Z.db')).toThrow('不是备份文件');
   });
 
   it('最新的一份与 .sha256 不符、或没有备份时抛出', () => {
     expect(() => latestBackup(dir)).toThrow('中没有备份');
-    backup('20261004T203000Z', '{"a":1}', '0'.repeat(64));
+    backup('20261004T203000Z', 'a', '0'.repeat(64));
     expect(() => latestBackup(dir)).toThrow('与其 .sha256 不符');
   });
 });
@@ -104,7 +133,8 @@ const now = () => new Date('2026-10-04T20:31:00Z');
 
 describe('上传', () => {
   it('加密最新的一份后上传日备与月备，带 Content-MD5 与签名；以私钥解密得到原文', async () => {
-    backup('20261004T203000Z', '{"abc":{"gomoku":{"points":1200}}}');
+    const original = sqliteBytes(3);
+    backup('20261004T203000Z', original);
     const identity = await generateIdentity();
     const sent: Sent[] = [];
     const env = {
@@ -116,18 +146,18 @@ describe('上传', () => {
       YI_BACKUP_DIR: dir,
     };
     const line = await upload(env, { fetch: fakeOss(sent), now });
-    expect(line).toMatch(/^<6>异地备份已上传：yi-ratings-20261004T203000Z\.json/);
+    expect(line).toMatch(/^<6>异地备份已上传：yi-20261004T203000Z\.db/);
     expect(sent.map(req => req.url)).toEqual([
-      'https://yi-backup-test.oss-cn-hangzhou.aliyuncs.com/daily/yi-ratings-20261004T203000Z.json.age',
-      'https://yi-backup-test.oss-cn-hangzhou.aliyuncs.com/monthly/yi-ratings-202610.json.age',
+      'https://yi-backup-test.oss-cn-hangzhou.aliyuncs.com/daily/yi-20261004.db.age',
+      'https://yi-backup-test.oss-cn-hangzhou.aliyuncs.com/monthly/yi-202610.db.age',
     ]);
     for (const req of sent) {
       expect(req.headers['content-md5']).toBe(md5(req.body).digest('base64'));
       expect(req.headers.authorization).toMatch(
         /^OSS4-HMAC-SHA256 Credential=LTAItestkey0001\/20261004\/cn-hangzhou\/oss\/aliyun_v4_request,Signature=[0-9a-f]{64}$/,
       );
-      expect(String(Buffer.from(req.body)).includes('gomoku')).toBe(false); // 上传的是密文
-      expect(await decrypt(req.body, identity)).toBe('{"abc":{"gomoku":{"points":1200}}}');
+      expect(Buffer.from(req.body).includes('SQLite format 3')).toBe(false); // 上传的是密文
+      expect(Buffer.from(await decrypt(req.body, identity))).toEqual(original);
     }
   });
 
@@ -138,8 +168,8 @@ describe('上传', () => {
     await expect(putObject(CONFIG, 'daily/x.age', body, { fetch: fakeOss([]), now })).resolves.toBeUndefined();
   });
 
-  it('用别的私钥无法解密；解出的内容不是 JSON 时失败', async () => {
-    backup('20261004T203000Z', 'not json');
+  it('用别的私钥无法解密；解出的内容不是 SQLite 数据库时失败', async () => {
+    backup('20261004T203000Z', 'not a database');
     const [mine, other] = [await generateIdentity(), await generateIdentity()];
     const sent: Sent[] = [];
     const env = {
@@ -153,7 +183,52 @@ describe('上传', () => {
     await upload(env, { fetch: fakeOss(sent), now });
     const body = must(sent[0], '上传的请求').body;
     await expect(decrypt(body, other)).rejects.toThrow();
-    await expect(decrypt(body, mine)).rejects.toThrow(SyntaxError);
+    await expect(decrypt(body, mine)).rejects.toThrow('不是 SQLite 数据库');
+  });
+});
+
+describe('本机解密', () => {
+  /** 以新生成的密钥加密 data，写出密文与私钥文件 */
+  async function sealed(data: Uint8Array) {
+    const identity = await generateIdentity();
+    fs.writeFileSync(path.join(dir, 'in.age'), await encrypt(data, await identityToRecipient(identity)));
+    fs.writeFileSync(path.join(dir, 'key.txt'), identity + '\n');
+    return [path.join(dir, 'in.age'), path.join(dir, 'key.txt')] as const;
+  }
+
+  it('写出数据库（权限 600、不覆盖），完整性检查通过后打出各表条数与 SHA-256', async () => {
+    const original = sqliteBytes(2);
+    const [input, key] = await sealed(original);
+    const out = path.join(dir, 'restored.db');
+    const line = await decryptToFile(input, key, out);
+    expect(line).toBe(`已解密为 ${out}，完整性检查通过；各表条数：users 2；SHA-256 ${createHash('sha256').update(original).digest('hex')}`);
+    expect(fs.readFileSync(out)).toEqual(original);
+    expect(fs.statSync(out).mode & 0o777).toBe(0o600);
+    await expect(decryptToFile(input, key, out)).rejects.toThrow('EEXIST');
+  });
+
+  it('索引与表内容不一致（各表仍能读取）时未通过完整性检查，并删除写出的文件', async () => {
+    const file = path.join(dir, '.indexed.db');
+    const db = new DatabaseSync(file);
+    db.exec("CREATE TABLE ratings (game TEXT); CREATE UNIQUE INDEX uq_game ON ratings (game); INSERT INTO ratings VALUES ('go'), ('gomoku')");
+    const root = Number(db.prepare("SELECT rootpage FROM sqlite_master WHERE name = 'uq_game'").get()?.rootpage);
+    db.close();
+    const bytes = fs.readFileSync(file);
+    const start = (root - 1) * bytes.readUInt16BE(16);
+    for (let i = start + bytes.readUInt16BE(start + 5); i < start + bytes.readUInt16BE(16); i++) if (bytes[i] === 0x67) bytes[i] = 0x68; // g 改为 h
+    const [input, key] = await sealed(bytes);
+    const out = path.join(dir, 'restored.db');
+    await expect(decryptToFile(input, key, out)).rejects.toThrow('未通过完整性检查');
+    expect(fs.existsSync(out)).toBe(false);
+  });
+
+  it('数据库已损坏、读取即出错时失败，并删除写出的文件', async () => {
+    const broken = sqliteBytes(200);
+    broken.fill(0x55, 4096, 8192); // 第二页（表 users 的数据）被破坏，文件头完好
+    const [input, key] = await sealed(broken);
+    const out = path.join(dir, 'restored.db');
+    await expect(decryptToFile(input, key, out)).rejects.toThrow();
+    expect(fs.existsSync(out)).toBe(false);
   });
 });
 

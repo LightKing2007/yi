@@ -3,8 +3,8 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.16 |
-| 修订日期 | 2026-10-16 |
+| 文件版本 | 1.1.17 |
+| 修订日期 | 2026-10-17 |
 | 规则前缀 | `OPS` |
 
 参考：ISO/IEC/IEEE 12207:2017 第 6.4.10 节至第 6.4.13 节；ISO/IEC 20000-1:2018；ISO/IEC 27035-1:2023；GB/T 20986—2023；RFC 3339；RFC 5424；SLSA v1.0。
@@ -132,6 +132,9 @@
 | `db.games-aborted` | info | 上次运行时尚未终局的对局已在启动时记为服务端放弃（roadmap.md 第 5.4 节） | `count` |
 | `db.migrated` | info | 数据库结构已升到本程序支持的版本（DAT-041）；已有结构的数据库在迁移前已备份（DAT-042） | `file`、`from`、`to`、`backup` |
 | `db.opened` | info | 数据库已打开，PRAGMA 与完整性检查通过（DAT-002） | `file`、`schemaVersion` |
+| `db.backup-done` | info | 数据库已备份（`node server.cjs backup`，DAT-062、DAT-064）：快照通过完整性检查，已写校验和，已按保留策略删除旧的备份 | `file`、`bytes`、`sha256`、`counts`、`pruned`、`kept` |
+| `db.backup-skipped` | info | 数据库还不存在，本次不备份 | `file` |
+| `db.backup-failed` | error | 数据库备份失败，已有的备份不受影响；当日运维检查中处理（DAT-064） | `file`、`dir`、`err` |
 | `db.write-failed` | error | 对局记录写入失败（开局、终局或放弃），已回滚；终局写入失败时本局不结算段位，双方收到提示与错误编号（10-edge-cases.md 第 4 节） | `roomId`、`gameId`、`op`、`errorId`、`err` |
 | `player.online` | info | 玩家上线 | `playerId` |
 | `player.offline` | info | 玩家断开 | `playerId`、`code` |
