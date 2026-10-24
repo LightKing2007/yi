@@ -9,7 +9,7 @@ import type { Build } from './health';
 import { startHost, type Host } from './host';
 import type { Logger } from './log';
 import { Metrics } from './metrics';
-import type { RatingStore } from './roomTypes';
+import type { Persistence } from './db/startup';
 
 /** 输出日志汇总行（OPS-063）的间隔 */
 export const LOG_FLUSH_MS = 1000;
@@ -44,14 +44,20 @@ export interface ServeDeps {
 export async function serve(deps: ServeDeps): Promise<void> {
   const { config, logger, build } = deps;
   const { log } = logger;
-  const persistence = startPersistence({ dbFile: config.dbFile, appVersion: build.version, now: deps.now, log });
+  const metrics = new Metrics(build);
+  const persistence = startPersistence({
+    dbFile: config.dbFile,
+    appVersion: build.version,
+    now: deps.now,
+    log,
+    repo: { onTransaction: seconds => metrics.observe('yi_db_transaction_seconds', seconds) },
+  });
   if (typeof persistence === 'number') {
     deps.exit(persistence); // 失败的原因已写入日志
     return;
   }
   const stopFlush = deps.every(LOG_FLUSH_MS, () => logger.flush());
-  const metrics = new Metrics(build);
-  const started = await listen(deps, persistence.store, metrics);
+  const started = await listen(deps, persistence, metrics);
   if (!started) {
     persistence.close();
     stopFlush();
@@ -79,12 +85,23 @@ export async function serve(deps: ServeDeps): Promise<void> {
 }
 
 /** 监听端口；失败时写 server.listen-failed 日志并返回 undefined */
-async function listen(deps: ServeDeps, store: RatingStore, metrics: Metrics): Promise<Host | undefined> {
+async function listen(deps: ServeDeps, persistence: Persistence, metrics: Metrics): Promise<Host | undefined> {
   const { config } = deps;
   const { host, latest, download, files } = config;
   const ports = [config.port];
   try {
-    return await startHost(ports, { log: deps.logger.log, store, host, latest, download, files, build: deps.build, metrics, eventLoopLag: deps.eventLoopLag });
+    return await startHost(ports, {
+      log: deps.logger.log,
+      store: persistence.store,
+      host,
+      latest,
+      download,
+      files,
+      build: deps.build,
+      metrics,
+      eventLoopLag: deps.eventLoopLag,
+      dbFileBytes: persistence.fileBytes,
+    });
   } catch (err) {
     deps.logger.log('error', 'server.listen-failed', { msg: `无法在端口 ${ports.join('、')} 启动`, ports, err });
     return undefined;

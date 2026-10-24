@@ -3,8 +3,8 @@
 | 项目 | 内容 |
 |---|---|
 | 性质 | 规程，强制执行；依据 [07-operations.md](../standards/07-operations.md)、[03-data.md](../standards/03-data.md)、[05-security.md](../standards/05-security.md) |
-| 文件版本 | 1.2.0 |
-| 修订日期 | 2026-10-17 |
+| 文件版本 | 1.2.1 |
+| 修订日期 | 2026-10-24 |
 | 适用范围 | 线上服务器 47.108.181.240 的日常检查、备份与恢复、回滚、应急处置 |
 | 相关文档 | [release.md](release.md)（发版与上线）、[README.md](../../README.md) 第 5.3、5.4 节（部署结构） |
 
@@ -123,7 +123,7 @@ npm run deploy -- restart
 
    | 退出码 | 含义 | 处置 |
    |---|---|---|
-   | 65、74 | 数据库无法打开、已损坏、结构版本高于程序支持或迁移失败，拒绝启动（`db.open-failed`）；systemd 不再自动重启 | 新版本上线后出现的，按第 4.1 条回滚；否则按第 3.2 条恢复数据库 |
+   | 65、74 | 数据库无法打开、已损坏、结构版本高于程序支持或迁移失败，拒绝启动（`db.open-failed`）；systemd 不再自动重启 | 按日志中的 `kind` 处置：`migration`（迁移已回滚，数据库不变）与 `schema-version`（数据库的结构比程序新）为版本问题，按第 4.1 条回滚到上一版本；`integrity`、`unreadable` 为数据库损坏，按第 3.2 条恢复；`io` 先检查 `/var/lib/yi` 的磁盘空间、属主与权限 |
    | 78 | 环境变量取值不合法，拒绝启动（如 `YI_LOG_LEVEL`），日志中有 `server.config-invalid` | 修正 `yi.service` 或附加配置后重启 |
    | 1 | 端口无法监听（`server.listen-failed`），如端口被占用 | 以 `ss -tlnp` 找出占用端口的进程并处理 |
    | 其他 | 未预期的异常（`internal.error`） | 新版本上线后出现的，按第 4.1 条回滚；否则保留日志后重启，并建 Issue |

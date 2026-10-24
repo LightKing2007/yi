@@ -15,6 +15,8 @@ const GAUGES: Gauges = {
   downloadsActive: 1,
   eventLoopLagSeconds: 0.012,
   residentMemoryBytes: 80_000_000,
+  dbFileBytes: 73_728,
+  joinFailIps: 4,
 };
 const build = { version: '9.8.7', commit: 'abc"1\\2' };
 
@@ -45,6 +47,9 @@ describe('Prometheus 文本格式', () => {
     expect(lines).toContain('yi_queue_waiting{mode="ranked",type="go"} 1');
     expect(lines).toContain('yi_event_loop_lag_seconds 0.012');
     expect(lines).toContain('process_resident_memory_bytes 80000000');
+    expect(lines).toContain('yi_db_file_bytes 73728');
+    expect(lines).toContain('yi_join_fail_ips 4');
+    expect(lines).toContain('# TYPE yi_db_file_bytes gauge');
     // 每个样本都在其指标族的 HELP、TYPE 之后
     const families = lines.filter(line => line.startsWith('# TYPE ')).map(line => line.split(' ')[2] ?? '');
     expect(new Set(families).size).toBe(families.length);
@@ -53,7 +58,7 @@ describe('Prometheus 文本格式', () => {
 
   it('直方图的桶为累计值，另有 +Inf、总和与次数', () => {
     const metrics = new Metrics(build);
-    for (const seconds of [0.0005, 0.001, 0.003, 0.02, 0.5]) metrics.observe(seconds);
+    for (const seconds of [0.0005, 0.001, 0.003, 0.02, 0.5]) metrics.observe('yi_message_handle_seconds', seconds);
     const lines = metrics.render(GAUGES).split('\n');
     expect(lines.filter(line => line.startsWith('yi_message_handle_seconds'))).toEqual([
       'yi_message_handle_seconds_bucket{le="0.001"} 2',
@@ -80,6 +85,27 @@ describe('Prometheus 文本格式', () => {
       .map(line => [line.slice(0, line.lastIndexOf(' ')), Number(line.slice(line.lastIndexOf(' ') + 1))]);
     expect(snapshot).toEqual(Object.fromEntries(samples));
     expect(snapshot['yi_errors_total{code="server.full"}']).toBe(1);
+  });
+});
+
+describe('数据库事务耗时的直方图', () => {
+  it('与消息处理耗时各自累计，互不计入', () => {
+    const metrics = new Metrics(build);
+    metrics.observe('yi_db_transaction_seconds', 0.002);
+    metrics.observe('yi_db_transaction_seconds', 0.2);
+    const lines = metrics.render(GAUGES).split('\n');
+    expect(lines.filter(line => line.startsWith('yi_db_transaction_seconds'))).toEqual([
+      'yi_db_transaction_seconds_bucket{le="0.001"} 0',
+      'yi_db_transaction_seconds_bucket{le="0.005"} 1',
+      'yi_db_transaction_seconds_bucket{le="0.01"} 1',
+      'yi_db_transaction_seconds_bucket{le="0.05"} 1',
+      'yi_db_transaction_seconds_bucket{le="0.1"} 1',
+      'yi_db_transaction_seconds_bucket{le="+Inf"} 2',
+      'yi_db_transaction_seconds_sum 0.202',
+      'yi_db_transaction_seconds_count 2',
+    ]);
+    expect(lines).toContain('yi_message_handle_seconds_count 0');
+    expect(lines.filter(line => line.startsWith('# TYPE yi_db_transaction_seconds'))).toEqual(['# TYPE yi_db_transaction_seconds histogram']);
   });
 });
 

@@ -3,8 +3,8 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.17 |
-| 修订日期 | 2026-10-17 |
+| 文件版本 | 1.1.18 |
+| 修订日期 | 2026-10-24 |
 | 规则前缀 | `OPS` |
 
 参考：ISO/IEC/IEEE 12207:2017 第 6.4.10 节至第 6.4.13 节；ISO/IEC 20000-1:2018；ISO/IEC 27035-1:2023；GB/T 20986—2023；RFC 3339；RFC 5424；SLSA v1.0。
@@ -97,7 +97,7 @@
 | 编号 | 等级 | 规定 | 现状 |
 |---|---|---|---|
 | OPS-070 | D | 联机服务的服务等级目标（SLO）统一为：月可用率 ≥ 99.5%（每月不可用时间 ≤ 3.6 小时），计划内维护不计入，但每月计划内维护 ≤ 2 小时 | 未知 |
-| OPS-071 | A | 服务端必须在 `/metrics`（仅本机可访问）以 Prometheus 文本格式输出本文件第 9 节定义的指标，并每 60 秒在日志中输出一条 `metrics.snapshot` 事件 | 未满足 |
+| OPS-071 | A | 服务端必须在 `/metrics`（仅本机可访问）以 Prometheus 文本格式输出本文件第 9 节定义的指标，并每 60 秒在日志中输出一条 `metrics.snapshot` 事件 | 满足（#92；阶段 5 第 9 步增加数据库事务耗时、数据库文件大小与按 IP 统计的 IP 数） |
 | OPS-072 | A | 指标名统一为 `yi_` 前缀的 snake_case，计数器以 `_total` 结尾，时长以 `_seconds` 结尾，字节以 `_bytes` 结尾；标签基数 ≤ 50 | 不适用 |
 | OPS-073 | A | 必须配置外部可用性探测：每 60 秒请求一次下载页面，连续 3 次失败即通知维护者 | 未满足（决策项 D-4 于 2026-10-06 决定暂不建立，以 OPS-075 的每日检查代替） |
 | OPS-074 | A | 以下情况必须触发告警：服务进程退出；磁盘使用率 ≥ 80%；内存 ≥ `MemoryMax` 的 80%；事件循环延迟 p99 ≥ 200 毫秒持续 5 分钟；备份任务失败；证书剩余有效期 ≤ 14 日 | 未满足（决策项 D-4 于 2026-10-06 决定暂不建立通知渠道，以 OPS-075 的每日检查代替；所需的指标已由 OPS-071 提供） |
@@ -128,8 +128,9 @@
 | `server.listen-failed` | error | 端口无法监听，服务未启动 | `ports`、`err` |
 | `server.config-invalid` | error | 配置校验失败，拒绝启动 | `variable`、`expected` |
 | `server.maintenance` | info | 进入维护模式（OPS-045） | `games`、`players` |
-| `db.open-failed` | error | 数据库无法打开、已损坏、结构版本过高或迁移失败，拒绝启动（DAT-002、DAT-041、VER-012） | `file`、`err` |
+| `db.open-failed` | error | 数据库无法打开、已损坏、结构版本过高或迁移失败，拒绝启动（DAT-002、DAT-041、VER-012）；`kind` 为失败的原因：`io` 无法打开、`unreadable` 不是数据库或读取即出错、`integrity` 未通过完整性检查、`schema-version` 结构版本无法识别或过高、`migration` 迁移失败（已回滚），处置见 [ops.md](../procedures/ops.md) 第 5.2 条 | `file`、`kind`、`err` |
 | `db.games-aborted` | info | 上次运行时尚未终局的对局已在启动时记为服务端放弃（roadmap.md 第 5.4 节） | `count` |
+| `db.migrating` | info | 即将执行迁移；已有结构的数据库已在此前备份（DAT-042）。只有本行、没有随后的 `db.migrated` 或 `db.open-failed` 时，迁移中进程被终止 | `file`、`from`、`to`、`backup` |
 | `db.migrated` | info | 数据库结构已升到本程序支持的版本（DAT-041）；已有结构的数据库在迁移前已备份（DAT-042） | `file`、`from`、`to`、`backup` |
 | `db.opened` | info | 数据库已打开，PRAGMA 与完整性检查通过（DAT-002） | `file`、`schemaVersion` |
 | `db.backup-done` | info | 数据库已备份（`node server.cjs backup`，DAT-062、DAT-064）：快照通过完整性检查，已写校验和，已按保留策略删除旧的备份 | `file`、`bytes`、`sha256`、`counts`、`pruned`、`kept` |
@@ -169,7 +170,10 @@
 | `yi_errors_total` | counter | `code` | 下发的错误码数 |
 | `yi_rate_limited_total` | counter | — | 触发限流的次数 |
 | `yi_message_handle_seconds` | histogram | — | 单条消息处理耗时，桶为 0.001、0.005、0.01、0.05、0.1 |
+| `yi_db_transaction_seconds` | histogram | — | 数据库事务耗时（开局、终局结算与段位写入，含提交或回滚），桶同上 |
 | `yi_event_loop_lag_seconds` | gauge | — | 事件循环延迟 p99 |
 | `yi_db_write_failures_total` | counter | — | 对局记录写入数据库失败的次数（`db.write-failed`） |
 | `yi_downloads_active` | gauge | — | 进行中的下载数 |
 | `process_resident_memory_bytes` | gauge | — | 常驻内存 |
+| `yi_db_file_bytes` | gauge | — | 数据库文件与其 WAL 文件的字节数合计 |
+| `yi_join_fail_ips` | gauge | — | 正在统计加入房间失败次数的 IP 数（API-044） |

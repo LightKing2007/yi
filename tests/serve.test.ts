@@ -4,9 +4,12 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import WebSocket from 'ws';
 import { parseConfig } from '../server/config';
 import { Logger } from '../server/log';
 import { LOG_FLUSH_MS, SNAPSHOT_MS, serve, type ServeDeps } from '../server/serve';
+import { PROTO_VERSION } from '../src/shared/protocol';
+import { newUid } from './serverWorld';
 
 let dir = '';
 const handles: (() => void)[] = [];
@@ -58,7 +61,7 @@ describe('服务端的运行', () => {
   it('启动：打开数据库、监听端口，写 server.start；按间隔输出日志汇总与指标快照', async () => {
     const run = harness();
     await serve(run.deps);
-    expect(run.events()).toEqual(['db.migrated', 'db.opened', 'server.start']);
+    expect(run.events()).toEqual(['db.migrating', 'db.migrated', 'db.opened', 'server.start']);
     const start = run.lines.at(-1);
     expect(start).toMatchObject({ msg: '弈 联机服务端已启动', protoRange: [3, 3], dbFile: path.join(dir, 'yi.db') });
     const [port] = start?.ports as number[];
@@ -84,6 +87,47 @@ describe('服务端的运行', () => {
     expect([...run.timers.values()].map(timer => timer.stopped)).toEqual([true, true]);
     await expect(fetch(`http://127.0.0.1:${port}/healthz`)).rejects.toThrow();
     expect(fs.existsSync(path.join(dir, 'yi.db-wal'))).toBe(false); // 最后一个连接关闭时 SQLite 做检查点并删除 WAL 文件
+  });
+});
+
+/** 连上 port 并握手；next(type) 等到这一类消息为止 */
+async function player(port: number, name: string) {
+  const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+  const inbox: { t: string; code?: string }[] = [];
+  let wake = () => {};
+  ws.on('message', data => {
+    inbox.push(JSON.parse(String(data)));
+    wake();
+  });
+  const next = async (type: string) => {
+    for (;;) {
+      const i = inbox.findIndex(msg => msg.t === type);
+      if (i >= 0) return inbox.splice(0, i + 1).at(-1);
+      await new Promise<void>(res => (wake = res));
+    }
+  };
+  await new Promise(res => ws.on('open', res));
+  ws.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, name, uid: newUid() }));
+  await next('welcome');
+  return { send: (msg: object) => ws.send(JSON.stringify(msg)), next, close: () => ws.close() };
+}
+
+describe('数据库的监控指标', () => {
+  it('指标快照中有数据库文件的大小，开局写对局记录的事务计入事务耗时', async () => {
+    const run = harness();
+    await serve(run.deps);
+    const [port = 0] = run.lines.at(-1)?.ports as number[];
+    const [host, guest] = [await player(port, '甲'), await player(port, '乙')];
+    host.send({ t: 'create', type: 0, size: 15, hostColor: 0, renju: true, moveTime: 0 });
+    guest.send({ t: 'join', code: (await host.next('created'))?.code });
+    await guest.next('start');
+    run.timers.get(SNAPSHOT_MS)?.fn();
+    const bytes = fs.statSync(path.join(dir, 'yi.db')).size + fs.statSync(path.join(dir, 'yi.db-wal')).size;
+    expect(run.lines.at(-1)).toMatchObject({ event: 'metrics.snapshot', yi_db_transaction_seconds_count: 1, yi_db_file_bytes: bytes, yi_join_fail_ips: 0 });
+    host.close();
+    guest.close();
+    run.signals.get('SIGTERM')?.();
+    expect(await exited(run.exits)).toEqual([0]);
   });
 });
 

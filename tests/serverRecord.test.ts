@@ -273,8 +273,17 @@ describe('对局记录写入失败（10-edge-cases.md 第 4 节）', () => {
       expect(client.closed).toBe(false);
     }
     expect(
-      metrics.snapshot({ connections: 0, playersOnline: 0, rooms: [], queue: [], downloadsActive: 0, eventLoopLagSeconds: 0, residentMemoryBytes: 0 })
-        .yi_db_write_failures_total,
+      metrics.snapshot({
+        connections: 0,
+        playersOnline: 0,
+        rooms: [],
+        queue: [],
+        downloadsActive: 0,
+        eventLoopLagSeconds: 0,
+        residentMemoryBytes: 0,
+        dbFileBytes: 0,
+        joinFailIps: 0,
+      }).yi_db_write_failures_total,
     ).toBe(1);
   });
 

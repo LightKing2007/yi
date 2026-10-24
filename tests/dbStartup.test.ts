@@ -29,12 +29,25 @@ afterEach(() => {
 describe('启动时的持久化', () => {
   it('首次启动新建数据库；段位写入数据库，退出时关闭', () => {
     const run = openPersistence(options());
-    expect(logs).toEqual(['db.migrated', 'db.opened']);
+    expect(logs).toEqual(['db.migrating', 'db.migrated', 'db.opened']);
     run.store.set(HASH_A, { gomoku: { points: 1216, win: 1, loss: 0, draw: 0 }, go: { points: 1200, win: 0, loss: 0, draw: 0 } }, '甲');
     run.close();
     const db = new DatabaseSync(dbFile);
     expect(db.prepare('SELECT points FROM ratings WHERE game_type = ?').get('gomoku')?.points).toBe(1216);
     db.close();
+  });
+
+  it('事务耗时报告给 repo.onTransaction；fileBytes 为数据库与 WAL 文件的字节数合计', () => {
+    const seconds: number[] = [];
+    let clock = 10;
+    const run = openPersistence({ ...options(), repo: { clock: () => (clock += 0.25), onTransaction: taken => seconds.push(taken) } });
+    run.store.set(HASH_A, { gomoku: { points: 1216, win: 1, loss: 0, draw: 0 }, go: { points: 1200, win: 0, loss: 0, draw: 0 } }, '甲');
+    expect(seconds).toEqual([0.25]);
+    const wal = fs.statSync(`${dbFile}-wal`).size;
+    expect(wal).toBeGreaterThan(0); // 写入还在 WAL 中
+    expect(run.fileBytes()).toBe(fs.statSync(dbFile).size + wal);
+    run.close(); // 关闭时做检查点并删除 WAL 文件
+    expect(run.fileBytes()).toBe(fs.statSync(dbFile).size);
   });
 
   it('上次运行时尚未终局的对局在启动时记为服务端放弃', () => {
@@ -61,14 +74,14 @@ describe('启动时的持久化', () => {
 });
 
 describe('入口调用的启动函数', () => {
-  it('成功时返回持久化；数据库损坏时写 db.open-failed 并返回 65', () => {
+  it('成功时返回持久化；数据库损坏时写 db.open-failed（附失败的原因 kind）并返回 65', () => {
     const run = startPersistence(options());
     expect(typeof run).toBe('object');
     if (typeof run === 'object') run.close();
     fs.writeFileSync(dbFile, 'garbage'.repeat(1000));
-    logs = [];
-    expect(startPersistence(options())).toBe(65);
-    expect(logs).toEqual(['db.open-failed']);
+    const entries: unknown[] = [];
+    expect(startPersistence({ ...options(), log: (_level, event, entry) => entries.push({ event, kind: entry?.kind }) })).toBe(65);
+    expect(entries).toEqual([{ event: 'db.open-failed', kind: 'unreadable' }]);
   });
 
   it('其他异常照常抛出，不当作数据损坏', () => {

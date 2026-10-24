@@ -58,6 +58,19 @@ describe('数据访问', () => {
     expect(count('ratings')).toBe(1);
   });
 
+  it('每个事务结束后报告耗时：提交与回滚都报告', () => {
+    let clock = 0;
+    const seconds: number[] = [];
+    const timed = new Repo(db, { clock: () => (clock += 0.5), onTransaction: taken => seconds.push(taken) });
+    timed.transaction(() => timed.ensure(HASH_A, '甲', 1));
+    expect(() =>
+      timed.transaction(() => {
+        throw new Error('中途出错');
+      }),
+    ).toThrow('中途出错');
+    expect(seconds).toEqual([0.5, 0.5]);
+  });
+
   it('事务中抛出异常时整体回滚', () => {
     expect(() =>
       repo.transaction(() => {

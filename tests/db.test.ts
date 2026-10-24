@@ -69,8 +69,8 @@ describe('打开数据库', () => {
     expect(db.prepare('PRAGMA foreign_keys').get()?.foreign_keys).toBe(1);
     expect(db.prepare('PRAGMA busy_timeout').get()?.timeout).toBe(3000);
     expect(db.prepare('PRAGMA synchronous').get()?.synchronous).toBe(1); // NORMAL
-    expect(logs.map(([event]) => event)).toEqual(['db.migrated', 'db.opened']);
-    expect(logs[0]?.[1]).toEqual(expect.objectContaining({ from: 0, to: 1, backup: undefined })); // 新建的空数据库不备份
+    expect(logs.map(([event]) => event)).toEqual(['db.migrating', 'db.migrated', 'db.opened']);
+    expect(logs[1]?.[1]).toEqual(expect.objectContaining({ from: 0, to: 1, backup: undefined })); // 新建的空数据库不备份
     expect(fs.existsSync(path.join(dir, 'backup'))).toBe(false);
   });
 
@@ -100,7 +100,8 @@ describe('迁移', () => {
     expect(version(db)).toBe('2');
     expect(db.prepare('SELECT name FROM users').all()).toEqual([{ name: '甲' }]);
     const saved = path.join(dir, 'backup', 'pre-migrate-2.0.8-20261016T013000Z.db');
-    expect(logs[0]).toEqual(['db.migrated', expect.objectContaining({ from: 1, to: 2, backup: saved })]);
+    expect(logs[0]).toEqual(['db.migrating', expect.objectContaining({ from: 1, to: 2, backup: saved })]);
+    expect(logs[1]).toEqual(['db.migrated', expect.objectContaining({ from: 1, to: 2, backup: saved })]);
     const copy = open(saved);
     expect(version(copy)).toBe('1');
     expect(tables(copy)).not.toContain('notes');
@@ -110,9 +111,11 @@ describe('迁移', () => {
   it('迁移失败时回滚整个迁移、拒绝启动，结构版本不变', () => {
     close(open(file));
     const broken: Migration = { version: 2, name: '0002_broken', sql: 'CREATE TABLE half (id INTEGER PRIMARY KEY) STRICT; INSERT INTO nowhere VALUES (1);' };
+    logs = [];
     const err = failure(() => open(file, [...MIGRATIONS, broken]));
-    expect(err.exitCode).toBe(65);
+    expect([err.exitCode, err.kind]).toEqual([65, 'migration']);
     expect(err.message).toContain('0002_broken');
+    expect(logs.map(([event]) => event)).toEqual(['db.migrating']); // 迁移开始时已写下，失败后没有 db.migrated
     const db = open(file);
     expect(version(db)).toBe('1');
     expect(tables(db)).not.toContain('half');
@@ -122,7 +125,7 @@ describe('迁移', () => {
     close(open(file, [...MIGRATIONS, V2]));
     const before = fs.readFileSync(file);
     const err = failure(() => open(file));
-    expect(err.exitCode).toBe(65);
+    expect([err.exitCode, err.kind]).toEqual([65, 'schema-version']);
     expect(err.message).toContain('结构版本 2 高于本程序支持的 1');
     expect(fs.readFileSync(file).equals(before)).toBe(true);
   });
@@ -131,7 +134,9 @@ describe('迁移', () => {
     const db = open(file);
     db.prepare("UPDATE meta SET meta_text = 'x' WHERE meta_name = 'schema_version'").run();
     close(db);
-    expect(failure(() => open(file)).message).toContain('结构版本 x 无法识别');
+    const err = failure(() => open(file));
+    expect(err.message).toContain('结构版本 x 无法识别');
+    expect(err.kind).toBe('schema-version');
   });
 });
 
@@ -139,7 +144,8 @@ describe('损坏的数据库', () => {
   it('不是数据库的文件拒绝启动，原文件不动', () => {
     fs.writeFileSync(file, 'yi-ratings.json 的内容'.repeat(400));
     const before = fs.readFileSync(file);
-    expect(failure(() => open(file)).exitCode).toBe(65);
+    const err = failure(() => open(file));
+    expect([err.exitCode, err.kind]).toEqual([65, 'unreadable']);
     expect(fs.readFileSync(file).equals(before)).toBe(true);
   });
 
@@ -157,7 +163,7 @@ describe('损坏的数据库', () => {
     for (let i = start + bytes.readUInt16BE(start + 5); i < start + pageSize; i++) if (bytes[i] === 0x67) bytes[i] = 0x68;
     fs.writeFileSync(file, bytes);
     const err = failure(() => open(file));
-    expect(err.exitCode).toBe(65);
+    expect([err.exitCode, err.kind]).toEqual([65, 'integrity']);
     expect(err.message).toContain('未通过完整性检查（row 1 missing from index uq_ratings_user_id_game_type；');
   });
 
@@ -172,12 +178,13 @@ describe('损坏的数据库', () => {
     bytes.fill(0x5a, last, last + 12); // 改坏最后一页（用户表的叶子页）的页头
     fs.writeFileSync(file, bytes);
     const err = failure(() => open(file));
-    expect(err.exitCode).toBe(65);
+    expect([err.exitCode, err.kind]).toEqual([65, 'unreadable']);
     expect(err.message).toContain('无法读取（database disk image is malformed）');
   });
 
   it('目录不存在等无法打开的情况以退出码 74 拒绝启动', () => {
-    expect(failure(() => open(path.join(dir, 'missing', 'yi.db'))).exitCode).toBe(74);
+    const err = failure(() => open(path.join(dir, 'missing', 'yi.db')));
+    expect([err.exitCode, err.kind]).toEqual([74, 'io']);
   });
 });
 
