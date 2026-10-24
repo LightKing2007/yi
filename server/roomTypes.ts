@@ -6,7 +6,7 @@ import type { Game } from '../src/core/game';
 import type { GameRecord } from '../src/core/record';
 import type { Log } from './log';
 import type { Metrics } from './metrics';
-import type { ConnLimits } from './ratelimit';
+import type { ConnLimits, IpCounter } from './ratelimit';
 import {
   newRating,
   type Act,
@@ -24,6 +24,8 @@ import {
 export interface Conn {
   send(msg: S2C): void;
   close(code?: number): void;
+  /** 连接的真实地址（server/clientIp.ts），用于按 IP 的限制；测试中的连接可以没有 */
+  readonly ip?: string;
 }
 
 /** 服务端出现未预期的异常、或数据库写入失败时的提示（v3 以文本下发，附错误编号；协议 v4 起为错误码 server.internal，E5） */
@@ -257,6 +259,8 @@ export interface ServerContext {
   readonly byToken: Map<string, Player>;
   /** 因累计违规被断开的匿名身份（散列）→ 解除的时刻（API-045） */
   readonly banned: Map<string, number>;
+  /** 按 IP 统计的加入房间失败次数（API-044、原问题 A6）：与每条连接的计数并存，重新连接不清零 */
+  readonly joinFailsByIp: IpCounter;
   /** 随 welcome 下发的最新版本号与下载地址；服务端没有配置时为空对象 */
   readonly latest: { latest?: string; url?: string };
   /** 尚未握手的连接数 */

@@ -31,8 +31,10 @@ export class Client {
     public name: string,
     token?: string,
     public uid = newUid(),
+    ip?: string,
   ) {
     this.conn = {
+      ip,
       send: m => {
         expectClientAccepts(m); // 连接关闭后发出的消息也要检查
         if (!this.closed) this.inbox.push(m);

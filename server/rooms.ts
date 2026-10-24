@@ -8,7 +8,7 @@ import { isInvalid, parseC2S } from '../src/shared/parse';
 import type { Log } from './log';
 import type { Metrics } from './metrics';
 import { errorCode } from './metrics';
-import { ConnLimits } from './ratelimit';
+import { ConnLimits, IpCounter, JOIN_FAIL_WINDOW_SECS, JOIN_FAILS_PER_IP } from './ratelimit';
 import { CLOSE_CODE, newRating, type C2S, type QueueMode, type S2C } from '../src/shared/protocol';
 import {
   MemoryStore,
@@ -45,6 +45,7 @@ export class RoomServer {
   private matches = new Set<Match>();
   /** 因累计违规被断开的匿名身份（散列）→ 解除的时刻（API-045） */
   private banned = new Map<string, number>();
+  private joinFailsByIp = new IpCounter(JOIN_FAIL_WINDOW_SECS, JOIN_FAILS_PER_IP);
   private nextPlayer = 1;
   private nextRoom = 1;
   private nextGame = 1;
@@ -93,6 +94,7 @@ export class RoomServer {
       },
       byToken: server.byToken,
       banned: server.banned,
+      joinFailsByIp: server.joinFailsByIp,
       latest: server.latest,
       get nextPlayer() {
         return server.nextPlayer;
@@ -231,6 +233,7 @@ export class RoomServer {
       );
     }
     for (const [key, until] of this.banned) if (now >= until) this.banned.delete(key);
+    this.joinFailsByIp.prune(now);
     for (const p of [...this.players]) {
       if (!this.players.has(p)) continue;
       const fault = { msg: '检查玩家时限时出现未预期的异常', playerId: p.id || undefined };
@@ -258,6 +261,10 @@ export class RoomServer {
   /** 当前有效的重连令牌数（监控用）：每位已握手的玩家一枚，重连后等待确认期间多一枚 */
   tokenCount() {
     return this.byToken.size;
+  }
+  /** 正在统计加入房间失败次数的 IP 数（监控用）：窗内已无记录的 IP 由 tick 清理 */
+  joinFailIpCount() {
+    return this.joinFailsByIp.size;
   }
   /** 正在匹配的人数（按队列） */
   queued(mode: QueueMode, type: number) {

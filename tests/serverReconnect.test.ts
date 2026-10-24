@@ -90,6 +90,34 @@ describe('2.0.1 联机修复', () => {
     expect(b.expect('start')).toBeTruthy();
   });
 
+  it('加入房间的失败按 IP 合计：同一 IP 换连接重试也躲不开，其他 IP 不受影响；一分钟后恢复（原问题 A6）', () => {
+    const { srv, idle } = world();
+    const host = new Client(srv, '房主');
+    host.send({ t: 'create', type: 0, size: 15, hostColor: 0, renju: true, moveTime: 0 });
+    const code = host.expect('created')!.code;
+    const wrong = code === '1234' ? '4321' : '1234';
+    const IP = '203.0.113.7';
+    // 每条连接失败 4 次（不触发每条连接 5 次的限制），5 条连接合计 20 次
+    for (let n = 0; n < 5; n++) {
+      const c = new Client(srv, `试${n}`, undefined, undefined, IP);
+      for (let i = 0; i < 4; i++) {
+        c.send({ t: 'join', code: wrong });
+        expect(c.expect('joinNo')?.reason).toBe('房号不存在，或房间已经开始');
+      }
+    }
+    const again = new Client(srv, '又来', undefined, undefined, IP);
+    again.send({ t: 'join', code });
+    expect(again.expect('joinNo')?.reason).toBe('尝试次数太多，请稍后再试');
+    const other = new Client(srv, '别处', undefined, undefined, '198.51.100.1');
+    other.send({ t: 'join', code: wrong });
+    expect(other.expect('joinNo')?.reason).toBe('房号不存在，或房间已经开始');
+    expect(srv.joinFailIpCount()).toBe(2);
+    idle(61, host, again, other);
+    expect(srv.joinFailIpCount()).toBe(0); // 滑出窗口的 IP 已清理，不一直占着内存
+    again.send({ t: 'join', code });
+    expect(again.expect('start')).toBeTruthy();
+  });
+
   it('同一台设备的两个窗口不能同时排位', () => {
     const { srv } = world();
     const a = new Client(srv, '甲'),

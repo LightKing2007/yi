@@ -11,7 +11,7 @@ import { byId, freeRoom, leaveRoom, newRoom, roomCode, seatPlayers } from './roo
 import { RoomState, type Player, type QEntry, type ServerContext } from './roomTypes';
 
 const MAX_ROOMS = 1024;
-const JOIN_FAILS = 5; // 一条连接一分钟内最多几次加入失败，超过就暂时不让再试（防止遍历房号）
+const JOIN_FAILS = 5; // 一条连接一分钟内最多几次加入失败，超过就暂时不让再试（防止遍历房号）；同一 IP 合计另有上限（JOIN_FAILS_PER_IP）
 /** 统计加入失败次数的时间窗 */
 const JOIN_WINDOW_SECS = 60;
 
@@ -116,7 +116,7 @@ export function closeRoom(ctx: ServerContext, p: Player) {
   }
 }
 
-/** 凭房号加入好友房间：一分钟内失败过多时暂时拒绝并累计违规；房主已离开时释放房间；成功即入座开局 */
+/** 凭房号加入好友房间：本连接或同一 IP 一分钟内失败过多时暂时拒绝并累计违规；房主已离开时释放房间；成功即入座开局 */
 export function joinRoom(ctx: ServerContext, p: Player, code: string) {
   if (ctx.maintenance) {
     ctx.send(p, { t: 'joinNo', reason: MAINTENANCE_TEXT });
@@ -124,7 +124,8 @@ export function joinRoom(ctx: ServerContext, p: Player, code: string) {
   }
   const now = ctx.now();
   p.joinFails = p.joinFails.filter(t0 => now - t0 < JOIN_WINDOW_SECS);
-  if (p.joinFails.length >= JOIN_FAILS) {
+  const ip = p.conn?.ip; // 按 IP 计数：换一条连接也躲不开（原问题 A6）
+  if (p.joinFails.length >= JOIN_FAILS || (ip !== undefined && ctx.joinFailsByIp.full(ip, now))) {
     ctx.send(p, { t: 'joinNo', reason: '尝试次数太多，请稍后再试' });
     violate(ctx, p);
     return;
@@ -136,6 +137,7 @@ export function joinRoom(ctx: ServerContext, p: Player, code: string) {
   }
   const noRoom = () => {
     p.joinFails.push(now);
+    if (ip !== undefined) ctx.joinFailsByIp.hit(ip, now);
     ctx.send(p, { t: 'joinNo', reason: '房号不存在，或房间已经开始' });
   };
   if (!r) {
