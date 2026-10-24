@@ -175,7 +175,7 @@
 
 4.11.1 验收按第 5 章进行。发版按 [release.md](../procedures/release.md)：`npm run release` → 人工确认草稿 → `npm run deploy`，上线时间按 OPS-050（北京时间 23:00 至次日 05:00），须经项目所有者同意。
 
-4.11.2 上线顺序：开启维护模式并等待对局结束 → 由项目所有者把旧段位存档 `yi-ratings.json` 下载一份到本机（DAT-066）→ 上线（启动时新建数据库并执行迁移）→ 健康检查（OPS-046）→ 删除服务器上的旧段位存档及其本地备份（架构决策记录 0009）→ 以 root 执行 `npm run deploy -- install-backup`（线上低于 3.0.0 时中止）与 `npm run deploy -- install-offsite --keep-config`，各立即备份或上传一次 → 按 [ops.md](../procedures/ops.md) 第 3.4 条演练恢复（第 4.8.3 条）→ 按上线后检查清单检查。
+4.11.2 上线顺序：开启维护模式并等待对局结束 → 由项目所有者把旧段位存档 `yi-ratings.json` 下载一份到本机（DAT-066）→ 上线（启动时新建数据库并执行迁移）→ 健康检查（OPS-046）→ 删除服务器上的旧段位存档及其本地备份（架构决策记录 0009）→ 以 root 执行 `npm run deploy -- install-backup` 与 `npm run deploy -- install-offsite --keep-config`，各立即备份或上传一次。二者在线上低于 3.0.0 时均中止，不改动任何文件：2026-10-17 曾在 2.0.7 上提前执行后者，新版 `yi-backup.service` 使每日备份连续 7 日失败（未丢失数据，SEV3），10-24 以 `main` 上的版本装回 → 按 [ops.md](../procedures/ops.md) 第 3.4 条演练恢复（第 4.8.3 条）→ 按上线后检查清单检查。
 
 ## 5 验收
 

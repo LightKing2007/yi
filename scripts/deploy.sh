@@ -8,6 +8,7 @@
 #   npm run deploy -- status                   查看线上的版本、对局数、是否维护中与连接数（健康检查，API-061）
 #   npm run deploy -- install-service          安装或更新 scripts/server/yi.service（加固选项见 SEC-045），重启并检查，不通过即恢复原文件
 #   npm run deploy -- install-offsite          安装异地加密备份（P1-13）：询问 OSS 的存储桶、地域、访问密钥与 age 公钥，立即上传一次；
+#                                              线上须为 3.0.0 或更高的版本（同时安装备份数据库的 yi-backup.service）；
 #                                              加 --keep-config 时不询问，只更新程序与单元文件
 #   npm run deploy -- install-backup           安装或更新每小时的数据库备份（scripts/server/ 下的单元文件与定时器），并立即备份一次；
 #                                              线上须为 3.0.0 或更高的版本（备份由服务端的 backup 命令执行）；不重启服务端
