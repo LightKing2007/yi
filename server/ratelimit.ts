@@ -29,6 +29,10 @@ export const NEW_CONN_MAX = 30;
 export const NEW_CONN_WINDOW_SECS = 60;
 /** 同一 IP 新建连接过频后，多久内拒绝它的新连接（API-041） */
 export const NEW_CONN_BLOCK_SECS = 60;
+/** 同一 IP 在时间窗内加入房间至多失败几次（API-044、原问题 A6）：同一出口地址后可能有多名玩家，故高于每条连接的 5 次 */
+export const JOIN_FAILS_PER_IP = 20;
+/** 按 IP 统计加入房间失败的时间窗 */
+export const JOIN_FAIL_WINDOW_SECS = 60;
 /** 同一 IP 的 HTTP 请求（下载页面、资源、安装程序）每秒补充的次数，即持续速率上限（API-041） */
 export const HTTP_RATE_PER_SEC = 5;
 /** 同一 IP 的 HTTP 请求可连续发出的次数：打开一次下载页面约 5 次请求，可连续刷新数次（API-041） */
@@ -144,6 +148,42 @@ export class IpGate {
   /** 正在追踪的 IP 数（测试与监控用） */
   get size() {
     return this.recent.size + this.blocked.size;
+  }
+}
+
+/**
+ * 按 IP 的滑动时间窗计数：重新连接不清零（原问题 A6，加入房间的失败次数）。只在内存中统计，不保存 IP（决定 D5-4）；
+ * 定时清理窗内已无记录的 IP，占用不随来过的 IP 数增长
+ */
+export class IpCounter {
+  private counters = new Map<string, WindowCounter>();
+
+  /** windowSecs：时间窗长度（秒）；max：上限，窗内次数达到它即 full */
+  constructor(
+    private readonly windowSecs: number,
+    private readonly max: number,
+  ) {}
+
+  /** 给 ip 记一次 */
+  hit(ip: string, now: number) {
+    let counter = this.counters.get(ip);
+    if (!counter) this.counters.set(ip, (counter = new WindowCounter(this.windowSecs, this.max)));
+    counter.hit(now);
+  }
+
+  /** ip 在窗内的次数已达到上限 */
+  full(ip: string, now: number): boolean {
+    return this.counters.get(ip)?.full(now) ?? false;
+  }
+
+  /** 清掉窗内已无记录的 IP（定时调用） */
+  prune(now: number) {
+    for (const [ip, counter] of this.counters) if (!counter.count(now)) this.counters.delete(ip);
+  }
+
+  /** 正在追踪的 IP 数（测试与监控用） */
+  get size() {
+    return this.counters.size;
   }
 }
 

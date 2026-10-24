@@ -160,6 +160,7 @@ function accept(ws: WebSocket, ip: string, server: RoomServer, { limits, timed }
     return;
   }
   const conn: Conn = {
+    ip,
     send: msg => {
       if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
     },

@@ -5,7 +5,10 @@ import {
   HTTP_BURST,
   HTTP_RATE_PER_SEC,
   HttpGate,
+  IpCounter,
   IpGate,
+  JOIN_FAIL_WINDOW_SECS,
+  JOIN_FAILS_PER_IP,
   MSG_BURST,
   MSG_RATE_PER_SEC,
   NEW_CONN_BLOCK_SECS,
@@ -95,6 +98,28 @@ describe('按 IP 的新建连接频率（API-041）', () => {
     expect(g.size).toBe(101);
     g.prune(Math.max(NEW_CONN_WINDOW_SECS, NEW_CONN_BLOCK_SECS));
     expect(g.size).toBe(0);
+  });
+});
+
+describe('按 IP 的计数（API-044，加入房间的失败次数）', () => {
+  it('各 IP 分别计数，窗内达到上限即 full，滑出窗口后恢复；没记过的 IP 不 full', () => {
+    const counter = new IpCounter(JOIN_FAIL_WINDOW_SECS, JOIN_FAILS_PER_IP);
+    for (let i = 0; i < JOIN_FAILS_PER_IP - 1; i++) counter.hit('1.1.1.1', i);
+    expect(counter.full('1.1.1.1', 19)).toBe(false);
+    counter.hit('1.1.1.1', 19);
+    expect([counter.full('1.1.1.1', 19), counter.full('2.2.2.2', 19)]).toEqual([true, false]);
+    expect(counter.full('1.1.1.1', JOIN_FAIL_WINDOW_SECS - 0.1)).toBe(true);
+    expect(counter.full('1.1.1.1', JOIN_FAIL_WINDOW_SECS)).toBe(false); // 第一次滑出窗口
+  });
+
+  it('清理后不再追踪窗内已无记录的 IP', () => {
+    const counter = new IpCounter(JOIN_FAIL_WINDOW_SECS, JOIN_FAILS_PER_IP);
+    for (let i = 0; i < 100; i++) counter.hit(`10.0.0.${i}`, 0);
+    counter.hit('1.1.1.1', 30);
+    counter.prune(JOIN_FAIL_WINDOW_SECS - 1);
+    expect(counter.size).toBe(101);
+    counter.prune(JOIN_FAIL_WINDOW_SECS);
+    expect(counter.size).toBe(1);
   });
 });
 

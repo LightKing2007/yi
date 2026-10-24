@@ -78,6 +78,13 @@ export class Client {
 }
 
 /** 一个以假时钟（从 1000 秒起）驱动的服务端：`advance` 让时间流逝并执行定时检查，`idle` 期间各客户端照常发心跳 */
+/** 从 ip 连上的客户端：连接带上真实地址，按 IP 的限制据此计数（host.ts 中由 clientIp 取得） */
+export function clientAt(srv: RoomServer, name: string, ip: string) {
+  const client = new Client(srv, name);
+  Object.assign(client.conn, { ip });
+  return client;
+}
+
 export function world(store: RatingStore = new MemoryStore(), opt: RoomServerOptions = {}) {
   let t = 1000;
   const srv = new RoomServer({ now: () => t, random: () => 0.3, store, ...opt });
