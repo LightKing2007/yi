@@ -331,9 +331,13 @@ cmd_service() {
 }
 
 # 安装异地加密备份（DAT-061 第二层、DAT-063；P1-13）：程序 /opt/yi/offsite.cjs、yi-offsite.service 与 yi-backup.service；
-# 传上来 offsite.env 时更新配置（属主 root:yi，权限 640，内含 OSS 的访问密钥，所在的临时目录做完即删）。随后立即上传一次以检查
+# 传上来 offsite.env 时更新配置（属主 root:yi，权限 640，内含 OSS 的访问密钥，所在的临时目录做完即删）。随后立即上传一次以检查。
+# 3.0.0 起两者改为备份数据库（server.cjs backup），线上为 2.x 时装上会使每日备份失败（2026-10-17 曾发生，连续 7 日），故先检查线上版本，不改动任何文件
 cmd_offsite() {
   for f in offsite.cjs yi-offsite.service yi-backup.service; do [ -f "$HERE/$f" ] || fail "没有 $f"; done
+  [ -L "$ROOT/current" ] || fail "服务器上没有版本目录（$ROOT/current），不是按 OPS-043 部署的结构"
+  cur=$(linked current)
+  if version_lt "$cur" 3.0.0; then fail "线上为 ${cur}，低于 3.0.0：本版本的异地备份与 yi-backup.service 备份数据库，先上线 3.0.0 再安装；未改动任何文件"; fi
   if [ -f "$HERE/offsite.env" ]; then
     mkdir -p "$ETC"
     chown root:yi "$ETC"

@@ -13,9 +13,11 @@ describe('服务端配置的解析', () => {
     expect(parseConfig([], {}, CWD)).toEqual({
       config: {
         version: false,
+        command: 'serve',
         port: 8443,
         host: undefined,
         dbFile: '/srv/yi/yi.db',
+        backupDir: '/srv/yi/backup',
         latest: undefined,
         download: undefined,
         files: undefined,
@@ -30,6 +32,7 @@ describe('服务端配置的解析', () => {
     const env = {
       HOST: '127.0.0.1',
       YI_DB: 'state/yi.db',
+      YI_BACKUP_DIR: 'saved',
       YI_LATEST: '2.0.7',
       YI_DOWNLOAD: 'https://yi.lightking.com.cn/',
       YI_FILES: 'download',
@@ -39,9 +42,11 @@ describe('服务端配置的解析', () => {
     expect(parseConfig(['8443'], env, CWD)).toEqual({
       config: {
         version: false,
+        command: 'serve',
         port: 8443,
         host: '127.0.0.1',
         dbFile: '/srv/yi/state/yi.db',
+        backupDir: '/srv/yi/saved',
         latest: '2.0.7',
         download: 'https://yi.lightking.com.cn/',
         files: '/srv/yi/download',
@@ -50,6 +55,18 @@ describe('服务端配置的解析', () => {
       },
       errors: [],
     });
+  });
+});
+
+describe('backup 命令', () => {
+  it('第一个参数为 backup 时备份数据库，不解析端口；备份目录默认在数据库所在目录下', () => {
+    const { config, errors } = parseConfig(['backup'], { PORT: 'x', YI_DB: '/var/lib/yi/yi.db' }, CWD);
+    expect([config.command, config.backupDir, errors]).toEqual(['backup', '/var/lib/yi/backup', []]);
+    expect(parseConfig(['8443'], {}, CWD).config.command).toBe('serve');
+  });
+
+  it('backup 之后带其他参数时报错', () => {
+    expect(failed(['backup', '8443'], {})).toEqual(['命令行参数']);
   });
 });
 

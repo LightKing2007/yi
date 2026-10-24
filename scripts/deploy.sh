@@ -8,8 +8,10 @@
 #   npm run deploy -- status                   查看线上的版本、对局数、是否维护中与连接数（健康检查，API-061）
 #   npm run deploy -- install-service          安装或更新 scripts/server/yi.service（加固选项见 SEC-045），重启并检查，不通过即恢复原文件
 #   npm run deploy -- install-offsite          安装异地加密备份（P1-13）：询问 OSS 的存储桶、地域、访问密钥与 age 公钥，立即上传一次；
+#                                              线上须为 3.0.0 或更高的版本（同时安装备份数据库的 yi-backup.service）；
 #                                              加 --keep-config 时不询问，只更新程序与单元文件
-#   npm run deploy -- install-backup           安装或更新每日备份（scripts/server/ 下的脚本与定时器），并立即备份一次；不重启服务端
+#   npm run deploy -- install-backup           安装或更新每小时的数据库备份（scripts/server/ 下的单元文件与定时器），并立即备份一次；
+#                                              线上须为 3.0.0 或更高的版本（备份由服务端的 backup 命令执行）；不重启服务端
 #   npm run deploy -- install-journald         安装或更新 journald 的保留策略（scripts/server/journald-yi.conf），重启 journald；不重启服务端
 #   npm run deploy -- install-caddy            安装或更新 Caddy 中弈的站点配置（scripts/server/yi.caddy），校验后平滑重载，经 HTTPS 检查，
 #                                              不通过即恢复原文件；不重启服务端。须先按 LightsWeb 仓库装好 Caddy 与主配置
@@ -134,21 +136,23 @@ case "${1:-}" in
 esac
 
 if [ "${1:-}" = install-backup ]; then
-  # 每日本地备份（DAT-060、DAT-061、DAT-064；整改项 P0-02）。重复执行即更新为仓库中的版本
-  ssh "$SERVER" "mkdir -p $DIR/.incoming"
-  scp -q "$HERE/backup.sh" "$HERE/yi-backup.service" "$HERE/yi-backup.timer" "$SERVER:$DIR/.incoming/"
+  # 每小时的数据库本地备份（DAT-060 至 DAT-064；阶段 5 第 7 步）。重复执行即更新为仓库中的版本。
+  # 备份由线上版本的 server.cjs backup 执行，2.x 没有该命令，线上低于 3.0.0 时中止，不改动服务器上的文件
+  ssh "$SERVER" "set -e; v=\$(/opt/node/bin/node $DIR/current/server.cjs --version | cut -d. -f1)
+    [ \"\$v\" -ge 3 ] 2>/dev/null || { echo '✗ 线上版本低于 3.0.0，没有 backup 命令；先上线 3.0.0 再安装备份' >&2; exit 1; }
+    mkdir -p $DIR/.incoming"
+  scp -q "$HERE/yi-backup.service" "$HERE/yi-backup.timer" "$SERVER:$DIR/.incoming/"
   ssh "$SERVER" "set -e; cd $DIR/.incoming
-    install -o root -g root -m 755 backup.sh $DIR/backup.sh
     install -o root -g root -m 644 yi-backup.service yi-backup.timer /etc/systemd/system/
-    cd $DIR && rm -r .incoming
+    cd $DIR && rm -r .incoming && rm -f $DIR/backup.sh
     systemctl daemon-reload
     systemctl enable --now yi-backup.timer
     if systemctl start yi-backup.service; then r=ok; else r=fail; fi
     journalctl -u yi-backup -n 2 --no-pager -o cat
     systemctl list-timers yi-backup.timer --no-pager | head -2
-    echo \"\$(date -u +%Y-%m-%dT%H:%M:%SZ) $WHO config P0-02 install-backup \$r\" >> /var/lib/yi/deploy.log
+    echo \"\$(date -u +%Y-%m-%dT%H:%M:%SZ) $WHO config P2-02 install-backup \$r\" >> /var/lib/yi/deploy.log
     test \$r = ok"
-  echo "✓ 每日备份已安装：/opt/yi/backup.sh，定时器 yi-backup.timer；备份在 /var/lib/yi/backup/"
+  echo "✓ 每小时备份已安装：定时器 yi-backup.timer，执行 /opt/yi/current/server.cjs backup；备份在 /var/lib/yi/backup/"
   exit 0
 fi
 
