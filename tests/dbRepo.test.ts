@@ -61,7 +61,7 @@ describe('数据访问', () => {
   it('每个事务结束后报告耗时：提交与回滚都报告', () => {
     let clock = 0;
     const seconds: number[] = [];
-    const timed = new Repo(db, { clock: () => (clock += 0.5), onTransaction: s => seconds.push(s) });
+    const timed = new Repo(db, { clock: () => (clock += 0.5), onTransaction: taken => seconds.push(taken) });
     timed.transaction(() => timed.ensure(HASH_A, '甲', 1));
     expect(() =>
       timed.transaction(() => {

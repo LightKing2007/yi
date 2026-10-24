@@ -40,7 +40,7 @@ describe('启动时的持久化', () => {
   it('事务耗时报告给 repo.onTransaction；fileBytes 为数据库与 WAL 文件的字节数合计', () => {
     const seconds: number[] = [];
     let clock = 10;
-    const run = openPersistence({ ...options(), repo: { clock: () => (clock += 0.25), onTransaction: s => seconds.push(s) } });
+    const run = openPersistence({ ...options(), repo: { clock: () => (clock += 0.25), onTransaction: taken => seconds.push(taken) } });
     run.store.set(HASH_A, { gomoku: { points: 1216, win: 1, loss: 0, draw: 0 }, go: { points: 1200, win: 0, loss: 0, draw: 0 } }, '甲');
     expect(seconds).toEqual([0.25]);
     const wal = fs.statSync(`${dbFile}-wal`).size;

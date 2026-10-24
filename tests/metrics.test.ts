@@ -73,7 +73,23 @@ describe('Prometheus 文本格式', () => {
     expect(lines.filter(line => line.startsWith('# TYPE yi_message_handle_seconds'))).toEqual(['# TYPE yi_message_handle_seconds histogram']);
   });
 
-  it('两个直方图各自累计：数据库事务耗时不计入消息处理耗时', () => {
+  it('快照与文本格式中的样本一致', () => {
+    const metrics = new Metrics(build);
+    metrics.inc('yi_errors_total', { code: 'server.full' });
+    const snapshot = metrics.snapshot(GAUGES);
+    const samples = metrics
+      .render(GAUGES)
+      .trimEnd()
+      .split('\n')
+      .filter(line => !line.startsWith('#'))
+      .map(line => [line.slice(0, line.lastIndexOf(' ')), Number(line.slice(line.lastIndexOf(' ') + 1))]);
+    expect(snapshot).toEqual(Object.fromEntries(samples));
+    expect(snapshot['yi_errors_total{code="server.full"}']).toBe(1);
+  });
+});
+
+describe('数据库事务耗时的直方图', () => {
+  it('与消息处理耗时各自累计，互不计入', () => {
     const metrics = new Metrics(build);
     metrics.observe('yi_db_transaction_seconds', 0.002);
     metrics.observe('yi_db_transaction_seconds', 0.2);
@@ -90,20 +106,6 @@ describe('Prometheus 文本格式', () => {
     ]);
     expect(lines).toContain('yi_message_handle_seconds_count 0');
     expect(lines.filter(line => line.startsWith('# TYPE yi_db_transaction_seconds'))).toEqual(['# TYPE yi_db_transaction_seconds histogram']);
-  });
-
-  it('快照与文本格式中的样本一致', () => {
-    const metrics = new Metrics(build);
-    metrics.inc('yi_errors_total', { code: 'server.full' });
-    const snapshot = metrics.snapshot(GAUGES);
-    const samples = metrics
-      .render(GAUGES)
-      .trimEnd()
-      .split('\n')
-      .filter(line => !line.startsWith('#'))
-      .map(line => [line.slice(0, line.lastIndexOf(' ')), Number(line.slice(line.lastIndexOf(' ') + 1))]);
-    expect(snapshot).toEqual(Object.fromEntries(samples));
-    expect(snapshot['yi_errors_total{code="server.full"}']).toBe(1);
   });
 });
 
