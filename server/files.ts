@@ -1,6 +1,6 @@
 /**
  * 安装包下载：联机端口上的普通网页请求（不是 WebSocket 的）走这里，不用另开端口。路径白名单（API-060）：
- *   GET /             下载页面（downloadPage.ts）；网站主页上线前与 /download/ 相同
+ *   GET /             主页（homePage.ts）
  *   GET /download/    下载页面（downloadPage.ts）；带 ?start 时推断确定的访客进入页面即开始下载。/download 重定向到 /download/
  *   GET /<文件名>     下载这个文件，支持断点续传；目录里只认 Yi-版本-平台 这样命名的文件，其他文件与子目录一概不给
  *   GET /SHA256SUMS   各安装程序的 SHA-256（SEC-070）
@@ -14,6 +14,7 @@ import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { clientIp } from './clientIp';
 import { downloadPage } from './downloadPage';
+import { homePage } from './homePage';
 import { PLATFORMS, type PagePkg } from './page';
 import { CLIENT_HINT_HEADERS, detectPlatform } from './platform';
 
@@ -198,7 +199,7 @@ function pages(pkgs: ReturnType<typeof listing>, sums: ReturnType<typeof checksu
     const cached = cache.bodies.get(key);
     if (cached !== undefined) return cached;
     const shown: PagePkg[] = current.map(p => ({ ...p, sha256: sums.get(p) }));
-    const body = downloadPage(shown, detected, __APP_VERSION__, starting);
+    const body = route === HOME ? homePage(shown, detected, __APP_VERSION__) : downloadPage(shown, detected, __APP_VERSION__, starting);
     if (shown.every(p => p.sha256)) cache = { from: current, bodies: cache.bodies.set(key, body) }; // 校验值未算完时不缓存，下次重新生成
     return body;
   };

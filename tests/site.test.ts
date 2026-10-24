@@ -1,4 +1,4 @@
-/** 网站：按请求头推断访客的操作系统（platform.ts），下载页面据此推荐安装程序，带 ?start 时自动开始下载 */
+/** 网站：按请求头推断访客的操作系统（platform.ts），主页与下载页面据此推荐安装程序，下载页面带 ?start 时自动开始下载 */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -38,25 +38,26 @@ describe('推断访客的操作系统 detectPlatform', () => {
   });
 });
 
-describe('下载页面', () => {
-  /** 在临时目录放好四个平台的安装程序并启动服务端，run 结束后关闭并删除目录 */
-  async function withSite(run: (get: (route: string, headers?: Record<string, string>) => Promise<Response>) => Promise<void>) {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-site-'));
-    for (const file of ['Yi-3.0.0-win-x64-setup.exe', 'Yi-3.0.0-mac-arm64.dmg', 'Yi-3.0.0-mac-x64.dmg', 'Yi-3.0.0-linux-x86_64.AppImage'])
-      fs.writeFileSync(path.join(dir, file), file);
-    const host = await startHost(0, { host: '127.0.0.1', files: dir });
-    const get = (route: string, headers: Record<string, string> = {}) => fetch(`http://127.0.0.1:${host.port}${route}`, { headers, redirect: 'manual' });
-    try {
-      // 校验值算完之后页面才进入缓存：先等它们算完，使缓存的行为也在检查之内
-      for (let i = 0; i < 100 && (await get('/SHA256SUMS')).status !== 200; i++) await new Promise(r => setTimeout(r, 10));
-      await run(get);
-    } finally {
-      await host.close();
-      fs.rmSync(dir, { recursive: true });
-    }
+/** 在临时目录放好四个平台的安装程序并启动服务端，run 结束后关闭并删除目录 */
+async function withSite(run: (get: (route: string, headers?: Record<string, string>) => Promise<Response>) => Promise<void>) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-site-'));
+  for (const file of ['Yi-3.0.0-win-x64-setup.exe', 'Yi-3.0.0-mac-arm64.dmg', 'Yi-3.0.0-mac-x64.dmg', 'Yi-3.0.0-linux-x86_64.AppImage'])
+    fs.writeFileSync(path.join(dir, file), file);
+  const host = await startHost(0, { host: '127.0.0.1', files: dir });
+  const get = (route: string, headers: Record<string, string> = {}) => fetch(`http://127.0.0.1:${host.port}${route}`, { headers, redirect: 'manual' });
+  try {
+    // 校验值算完之后页面才进入缓存：先等它们算完，使缓存的行为也在检查之内
+    for (let i = 0; i < 100 && (await get('/SHA256SUMS')).status !== 200; i++) await new Promise(r => setTimeout(r, 10));
+    await run(get);
+  } finally {
+    await host.close();
+    fs.rmSync(dir, { recursive: true });
   }
-  const refresh = (html: string) => /<meta http-equiv="refresh" content="1;url=([^"]+)">/.exec(html)?.[1];
+}
+/** 页面中 meta refresh 指向的地址（自动开始下载时才有） */
+const refresh = (html: string) => /<meta http-equiv="refresh" content="1;url=([^"]+)">/.exec(html)?.[1];
 
+describe('主页与下载页面', () => {
   it('/download 重定向到 /download/；页面请求芯片架构的客户端提示，并按这些请求头区分缓存', async () => {
     await withSite(async get => {
       const moved = await get('/download');
@@ -83,6 +84,25 @@ describe('下载页面', () => {
       expect(refresh(phone)).toBeUndefined();
       expect(phone).toContain('“弈”为桌面游戏');
       expect(refresh(await page('/download/', { 'user-agent': UA.winEdge }))).toBeUndefined();
+    });
+  });
+
+  it('主页按访客的系统给出下载按钮（经 /download/?start 下载）；手机与无法识别时改为前往下载页面', async () => {
+    await withSite(async get => {
+      const home = async (headers: Record<string, string>) => (await get('/', headers)).text();
+      const win = await home({ 'user-agent': UA.winEdge });
+      expect(win).toContain('href="/download/?start"');
+      expect(win).toContain('下载 Windows 版');
+      const linux = await home({ 'user-agent': UA.linuxFirefox });
+      expect(linux).toContain('下载 Linux 版'); // 缓存按系统区分，不沿用上一位访客的页面
+      for (const [ua, hint] of [
+        [UA.iphone, '“弈”为桌面游戏，请在计算机上下载'],
+        [UA.linuxArm, '提供 Windows、macOS 及 Linux 版本'],
+      ] as const) {
+        const html = await home({ 'user-agent': ua });
+        expect(html).not.toContain('/download/?start');
+        expect(html).toContain(`<span>前往下载</span></a><span class="hint">${hint}</span>`);
+      }
     });
   });
 });
