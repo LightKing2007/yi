@@ -10,7 +10,7 @@ import { downloadPage, PLATFORMS, type PagePkg } from '../server/page';
 import { TABLE } from '../src/i18n/table';
 import { INFO_PAGES, releasedLog, type InfoLine } from '../src/ui/info';
 // @ts-expect-error 纯 JS 脚本，没有类型声明
-import { changelog } from '../scripts/changelog.mjs';
+import { changelog, compatibility } from '../scripts/changelog.mjs';
 import { must } from './must';
 
 const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
@@ -158,6 +158,20 @@ describe('更新日志', () => {
       log.some(s => s.version === pkg.version),
       `更新日志里没有当前版本 ${pkg.version}`,
     ).toBe(true);
+  });
+});
+
+describe('发布说明的兼容性一节（I18N-085）', () => {
+  it('次版本与修订版本：可与同一协议版本的客户端联机，段位及本机设置保留', () => {
+    for (const version of ['2.0.7', '2.1.0'])
+      expect(compatibility(version, 3)).toBe('本版本使用第 3 版联机协议，可与使用同一协议版本的客户端进行联机对战。段位及本机设置在升级后予以保留。');
+  });
+
+  it('主版本：此前版本的游戏不能再联机，须更新；不声称段位保留', () => {
+    const text = compatibility('3.0.0', 3);
+    expect(text).toContain('此前版本的游戏无法再连接联机服务器，须更新至本版本方可联机');
+    expect(text).not.toContain('段位及本机设置在升级后予以保留');
+    expect(punctuationIssues(text)).toEqual([]);
   });
 });
 

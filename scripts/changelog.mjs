@@ -57,6 +57,16 @@ function facts(version) {
   return { date, proto: Number(/PROTO_VERSION = (\d+)/.exec(proto)?.[1]) };
 }
 
+/**
+ * 兼容性一节：主版本按 VER-002 为不兼容的变更、须强制更新，此前版本的客户端不能再联机；次版本与修订版本可与同一协议版本的客户端联机，
+ * 段位及本机设置保留。段位等数据的具体变化由该版本的更新日志说明
+ */
+export function compatibility(version, proto) {
+  const [, minor, patch] = version.split('.').map(Number);
+  if (minor || patch) return `本版本使用第 ${proto} 版联机协议，可与使用同一协议版本的客户端进行联机对战。段位及本机设置在升级后予以保留。`;
+  return `本版本为主版本，使用第 ${proto} 版联机协议。此前版本的游戏无法再连接联机服务器，须更新至本版本方可联机。本机设置在升级后予以保留；联机段位等数据的变化见上文的变更内容。`;
+}
+
 /** GitHub Release 的说明（发布说明）：概要、变更内容（按新增、改进、修复分类）、兼容性、安装 */
 export function notes(version) {
   const sec = changelog().find(s => s.version === version);
@@ -87,7 +97,7 @@ export function notes(version) {
     ...changes,
     '## 2 兼容性',
     '',
-    `本版本使用第 ${proto} 版联机协议，可与使用同一协议版本的客户端进行联机对战。段位及本机设置在升级后予以保留。`,
+    compatibility(version, proto),
     '',
     '## 3 获取与安装',
     '',
