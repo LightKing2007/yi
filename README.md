@@ -226,10 +226,10 @@ node dist-server/server.cjs --version
 | `/var/lib/yi/` | 数据库 `yi.db` 及其备份，属主为系统用户 `yi`（`useradd --system --no-create-home --shell /usr/sbin/nologin yi`） |
 | `/etc/systemd/system/yi.service` | 常驻服务，开机自启，异常退出后 3 秒自动重启；因数据库损坏或无法打开退出（退出码 65、74）时不重启；源文件为仓库中的 `scripts/server/yi.service` |
 | `/etc/ssh/sshd_config.d/00-yi-hardening.conf` | SSH 仅允许 Ed25519 密钥登录，禁止口令登录（SEC-040）；原配置备份为 `/etc/ssh/sshd_config.bak-20261002` |
-| UFW | 主机防火墙，默认拒绝入站，仅放行 TCP 22、80、443、8443，与阿里云安全组一致（SEC-041）；80、443 供 Caddy 使用（2026-10-13 起），8443 供 2.x 客户端直连，3.0 起关闭 |
+| UFW | 主机防火墙，默认拒绝入站，仅放行 TCP 22、80、443，与阿里云安全组一致（SEC-041）；80、443 供 Caddy 使用（2026-10-13 起）；8443 已于 2026-10-24 随 3.0.0 上线关闭，服务端只监听本机 |
 | `/etc/fail2ban/jail.local` | SSH 10 分钟内失败 5 次封禁 1 小时（SEC-042）。Ubuntu 24.04 的 SSH 单元名为 `ssh.service`，须以 `journalmatch = _SYSTEMD_UNIT=ssh.service + _COMM=sshd` 指明，否则 fail2ban 读不到任何日志 |
 | `/var/lib/yi/deploy.log` | 上线、回滚及配置修改的记录，每次操作追加一行（OPS-048）；最近一次上线的完整输出在 `deploy-last.log` |
-| `/etc/systemd/system/yi-backup.{service,timer}` | 每小时的本地备份（DAT-060 至 DAT-062），每小时第 7 分钟执行 `node /opt/yi/current/server.cjs backup`；源文件为仓库中的 `scripts/server/`，由 `npm run deploy -- install-backup` 在 3.0.0 上线后安装。此前的每日备份脚本 `/opt/yi/backup.sh` 备份旧的段位存档，安装时删除 |
+| `/etc/systemd/system/yi-backup.{service,timer}` | 每小时的本地备份（DAT-060 至 DAT-062），每小时第 7 分钟执行 `node /opt/yi/current/server.cjs backup`；源文件为仓库中的 `scripts/server/`，由 `npm run deploy -- install-backup` 安装（2026-10-24）。此前的每日备份脚本 `/opt/yi/backup.sh` 备份旧的段位存档，安装时已删除 |
 | `/var/lib/yi/backup/` | 数据库的备份 `yi-UTC时间.db` 及其 `.sha256` 校验和，保留最新的 24 份与最近 7 天各一份（DAT-061、DAT-064）；启动迁移前的备份 `pre-migrate-版本号-时间.db`（DAT-042） |
 | `/opt/yi/offsite.cjs`、`/etc/systemd/system/yi-offsite.service`、`/etc/yi/offsite.env` | 异地加密备份（DAT-061 第二层、DAT-063）：每次本地备份成功后，以 age 加密最新的一份并上传到阿里云 OSS；`offsite.env` 内含 OSS 的存储桶与只能写入的访问密钥（属主 root:yi，权限 640），解密用的私钥只在维护者本机。源文件为仓库中的 `scripts/offsite.ts` 与 `scripts/server/yi-offsite.service`，由 `npm run deploy -- install-offsite` 安装；本版本须在 3.0.0 上线后安装，线上低于 3.0.0 时中止 |
 | `/etc/systemd/journald.conf.d/yi.conf` | journald 的保留策略：日志总量至多 1 GB，保留 90 日（OPS-065），源文件为仓库中的 `scripts/server/journald-yi.conf`，由 `npm run deploy -- install-journald` 安装 |
@@ -245,7 +245,7 @@ node dist-server/server.cjs --version
 - **监控指标**：同一端口上的 `/metrics`（只回应来自本机的请求，API-061）以 Prometheus 文本格式输出 [07-operations.md](docs/standards/07-operations.md) 第 9 节的指标（连接数、在线玩家、房间、排队、消息与错误码计数、处理耗时、事件循环延迟、内存，以及数据库的事务耗时、文件大小与写入失败次数等）；服务端另每 60 秒在日志中写一条 `metrics.snapshot`（OPS-071）。查看：`ssh deploy@47.108.181.240 /opt/node/bin/node -e "fetch('http://127.0.0.1:8443/metrics').then(r=>r.text()).then(console.log)"`。
 - **查看日志**：`ssh deploy@47.108.181.240 journalctl -u yi -f`。日志为 JSON Lines，每行一个事件，`ver` 字段为服务端的版本号及提交号（格式与事件码见 [07-operations.md](docs/standards/07-operations.md) 第 5 节、第 8 节）；只看警告及以上：`journalctl -u yi -p warning`；临时输出 debug 级别：以 root 执行 `systemctl edit yi` 在附加配置中设 `Environment=YI_LOG_LEVEL=debug`（OPS-062），不改动 `yi.service` 本身，用完以 `systemctl revert yi` 删除。
 - **修改服务配置**：修改仓库中的 `scripts/server/yi.service`，经 PR 合并后执行 `npm run deploy -- install-service`；严禁在服务器上直接改动该文件。
-- **防火墙**：阿里云安全组与主机防火墙 UFW 均仅放行 TCP 22、80、443、8443 端口，两者须保持一致（SEC-041）；8443 供 2.x 客户端直连，3.0.0 上线后关闭。
+- **防火墙**：阿里云安全组与主机防火墙 UFW 均仅放行 TCP 22、80、443 端口，两者须保持一致（SEC-041）；8443 已于 2026-10-24 关闭。
 - **重启**：以 `npm run deploy -- restart` 进行：有对局时先进入维护模式，等对局结束后重启，并以健康检查核对；严禁直接执行 `systemctl restart yi`。
 - **备份**：备份在 `/var/lib/yi/backup/`。立即备份一次：`systemctl start yi-backup`；查看结果：`journalctl -u yi-backup -n 5`，成功为 `db.backup-done`（附校验和与各表的条数），失败为 error 级的 `db.backup-failed`，可用 `journalctl -u yi-backup -p err` 筛出。
 - **从备份恢复**：恢复会丢失备份时刻之后的变化，并须停止服务端，应在无人对局时进行；步骤见 [运维规程](docs/procedures/ops.md) 第 3.2 条，从异地备份恢复见第 3.3 条。
@@ -258,7 +258,7 @@ node dist-server/server.cjs --version
 1. Caddy 作为整台服务器的反向代理，监听 80、443 端口并自动申请、续期证书（SEC-010）。Caddy 本身、主配置 `/etc/caddy/Caddyfile`（以 `import /etc/caddy/sites/*.caddy` 引入各站点）、默认拒绝以 IP 或未登记的域名访问、公共响应头由 LightsWeb 仓库管理；
 2. 弈的站点配置为仓库中的 `scripts/server/yi.caddy`，以 `npm run deploy -- install-caddy` 安装：先以整套配置校验，再平滑重载（不中断其他网站与已建立的联机），经 HTTPS 检查下载页面可以访问、`/healthz` 已屏蔽，不通过即恢复原文件；
 3. 服务端按客户端的真实地址限流：经本机代理时取 `X-Forwarded-For` 的最后一项，只信任来自本机的这个头（API-040，`server/clientIp.ts`）；
-4. 阿里云安全组与 UFW 放行 80、443 端口，其中 80 端口仅供证书验证及跳转至 HTTPS；3.0.0 上线前 8443 端口仍开放，供 2.0.x 客户端直连；
+4. 阿里云安全组与 UFW 放行 80、443 端口，其中 80 端口仅供证书验证及跳转至 HTTPS；8443 端口已于 2026-10-24 随 3.0.0 上线关闭；
 5. 3.0.0 客户端改用 `wss://yi.lightking.com.cn/ws`，CSP 的 `connect-src` 只放行该地址（SEC-013），`YI_DOWNLOAD` 改为 `https://yi.lightking.com.cn/`，下载页面底部展示备案号；
 6. 3.0.0 上线时以 `install-service` 安装已含 `Environment=HOST=127.0.0.1` 的 `yi.service`，使服务端仅接受本机反向代理的连接，并在安全组与 UFW 中关闭 8443 端口（SEC-011）。
 

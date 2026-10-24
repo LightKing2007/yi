@@ -3,8 +3,8 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.14 |
-| 修订日期 | 2026-10-16 |
+| 文件版本 | 1.1.15 |
+| 修订日期 | 2026-10-24 |
 | 规则前缀 | `SEC` |
 
 参考：ISO/IEC 27001:2022、ISO/IEC 27002:2022；GB/T 22239—2019（第二级）；GB/T 20984—2022；OWASP ASVS 5.0；Electron Security Checklist；CIS Ubuntu Linux 24.04 LTS Benchmark；ISO/IEC 29147:2018、ISO/IEC 30111:2019。
@@ -30,10 +30,10 @@
 
 | 编号 | 等级 | 规定 | 现状 |
 |---|---|---|---|
-| SEC-010 | A | 3.0 版本起，联机统一使用 `wss://`，HTTP 统一使用 `https://`，TLS 版本 ≥ 1.2，证书由 Caddy 自动续期；客户端严禁回退到明文连接 | 部分满足（3.0.0 起客户端经 `wss://yi.lightking.com.cn/ws` 连接，下载页面经 `https://`，证书由 Caddy 自动续期；客户端的服务器地址只有这一个，没有回退到明文的途径。随 3.0.0 发布后满足） |
-| SEC-011 | A | 启用 TLS 后，服务端监听地址必须为 127.0.0.1，公网只开放 80、443（80 只用于证书申请与跳转至 HTTPS）；8443 端口必须在安全组与主机防火墙中同时关闭 | 部分满足（`yi.service` 已设 `HOST=127.0.0.1`，随 3.0.0 以 `install-service` 安装后服务端只监听本机；安全组与 UFW 关闭 8443 由项目所有者在上线 3.0.0 时操作） |
+| SEC-010 | A | 3.0 版本起，联机统一使用 `wss://`，HTTP 统一使用 `https://`，TLS 版本 ≥ 1.2，证书由 Caddy 自动续期；客户端严禁回退到明文连接 | 满足（3.0.0 起客户端经 `wss://yi.lightking.com.cn/ws` 连接，下载页面经 `https://`，证书由 Caddy 自动续期；客户端的服务器地址只有这一个，没有回退到明文的途径。2026-10-24 随 3.0.0 上线） |
+| SEC-011 | A | 启用 TLS 后，服务端监听地址必须为 127.0.0.1，公网只开放 80、443（80 只用于证书申请与跳转至 HTTPS）；8443 端口必须在安全组与主机防火墙中同时关闭 | 满足（2026-10-24 随 3.0.0 以 `install-service` 安装设 `HOST=127.0.0.1` 的 `yi.service`，服务端只监听本机；同日在安全组与 UFW 中关闭 8443，公网只开放 22、80、443） |
 | SEC-012 | A | 严禁在明文通道上传输口令、邮箱验证码、登录令牌；账号系统（阶段 6）必须在 SEC-010 满足之后才允许上线 | 满足 |
-| SEC-013 | A | `index.html` 的 CSP 中 `connect-src` 必须收紧为生产服务器的确切地址（开发模式另行注入），严禁使用通配的 `ws:`、`wss:` | 满足（`index.html` 的 `connect-src` 为 `'self' wss://yi.lightking.com.cn`；开发模式由 Vite 插件另加本机地址，`scripts/dev-csp.mjs`；`tests/csp.test.ts` 核对。随 3.0.0 发布） |
+| SEC-013 | A | `index.html` 的 CSP 中 `connect-src` 必须收紧为生产服务器的确切地址（开发模式另行注入），严禁使用通配的 `ws:`、`wss:` | 满足（`index.html` 的 `connect-src` 为 `'self' wss://yi.lightking.com.cn`；开发模式由 Vite 插件另加本机地址，`scripts/dev-csp.mjs`；`tests/csp.test.ts` 核对。2026-10-24 随 3.0.0 发布） |
 
 ## 3 身份与会话
 
@@ -61,7 +61,7 @@
 | 编号 | 等级 | 规定 | 现状 |
 |---|---|---|---|
 | SEC-040 | A | SSH 统一为 `PasswordAuthentication no`、`PermitRootLogin prohibit-password`、`KbdInteractiveAuthentication no`、`MaxAuthTries 3`；只允许 Ed25519 密钥 | 满足（整改项 P0-03，2026-10-02；2026-10-13 以 `sshd -T` 核对：`passwordauthentication no`、`permitrootlogin without-password`（即 `prohibit-password`）、`kbdinteractiveauthentication no`、`maxauthtries 3`，`pubkeyacceptedalgorithms` 只含 Ed25519） |
-| SEC-041 | A | 主机防火墙（UFW）必须启用，默认拒绝入站，只放行 22、8443（启用 TLS 后改为 22、80、443）；放行清单必须与云安全组一致 | 部分满足（2026-10-13 起放行 22、80、443、8443，与安全组一致；8443 在过渡期内保留，3.0 起关闭） |
+| SEC-041 | A | 主机防火墙（UFW）必须启用，默认拒绝入站，只放行 22、8443（启用 TLS 后改为 22、80、443）；放行清单必须与云安全组一致 | 满足（2026-10-24 起只放行 22、80、443，与安全组一致；8443 随 3.0.0 上线关闭） |
 | SEC-042 | A | 必须安装 fail2ban，SSH 10 分钟内失败 5 次封禁 1 小时 | 满足（整改项 P0-03，2026-10-02；2026-10-13 核对：fail2ban 运行中，`sshd` 规则 `findtime` 600 秒、`maxretry` 5、`bantime` 3600 秒） |
 | SEC-043 | A | 必须启用 `unattended-upgrades` 自动安装安全更新；需要重启的内核更新，必须在 7 日内择无对局时重启 | 部分满足（2026-10-13 核对：`unattended-upgrades` 已启用。服务器自 2026-09-30 起因 `libc6` 的更新待重启，至 2026-10-13 22:43 才重启，晚于 7 日的期限 6 日；`libc6` 不属于内核，但重启前各服务仍使用旧版本，按同等要求处理。此前日常检查中没有待重启一项，已补入 [ops.md](../procedures/ops.md) 第 2.1 条） |
 | SEC-044 | C | 日常运维（上线、重启、回滚、查看状态与日志）统一使用非 root 的部署用户 `deploy`，以 `sudo` 白名单执行；白名单只允许执行 root 所有、部署用户不能改动的脚本，严禁放行可执行任意命令或安装以 root 身份运行的配置的命令。安装或修改以 root 身份运行的配置（systemd 单元、Caddy 配置、sudo 白名单本身等）以 root 执行，每次须经项目所有者同意；root 登录还用于应急 | 满足（整改项 P2-14，#130：部署用户、`/usr/local/sbin/yi-deploy` 与白名单，以 `npm run deploy -- install-deploy-user` 安装；2026-10-13 安装到服务器，见 `deploy.log`） |
