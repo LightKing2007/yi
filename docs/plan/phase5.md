@@ -188,6 +188,7 @@
 - 随后：安全组与 UFW 关闭 8443；删除服务器上的旧段位存档及其本地备份；`install-backup` 后首份备份成功；`install-offsite --keep-config` 后首次上传 `daily/yi-20261024.db.age` 与 `monthly/yi-202610.db.age` 成功。
 - 旧段位存档的副本：删除前未下载到本机。按项目所有者的决定，以 OSS 上 2026-10-24 上传的 `monthly/yi-ratings-202610.json.age`（生命周期保留 365 日，内容为删除前的最后状态）作为 DAT-066 的留存副本；解密须用 v2.0.7 的 `scripts/offsite.ts`（新版的 `decrypt` 只接受数据库）。
 - 上线后检查（checklists.md 第 4 节）：健康检查为 3.0.0（d6b3156）；上线以来没有 warning 及以上的日志；下载页面四个安装程序与 `SHA256SUMS` 一致；以 `wss://yi.lightking.com.cn/ws` 握手成功；第 4 项“旧版本客户端能看到新版本提示”不适用（2.x 不能连接 3.0.0，架构决策记录 0009）。
+- 上线后 60 分钟：`yi-watch` 到期结束，期间未触发自动回滚（OPS-047）；23:07 的整点备份成功，自动上传异地备份成功；至 23:33 没有 warning 及以上的日志。
 
 ## 5 验收
 
