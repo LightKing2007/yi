@@ -1,8 +1,6 @@
 {
   "note": "违规基线（OPS-015）：由 node scripts/ratchet.mjs --update 生成，只允许减少",
   "metrics": {
-    "例外 COD-053": 1,
-    "例外 COD-055": 2,
     "COD-001 文本格式不合规的文件": 0,
     "COD-003 超过 160 字符的行": 1,
     "COD-030 缺少模块说明注释的源文件": 0,
@@ -14,19 +12,21 @@
     "COD-062 原因不足 8 个汉字的 catch 注释": 4,
     "ESLint @typescript-eslint/no-explicit-any": 8,
     "ESLint @typescript-eslint/no-floating-promises": 3,
-    "ESLint @typescript-eslint/no-magic-numbers": 1854,
+    "ESLint @typescript-eslint/no-magic-numbers": 1824,
     "ESLint @typescript-eslint/no-non-null-assertion": 40,
     "ESLint @typescript-eslint/only-throw-error": 1,
     "ESLint complexity": 21,
-    "ESLint id-length": 790,
+    "ESLint id-length": 781,
     "ESLint max-depth": 19,
     "ESLint max-lines": 5,
-    "ESLint max-lines-per-function": 29,
+    "ESLint max-lines-per-function": 28,
     "ESLint max-params": 42,
     "ESLint no-console": 3,
     "ESLint no-control-regex": 1,
     "ESLint no-useless-escape": 1,
     "ESLint prefer-const": 2,
-    "GEN 原因不合格的例外声明": 0
+    "GEN 原因不合格的例外声明": 0,
+    "例外 COD-053": 1,
+    "例外 COD-055": 2
   }
 }

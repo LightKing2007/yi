@@ -6,7 +6,9 @@
  */
 import fs from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { downloadPage, PLATFORMS, type PagePkg } from '../server/page';
+import { downloadPage } from '../server/downloadPage';
+import { PLATFORMS, type PagePkg } from '../server/page';
+import type { Detected } from '../server/platform';
 import { TABLE } from '../src/i18n/table';
 import { INFO_PAGES, releasedLog, type InfoLine } from '../src/ui/info';
 // @ts-expect-error 纯 JS 脚本，没有类型声明
@@ -72,16 +74,14 @@ function installerTexts(source: string) {
   };
 }
 
-/** 下载页面不是段落的 <p>：首屏的棋种与标语、页脚的备案号（编号不以句号结尾） */
-const PAGE_TAGLINES = ['kinds', 'motto', 'record'];
-
-/** 下载页面的文字：页面由服务端生成，结构固定，按标签切分即可。段落为 <p> 与 <li>（标语除外），其余为标题、按钮、表格与属性中的文字 */
+/**
+ * 网站页面的文字：页面由服务端生成，结构固定，按标签切分即可。段落为 <p> 与 <li>，其余为标题、按钮、标签与属性中的文字；
+ * 页面上标签式的短语（棋盘路数、段位、语言对照等）不用 <p> 与 <li>
+ */
 function pageTexts(html: string) {
   const body = html.replace(/<style>[\s\S]*?<\/style>/, '');
   const decode = (text: string) => text.replace(/&#(\d+);/g, (_, code: string) => String.fromCharCode(Number(code))).trim();
-  const paragraphs = [...body.matchAll(/<(p|li)\b([^>]*)>([\s\S]*?)<\/\1>/g)]
-    .filter(m => !PAGE_TAGLINES.some(cls => (m[2] ?? '').includes(`class="${cls}"`)))
-    .map(m => decode((m[3] ?? '').replace(/<[^>]+>/g, '')));
+  const paragraphs = [...body.matchAll(/<(p|li)\b([^>]*)>([\s\S]*?)<\/\1>/g)].map(m => decode((m[3] ?? '').replace(/<[^>]+>/g, '')));
   const segments = body.split(/<[^>]+>/).map(decode);
   const attributes = [...body.matchAll(/\s(?:content|alt|aria-label|title)="([^"]*)"/g)].map(m => decode(m[1] ?? ''));
   return { paragraphs, others: [...segments, ...attributes].filter(han) };
@@ -99,7 +99,7 @@ describe('标点的检查范围（I18N-011）', () => {
     expect([...paragraphs.flatMap(paragraphIssues), ...labels.flatMap(punctuationIssues)]).toEqual([]);
   });
 
-  it('下载页面的文字（有安装程序与尚无安装程序两种情况）：段落以句号结尾', () => {
+  it('下载页面的文字（有无安装程序、各种访客系统、是否自动开始下载）：段落以句号结尾', () => {
     const pkgs: PagePkg[] = Object.keys(PLATFORMS).map((platform, i) => ({
       file: `Yi-${platform}`,
       version: '2.0.4',
@@ -107,13 +107,21 @@ describe('标点的检查范围（I18N-011）', () => {
       size: 1e8,
       sha256: i ? 'ab' : null,
     }));
-    for (const html of [downloadPage(pkgs, 'v'), downloadPage([], 'v')]) {
+    const visitors: Detected[] = [
+      { platform: 'mac-arm64', mobile: false, sure: false },
+      { platform: 'win-x64', mobile: false, sure: true },
+      { platform: null, mobile: true, sure: true },
+      { platform: null, mobile: false, sure: false },
+    ];
+    const pages = visitors.flatMap(who => [pkgs, []].flatMap(list => [downloadPage(list, who, 'v'), downloadPage(list, who, 'v', true)]));
+    for (const html of pages) {
       const { paragraphs, others } = pageTexts(html);
       expect(paragraphs.length).toBeGreaterThanOrEqual(15);
-      expect(paragraphs).toContain('为下载的文件添加执行权限：chmod +x Yi-*.AppImage。'); // 段落内的标签去掉后连成一段
-      expect(others.some(text => text.endsWith('下载 macOS、Windows 及 Linux 版本。'))).toBe(true); // 页面描述等属性中的文字
+      expect(others.some(text => text.includes('提供 Windows、macOS'))).toBe(true); // 页面描述等属性中的文字
       expect([...paragraphs.flatMap(paragraphIssues), ...others.flatMap(punctuationIssues)]).toEqual([]);
     }
+    const guide = pageTexts(downloadPage(pkgs, visitors[0] as Detected, 'v')).paragraphs;
+    expect(guide).toContain('为下载的文件添加执行权限：chmod +x Yi-*.AppImage。'); // 段落内的标签去掉后连成一段
   });
 });
 

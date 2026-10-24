@@ -46,12 +46,12 @@ describe('下载目录列表的缓存（P2-17）', () => {
     const readdir = vi.spyOn(fs, 'readdirSync');
     const reads = () => readdir.mock.calls.filter(([at]) => at === dir).length;
     try {
-      await (await fetch(base + '/')).text();
-      await (await fetch(base + '/')).text();
+      await (await fetch(base + '/download/')).text();
+      await (await fetch(base + '/download/')).text();
       expect(await (await fetch(base + '/Yi-2.0.1-win-x64-setup.exe')).text()).toBe('0123456789');
       expect(reads()).toBe(1);
       fs.writeFileSync(path.join(dir, 'Yi-2.0.1-mac-arm64.dmg'), 'mac');
-      expect(await (await fetch(base + '/')).text()).toContain('Yi-2.0.1-mac-arm64.dmg');
+      expect(await (await fetch(base + '/download/')).text()).toContain('Yi-2.0.1-mac-arm64.dmg');
       fs.writeFileSync(exe, 'abc'); // 原地改写不改变目录
       const changed = await fetch(base + '/Yi-2.0.1-win-x64-setup.exe');
       expect([changed.headers.get('content-length'), await changed.text()]).toEqual(['3', 'abc']);
@@ -70,9 +70,9 @@ describe('下载目录列表的缓存（P2-17）', () => {
     const host = await startHost(0, { host: '127.0.0.1', files: dir });
     const base = `http://127.0.0.1:${host.port}`;
     try {
-      expect(await (await fetch(base + '/')).text()).toContain('Yi-2.0.1-win-x64-setup.exe');
+      expect(await (await fetch(base + '/download/')).text()).toContain('Yi-2.0.1-win-x64-setup.exe');
       fs.rmSync(dir, { recursive: true });
-      const page = await fetch(base + '/');
+      const page = await fetch(base + '/download/');
       expect(page.status).toBe(200);
       expect(await page.text()).not.toContain('Yi-2.0.1-win-x64-setup.exe');
     } finally {

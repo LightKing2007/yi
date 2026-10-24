@@ -1,5 +1,5 @@
 /**
- * 下载页面用到的资源（API-060 的 /assets/ 名单）：构建时读成 base64，经 define 嵌入服务端（build-node.mjs）与测试（vite.config.ts），
+ * 主页与下载页面用到的资源（API-060 的 /assets/ 名单）：构建时读成 base64，经 define 嵌入服务端（build-node.mjs）与测试（vite.config.ts），
  * 服务端运行时不读取磁盘。新增资源时同时在 server/files.ts 的 ASSET_TYPES 中登记内容类型。
  */
 import fs from 'node:fs';
@@ -9,6 +9,7 @@ const SOURCES = {
   'title-yi.png': 'src/ui/assets/title-yi.png',
   'icon.png': 'public/icon.png',
   'yi-serif-900.woff2': 'src/ui/assets/fonts/yi-serif-900.woff2',
+  'yi-serif-400.woff2': 'src/ui/assets/fonts/yi-serif-400.woff2',
   'icp.png': 'server/assets/icp.png', // ICP 备案图标（48×48）
 };
 

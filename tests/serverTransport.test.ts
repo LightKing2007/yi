@@ -86,7 +86,7 @@ describe('安装包下载', () => {
     const host = await startHost(0, { host: '127.0.0.1', files: dir });
     const base = `http://127.0.0.1:${host.port}`;
     try {
-      const page = await (await fetch(base + '/')).text();
+      const page = await (await fetch(base + '/download/')).text();
       expect(page).toContain('Yi-2.0.1-win-x64-setup.exe');
       expect(page).toContain('Yi-2.0.1-mac-arm64.dmg');
       expect(page).not.toContain('2.0.0');
@@ -113,7 +113,7 @@ describe('安装包下载', () => {
     }
   });
 
-  it('下载页面带安全响应头，只提供名单内的资源，页脚有 ICP 备案号；SHA256SUMS 与页面上的校验值一致（API-060、API-063、SEC-070）', async () => {
+  it('主页与下载页面带安全响应头，只提供名单内的资源，页脚有 ICP 备案号；SHA256SUMS 与页面上的校验值一致（API-060、API-063、SEC-070）', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-files-'));
     fs.writeFileSync(path.join(dir, 'Yi-2.0.3-win-x64-setup.exe'), 'windows');
     fs.writeFileSync(path.join(dir, 'Yi-2.0.3-linux-x86_64.AppImage'), 'linux');
@@ -121,21 +121,24 @@ describe('安装包下载', () => {
     const base = `http://127.0.0.1:${host.port}`;
     const sha = (s: string) => createHash('sha256').update(s).digest('hex');
     try {
-      const page = await fetch(base + '/');
-      expect(page.headers.get('content-security-policy')).toBe("default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; font-src 'self'");
-      expect(page.headers.get('x-content-type-options')).toBe('nosniff');
-      expect(page.headers.get('referrer-policy')).toBe('no-referrer');
-      const html = await page.text();
-      expect(html).not.toMatch(/<script/i);
-      expect(html).toContain('/assets/title-yi.png');
-      // 页脚展示 ICP 备案号并链接到工信部的备案管理系统（以域名对外提供网页的要求）
-      expect(html).toMatch(
-        /<a class="icp" href="https:\/\/beian\.miit\.gov\.cn\/"[^>]*>\s*<img src="\/assets\/icp\.png\?v=[^"]+"[^>]*>渝ICP备2025066996号-2<\/a>/,
-      );
+      for (const route of ['/', '/download/', '/download/?start']) {
+        const page = await fetch(base + route);
+        expect(page.headers.get('content-security-policy'), route).toBe("default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; font-src 'self'");
+        expect(page.headers.get('x-content-type-options')).toBe('nosniff');
+        expect(page.headers.get('referrer-policy')).toBe('no-referrer');
+        const html = await page.text();
+        expect(html).not.toMatch(/<script/i);
+        expect(html).toContain('/assets/title-yi.png');
+        // 页脚展示 ICP 备案号并链接到工信部的备案管理系统（以域名对外提供网页的要求）
+        expect(html).toMatch(
+          /<a class="icp" href="https:\/\/beian\.miit\.gov\.cn\/"[^>]*>\s*<img src="\/assets\/icp\.png\?v=[^"]+"[^>]*>渝ICP备2025066996号-2<\/a>/,
+        );
+      }
       for (const [name, type] of [
         ['title-yi.png', 'image/png'],
         ['icon.png', 'image/png'],
         ['yi-serif-900.woff2', 'font/woff2'],
+        ['yi-serif-400.woff2', 'font/woff2'],
         ['icp.png', 'image/png'],
       ]) {
         const r = await fetch(`${base}/assets/${name}?v=1`);
@@ -151,7 +154,7 @@ describe('安装包下载', () => {
         sums = await fetch(base + '/SHA256SUMS');
       }
       expect(await sums.text()).toBe(`${sha('windows')}  Yi-2.0.3-win-x64-setup.exe\n${sha('linux')}  Yi-2.0.3-linux-x86_64.AppImage\n`);
-      const again = await (await fetch(base + '/')).text();
+      const again = await (await fetch(base + '/download/')).text();
       expect(again).toContain(sha('windows'));
       expect(again).toContain('macOS 13 Ventura 或更高版本');
     } finally {
