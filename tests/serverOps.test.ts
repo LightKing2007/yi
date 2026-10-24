@@ -260,9 +260,9 @@ describe('按 IP 的加入失败次数（API-044，原问题 A6）', () => {
         replies.push(JSON.parse(String(data)));
         wake();
       });
-      const next = async (t: string) => {
+      const next = async (type: string) => {
         for (;;) {
-          const i = replies.findIndex(m => m.t === t);
+          const i = replies.findIndex(reply => reply.t === type);
           if (i >= 0) return replies.splice(0, i + 1).at(-1);
           await new Promise<void>(res => (wake = res));
         }
