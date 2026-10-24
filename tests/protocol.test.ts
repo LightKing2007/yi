@@ -124,7 +124,7 @@ const RATING = { points: 1260, win: 3, loss: 1, draw: 0 };
 /** 服务端每种消息一条合法的例子 */
 const LEGAL_S2C: S2C[] = [
   { t: 'welcome', id: 7, token: TOKEN, ratings: { gomoku: RATING, go: RATING } },
-  { t: 'welcome', id: 8, token: TOKEN, ratings: { gomoku: RATING, go: RATING }, latest: '2.0.5', url: 'http://yi.lightking.com.cn:8443/' },
+  { t: 'welcome', id: 8, token: TOKEN, ratings: { gomoku: RATING, go: RATING }, latest: '3.0.0', url: 'https://yi.lightking.com.cn/' },
   { t: 'resumeFailed' },
   { t: 'pong' },
   { t: 'queued', mode: 'ranked', type: 1, size: 19 },
