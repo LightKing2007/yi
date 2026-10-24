@@ -33,15 +33,25 @@ export interface OpenOptions {
   migrations?: readonly Migration[];
 }
 
+/**
+ * 打开失败的原因，写入 `db.open-failed` 的 kind 字段，供运维区分处置（ops.md 第 5.2 条）：
+ * io 无法打开；unreadable 不是数据库或首次读取即出错；integrity 未通过完整性检查；schema-version 结构版本无法识别或高于程序支持；
+ * migration 执行迁移失败（已回滚）
+ */
+export type DbOpenKind = 'io' | 'unreadable' | 'integrity' | 'schema-version' | 'migration';
+
 /** 数据库无法打开、已损坏、结构版本过高或迁移失败。调用方必须以 `exitCode` 退出 */
 export class DbOpenError extends Error {
+  readonly exitCode: number;
+
   constructor(
     readonly file: string,
-    readonly exitCode: number,
+    readonly kind: DbOpenKind,
     reason: string,
   ) {
     super(`数据库 ${file} ${reason}，已拒绝启动`);
     this.name = 'DbOpenError';
+    this.exitCode = kind === 'io' ? EXIT_IO_ERROR : EXIT_DATA_ERROR;
   }
 }
 
@@ -58,7 +68,7 @@ function readVersion(db: DatabaseSync, file: string): number {
   if (!table) return 0;
   const row = db.prepare('SELECT meta_text FROM meta WHERE meta_name = ?').get(VERSION_NAME);
   const version = Number(row?.meta_text);
-  if (!Number.isSafeInteger(version) || version < 1) throw new DbOpenError(file, EXIT_DATA_ERROR, `的结构版本 ${String(row?.meta_text)} 无法识别`);
+  if (!Number.isSafeInteger(version) || version < 1) throw new DbOpenError(file, 'schema-version', `的结构版本 ${String(row?.meta_text)} 无法识别`);
   return version;
 }
 
@@ -67,7 +77,7 @@ function prepare(db: DatabaseSync, file: string) {
   for (const pragma of PRAGMAS) db.exec(`PRAGMA ${pragma}`);
   const result = db.prepare('PRAGMA integrity_check').all();
   const ok = result.length === 1 && result[0]?.integrity_check === 'ok';
-  if (!ok) throw new DbOpenError(file, EXIT_DATA_ERROR, `未通过完整性检查（${result.map(row => String(row.integrity_check)).join('；')}）`);
+  if (!ok) throw new DbOpenError(file, 'integrity', `未通过完整性检查（${result.map(row => String(row.integrity_check)).join('；')}）`);
 }
 
 /** 迁移前以 VACUUM INTO 备份一份一致的快照（DAT-042、DAT-062），返回备份文件的路径 */
@@ -91,7 +101,7 @@ function migrate(db: DatabaseSync, file: string, migration: Migration) {
     db.exec('COMMIT');
   } catch (err) {
     db.exec('ROLLBACK');
-    throw new DbOpenError(file, EXIT_DATA_ERROR, `执行迁移 ${migration.name} 失败（${err instanceof Error ? err.message : String(err)}），已回滚`);
+    throw new DbOpenError(file, 'migration', `执行迁移 ${migration.name} 失败（${err instanceof Error ? err.message : String(err)}），已回滚`);
   }
 }
 
@@ -100,11 +110,13 @@ function upgrade(db: DatabaseSync, file: string, opt: OpenOptions) {
   const migrations = opt.migrations ?? MIGRATIONS;
   const latest = migrations.at(-1)?.version ?? 0;
   const from = readVersion(db, file);
-  if (from > latest) throw new DbOpenError(file, EXIT_DATA_ERROR, `的结构版本 ${from} 高于本程序支持的 ${latest}，请回滚到匹配的版本`); // VER-012：严禁写入
+  if (from > latest) throw new DbOpenError(file, 'schema-version', `的结构版本 ${from} 高于本程序支持的 ${latest}，请回滚到匹配的版本`); // VER-012：严禁写入
   const pending = migrations.filter(m => m.version > from);
   if (!pending.length) return;
   // 新建的空数据库没有可丢失的数据，不备份
   const saved = from > 0 ? backup(db, file, opt) : undefined;
+  // 迁移开始前先写一行：迁移卡住或进程在迁移中被杀时，日志中可以看出停在哪里
+  opt.log?.('info', 'db.migrating', { msg: `数据库结构正由版本 ${from} 升到 ${latest}`, file, from, to: latest, backup: saved });
   for (const migration of pending) migrate(db, file, migration);
   opt.log?.('info', 'db.migrated', { msg: `数据库结构已由版本 ${from} 升到 ${latest}`, file, from, to: latest, backup: saved });
 }
@@ -115,7 +127,7 @@ export function openDatabase(file: string, opt: OpenOptions): DatabaseSync {
   try {
     db = new DatabaseSync(file);
   } catch (err) {
-    throw new DbOpenError(file, EXIT_IO_ERROR, `无法打开（${err instanceof Error ? err.message : String(err)}）`);
+    throw new DbOpenError(file, 'io', `无法打开（${err instanceof Error ? err.message : String(err)}）`);
   }
   try {
     prepare(db, file);
@@ -123,7 +135,7 @@ export function openDatabase(file: string, opt: OpenOptions): DatabaseSync {
   } catch (err) {
     db.close();
     if (err instanceof DbOpenError) throw err;
-    throw new DbOpenError(file, EXIT_DATA_ERROR, `无法读取（${err instanceof Error ? err.message : String(err)}）`); // 文件不是数据库或已损坏时，首次读取即抛出
+    throw new DbOpenError(file, 'unreadable', `无法读取（${err instanceof Error ? err.message : String(err)}）`); // 文件不是数据库或已损坏时，首次读取即抛出
   }
   opt.log?.('info', 'db.opened', { msg: '数据库已打开', file, schemaVersion: readVersion(db, file) });
   return db;

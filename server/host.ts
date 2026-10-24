@@ -213,9 +213,15 @@ function closeAll(listening: Listening[]) {
 
 /**
  * startHost 的选项：files 为安装包所在的目录；build 为健康检查中的版本号与提交号，不设时提交号为空串；
- * metrics 为监控指标（设了才提供 /metrics），eventLoopLag 返回事件循环延迟 p99（秒）
+ * metrics 为监控指标（设了才提供 /metrics），eventLoopLag 返回事件循环延迟 p99（秒），dbFileBytes 返回数据库文件的字节数
  */
-export type HostOptions = RoomServerOptions & { host?: string; files?: string; build?: Build; eventLoopLag?: () => number };
+export type HostOptions = RoomServerOptions & {
+  host?: string;
+  files?: string;
+  build?: Build;
+  eventLoopLag?: () => number;
+  dbFileBytes?: () => number;
+};
 
 /** 在 ports 上开服（第一个是主端口）；有端口被占用时抛出 */
 export async function startHost(ports: number | number[], opt: HostOptions = {}): Promise<Host> {
@@ -231,6 +237,8 @@ export async function startHost(ports: number | number[], opt: HostOptions = {})
     downloadsActive: files?.active() ?? 0,
     eventLoopLagSeconds: opt.eventLoopLag?.() ?? 0,
     residentMemoryBytes: process.memoryUsage.rss(),
+    dbFileBytes: opt.dbFileBytes?.() ?? 0,
+    joinFailIps: server.joinFailIpCount(),
   });
   const { metrics } = opt;
   const httpGate = new HttpGate();
@@ -243,7 +251,7 @@ export async function startHost(ports: number | number[], opt: HostOptions = {})
     ? work => {
         const start = now();
         const result = work();
-        metrics.observe(now() - start);
+        metrics.observe('yi_message_handle_seconds', now() - start);
         return result;
       }
     : work => work();

@@ -281,6 +281,7 @@ describe('按 IP 的加入失败次数（API-044，原问题 A6）', () => {
     for (let n = 0; n < 5; n++) expect(await tryJoin('203.0.113.7', 4)).toBe('房号不存在，或房间已经开始');
     expect(await tryJoin('203.0.113.7', 1)).toBe('尝试次数太多，请稍后再试');
     expect(await tryJoin('198.51.100.1', 1)).toBe('房号不存在，或房间已经开始');
+    expect(host.gauges().joinFailIps).toBe(2); // 监控指标 yi_join_fail_ips
     await host.close();
   });
 });
@@ -312,7 +313,17 @@ describe('监控指标的统计点（OPS-071）', () => {
     const metrics = new Metrics({ version: '1.0.0', commit: 'c' });
     const env = world(new MemoryStore(), { metrics });
     const value = (sample: string) =>
-      metrics.snapshot({ connections: 0, playersOnline: 0, rooms: [], queue: [], downloadsActive: 0, eventLoopLagSeconds: 0, residentMemoryBytes: 0 })[sample];
+      metrics.snapshot({
+        connections: 0,
+        playersOnline: 0,
+        rooms: [],
+        queue: [],
+        downloadsActive: 0,
+        eventLoopLagSeconds: 0,
+        residentMemoryBytes: 0,
+        dbFileBytes: 0,
+        joinFailIps: 0,
+      })[sample];
     return { ...env, metrics, value };
   };
 

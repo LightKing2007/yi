@@ -93,16 +93,33 @@ function statements(db: DatabaseSync) {
   } satisfies Record<string, StatementSync>;
 }
 
+/** Repo 的可选依赖 */
+export interface RepoOptions {
+  /** 单调时钟（秒），用于事务耗时；默认为 performance.now */
+  clock?: () => number;
+  /** 每个事务结束（提交或回滚）后调用，参数为耗时（秒）：监控指标 yi_db_transaction_seconds */
+  onTransaction?: (seconds: number) => void;
+}
+
+/** 毫秒换算为秒 */
+const MS_PER_SEC = 1000;
+
 /** 服务端的数据访问；方法都是同步的，多条写入由调用方以 `transaction` 包成一个事务（DAT-040） */
 export class Repo {
   private readonly sql: ReturnType<typeof statements>;
+  private readonly clock: () => number;
 
-  constructor(private readonly db: DatabaseSync) {
+  constructor(
+    private readonly db: DatabaseSync,
+    private readonly opt: RepoOptions = {},
+  ) {
     this.sql = statements(db);
+    this.clock = opt.clock ?? (() => performance.now() / MS_PER_SEC);
   }
 
-  /** 在一个事务内执行；抛出异常时回滚并原样抛出。不支持嵌套 */
+  /** 在一个事务内执行；抛出异常时回滚并原样抛出。不支持嵌套。结束后报告耗时（RepoOptions.onTransaction） */
   transaction<T>(fn: () => T): T {
+    const start = this.clock();
     this.db.exec('BEGIN IMMEDIATE');
     try {
       const result = fn();
@@ -111,6 +128,8 @@ export class Repo {
     } catch (err) {
       this.db.exec('ROLLBACK');
       throw err;
+    } finally {
+      this.opt.onTransaction?.(this.clock() - start);
     }
   }
 

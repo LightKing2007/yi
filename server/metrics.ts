@@ -6,7 +6,7 @@
 import { PROTO_VERSION } from '../src/shared/protocol';
 import { REJECT_TEXTS } from '../src/shared/reject';
 
-/** 单条消息处理耗时的直方图分桶（秒，07-operations.md 第 9 节） */
+/** 直方图的分桶（秒，07-operations.md 第 9 节）：单条消息处理耗时与数据库事务耗时共用 */
 const BUCKET_SECONDS = { '1ms': 0.001, '5ms': 0.005, '10ms': 0.01, '50ms': 0.05, '100ms': 0.1 };
 /** 分桶的上界（秒），从小到大 */
 export const HANDLE_BUCKETS: readonly number[] = Object.values(BUCKET_SECONDS);
@@ -56,11 +56,48 @@ export interface Gauges {
   downloadsActive: number;
   eventLoopLagSeconds: number;
   residentMemoryBytes: number;
+  /** 数据库文件与其 WAL 文件的字节数合计 */
+  dbFileBytes: number;
+  /** 正在统计加入房间失败次数的 IP 数（API-044） */
+  joinFailIps: number;
 }
 
 type Labels = Record<string, string>;
-/** 直方图的指标族名 */
-const HISTOGRAM = 'yi_message_handle_seconds';
+/** 直方图的名称与说明（07-operations.md 第 9 节） */
+const HISTOGRAMS = {
+  yi_message_handle_seconds: '单条消息处理耗时',
+  yi_db_transaction_seconds: '数据库事务耗时（含提交或回滚）',
+} as const;
+/** 直方图的名称 */
+export type HistogramName = keyof typeof HISTOGRAMS;
+
+/** 一个直方图：各桶的计数（不累计）、超出最大桶的次数、总和与次数 */
+class Histogram {
+  private buckets: number[] = HANDLE_BUCKETS.map(() => 0);
+  private over = 0;
+  private sum = 0;
+  private count = 0;
+
+  observe(seconds: number) {
+    const i = HANDLE_BUCKETS.findIndex(le => seconds <= le);
+    if (i < 0) this.over++;
+    else this.buckets[i] = (this.buckets[i] ?? 0) + 1;
+    this.sum += seconds;
+    this.count++;
+  }
+
+  /** 样本：各桶的累计次数，以及 _sum、_count */
+  samples(name: string): [string, number][] {
+    const out: [string, number][] = [];
+    let cumulative = 0;
+    HANDLE_BUCKETS.forEach((le, i) => {
+      cumulative += this.buckets[i] ?? 0;
+      out.push([`${name}_bucket{le="${le}"}`, cumulative]);
+    });
+    out.push([`${name}_bucket{le="+Inf"}`, cumulative + this.over], [`${name}_sum`, this.sum], [`${name}_count`, this.count]);
+    return out;
+  }
+}
 /** 计数器的名称、说明与标签名（07-operations.md 第 9 节） */
 const COUNTERS = {
   yi_games_finished_total: { help: '已结束的对局数', labels: ['kind', 'reason'] },
@@ -82,11 +119,8 @@ function labelText(labels: Labels) {
 export class Metrics {
   /** 计数器：名称 → 标签文本 → 值 */
   private counters = new Map<CounterName, Map<string, number>>();
-  /** 直方图：各桶的计数（不累计）、总和与次数 */
-  private buckets: number[] = HANDLE_BUCKETS.map(() => 0);
-  private over = 0;
-  private sum = 0;
-  private count = 0;
+  /** 直方图：名称 → 直方图 */
+  private histograms = new Map<HistogramName, Histogram>((Object.keys(HISTOGRAMS) as HistogramName[]).map(name => [name, new Histogram()]));
 
   constructor(private readonly build: { version: string; commit: string }) {}
 
@@ -98,13 +132,9 @@ export class Metrics {
     this.counters.set(name, series);
   }
 
-  /** 记下一次消息处理耗时（秒） */
-  observe(seconds: number) {
-    const i = HANDLE_BUCKETS.findIndex(le => seconds <= le);
-    if (i < 0) this.over++;
-    else this.buckets[i] = (this.buckets[i] ?? 0) + 1;
-    this.sum += seconds;
-    this.count++;
+  /** 在直方图 name 中记下一次耗时（秒） */
+  observe(name: HistogramName, seconds: number) {
+    this.histograms.get(name)?.observe(seconds);
   }
 
   /** 全部指标的样本：[名称加标签, 值]，按第 9 节的次序 */
@@ -121,18 +151,13 @@ export class Metrics {
       if (!series || series.size === 0) out.push([name, 0]);
       else for (const [key, value] of series) out.push([name + key, value]);
     }
-    let cumulative = 0;
-    HANDLE_BUCKETS.forEach((le, i) => {
-      cumulative += this.buckets[i] ?? 0;
-      out.push([`yi_message_handle_seconds_bucket{le="${le}"}`, cumulative]);
-    });
+    for (const [name, histogram] of this.histograms) out.push(...histogram.samples(name));
     out.push(
-      ['yi_message_handle_seconds_bucket{le="+Inf"}', cumulative + this.over],
-      ['yi_message_handle_seconds_sum', this.sum],
-      ['yi_message_handle_seconds_count', this.count],
       ['yi_event_loop_lag_seconds', g.eventLoopLagSeconds],
       ['yi_downloads_active', g.downloadsActive],
       ['process_resident_memory_bytes', g.residentMemoryBytes],
+      ['yi_db_file_bytes', g.dbFileBytes],
+      ['yi_join_fail_ips', g.joinFailIps],
     );
     return out;
   }
@@ -146,16 +171,18 @@ export class Metrics {
       yi_rooms_active: ['gauge', '房间数'],
       yi_queue_waiting: ['gauge', '匹配队列中的人数'],
       ...Object.fromEntries(Object.entries(COUNTERS).map(([name, counter]) => [name, ['counter', counter.help] as [string, string]])),
-      yi_message_handle_seconds: ['histogram', '单条消息处理耗时'],
+      ...Object.fromEntries(Object.entries(HISTOGRAMS).map(([name, text]) => [name, ['histogram', text] as [string, string]])),
       yi_event_loop_lag_seconds: ['gauge', '事件循环延迟 p99'],
       yi_downloads_active: ['gauge', '进行中的下载数'],
       process_resident_memory_bytes: ['gauge', '常驻内存'],
+      yi_db_file_bytes: ['gauge', '数据库文件与其 WAL 文件的字节数'],
+      yi_join_fail_ips: ['gauge', '正在统计加入房间失败次数的 IP 数'],
     };
     const lines: string[] = [];
     let last = '';
     for (const [sample, value] of this.samples(g)) {
       const name = sample.replace(/\{.*$/, '');
-      const family = name.startsWith(HISTOGRAM) ? HISTOGRAM : name; // 直方图的 _bucket、_sum、_count 同属一族
+      const family = Object.keys(HISTOGRAMS).find(histogram => name.startsWith(`${histogram}_`)) ?? name; // 直方图的 _bucket、_sum、_count 同属一族
       if (family !== last) {
         const [type, text] = help[family] ?? ['untyped', family];
         lines.push(`# HELP ${family} ${text}`, `# TYPE ${family} ${type}`);
