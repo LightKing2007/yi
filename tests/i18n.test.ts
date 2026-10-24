@@ -191,7 +191,7 @@ describe('扫描工具 hanTextsOf', () => {
       'this.log(`乙 ${x}`);',
       "ctx.log('info', 'match.paired', { msg: `庚 ${x}` });",
       "console.warn('丙');",
-      "throw new StoreLoadError(f, 1, '丁');",
+      "throw new DbOpenError(f, 'io', '丁');",
       "if (bad) throw '戊';",
       "Promise.reject(new Error('己'));",
     ].join('\n');

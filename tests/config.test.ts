@@ -101,7 +101,7 @@ describe('服务端配置的校验', () => {
   it('最新版本号为“主版本.次版本.修订号”，下载地址为 http 或 https 网址', () => {
     for (const bad of ['2.0', 'v2.0.7', '2.0.7-beta']) expect(failed([], { YI_LATEST: bad }), bad).toEqual(['YI_LATEST']);
     for (const bad of ['ftp://yi.com/', 'yi.lightking.com.cn', 'javascript:alert(1)']) expect(failed([], { YI_DOWNLOAD: bad }), bad).toEqual(['YI_DOWNLOAD']);
-    expect(failed([], { YI_DOWNLOAD: 'http://yi.lightking.com.cn:8443/' })).toEqual([]);
+    expect(failed([], { YI_DOWNLOAD: 'http://127.0.0.1:8443/' })).toEqual([]); // 本机测试时的明文地址也合法
   });
 
   it('多项不合法时全部报出，各附期望的格式；不合法的项取默认值', () => {
