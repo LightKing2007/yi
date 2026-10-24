@@ -5,7 +5,7 @@
 | 性质 | 计划，资料性；各阶段的实施必须符合 [docs/standards/](../standards/00-general.md)，二者冲突时以规范为准 |
 | 文件版本 | 第 4 版 |
 | 修订日期 | 2026-10-24 |
-| 当前版本 | 2.0.7（联机协议第 3 版） |
+| 当前版本 | 3.0.0（联机协议第 3 版） |
 | 下一阶段 | 阶段 5：数据库、对局记录与服务端加固 |
 
 本文件规定“弈”的架构改造目标、原则与尚未完成的阶段。已完成阶段的设计与实施细节见 Git 历史（第 2 版：提交 `ed1cb10` 中的 `docs/PLAN.md`，可用 `git show ed1cb10:docs/PLAN.md` 查看）；规范整改项见 [remediation.md](remediation.md)。
@@ -284,8 +284,8 @@ server/
 |---|---|
 | 域名 | `yi.lightking.com.cn`，A 记录指向服务器 |
 | Caddy | 安装 Caddy，自动申请并续期证书：`yi.lightking.com.cn { reverse_proxy 127.0.0.1:8443 }`。**已实施**（2026-10-13，Caddy v2.11.7）：站点配置为 `scripts/server/yi.caddy`，以 `npm run deploy -- install-caddy` 安装；安全组与 UFW 已放行 80、443；Caddy 与主配置由 LightsWeb 仓库管理（2026-10-13 项目所有者决定），以便同一台服务器承载多个网站 |
-| 服务端只监听本机 | `yi.service` 设 `HOST=127.0.0.1`（6c 已改，随 3.0.0 以 `install-service` 安装）；安全组与 UFW 关闭 8443，只开放 80、443。按架构决策记录 0009 不再为 2.x 客户端保留对外端口 |
-| 客户端地址 | `.env.production`：`VITE_YI_SERVER=wss://yi.lightking.com.cn/ws`（6c 已改，随 3.0.0 发布） |
+| 服务端只监听本机 | `yi.service` 设 `HOST=127.0.0.1`（6c 已改，2026-10-24 随 3.0.0 以 `install-service` 安装）；安全组与 UFW 关闭 8443，只开放 80、443（2026-10-24 已关闭）。按架构决策记录 0009 不再为 2.x 客户端保留对外端口 |
+| 客户端地址 | `.env.production`：`VITE_YI_SERVER=wss://yi.lightking.com.cn/ws`（6c 已改，2026-10-24 随 3.0.0 发布） |
 | CSP | `index.html` 的 `connect-src` 为 `'self' wss://yi.lightking.com.cn`；开发时由 Vite 插件另加本机地址（6c 已改，`scripts/dev-csp.mjs`） |
 | 真实 IP | 服务端取客户端 IP 时读 `X-Forwarded-For`（只信任来自 127.0.0.1 的这个头），限流和反作弊要用。**已实施**（#115，`server/clientIp.ts`）：取该头的最后一项；带这个头的请求不算本机请求，`/healthz`、`/metrics` 不回应 |
 
