@@ -245,7 +245,7 @@ node dist-server/server.cjs --version
 - **监控指标**：同一端口上的 `/metrics`（只回应来自本机的请求，API-061）以 Prometheus 文本格式输出 [07-operations.md](docs/standards/07-operations.md) 第 9 节的指标（连接数、在线玩家、房间、排队、消息与错误码计数、处理耗时、事件循环延迟、内存，以及数据库的事务耗时、文件大小与写入失败次数等）；服务端另每 60 秒在日志中写一条 `metrics.snapshot`（OPS-071）。查看：`ssh deploy@47.108.181.240 /opt/node/bin/node -e "fetch('http://127.0.0.1:8443/metrics').then(r=>r.text()).then(console.log)"`。
 - **查看日志**：`ssh deploy@47.108.181.240 journalctl -u yi -f`。日志为 JSON Lines，每行一个事件，`ver` 字段为服务端的版本号及提交号（格式与事件码见 [07-operations.md](docs/standards/07-operations.md) 第 5 节、第 8 节）；只看警告及以上：`journalctl -u yi -p warning`；临时输出 debug 级别：以 root 执行 `systemctl edit yi` 在附加配置中设 `Environment=YI_LOG_LEVEL=debug`（OPS-062），不改动 `yi.service` 本身，用完以 `systemctl revert yi` 删除。
 - **修改服务配置**：修改仓库中的 `scripts/server/yi.service`，经 PR 合并后执行 `npm run deploy -- install-service`；严禁在服务器上直接改动该文件。
-- **防火墙**：阿里云安全组与主机防火墙 UFW 均仅放行 TCP 22、8443 端口，两者须保持一致（SEC-041）。
+- **防火墙**：阿里云安全组与主机防火墙 UFW 均仅放行 TCP 22、80、443、8443 端口，两者须保持一致（SEC-041）；8443 供 2.x 客户端直连，3.0.0 上线后关闭。
 - **重启**：以 `npm run deploy -- restart` 进行：有对局时先进入维护模式，等对局结束后重启，并以健康检查核对；严禁直接执行 `systemctl restart yi`。
 - **备份**：备份在 `/var/lib/yi/backup/`。立即备份一次：`systemctl start yi-backup`；查看结果：`journalctl -u yi-backup -n 5`，成功为 `db.backup-done`（附校验和与各表的条数），失败为 error 级的 `db.backup-failed`，可用 `journalctl -u yi-backup -p err` 筛出。
 - **从备份恢复**：恢复会丢失备份时刻之后的变化，并须停止服务端，应在无人对局时进行；步骤见 [运维规程](docs/procedures/ops.md) 第 3.2 条，从异地备份恢复见第 3.3 条。
@@ -304,7 +304,7 @@ server/               rooms.ts 队列、配对、房间、对局与段位（与�
                       files.ts 同一端口上的下载服务（page.ts 页面、pageStyle.ts 样式）；main.ts 入口
 electron/             桌面版主进程（窗口、单实例、匹配成功时的任务栏提醒、错误日志）及预加载脚本
 tests/                vitest：rules（规则与人机）、record（规则层与棋谱）、session（会话与座位）、protocol（消息校验与昵称清洗）、server（联机服务端）、ratelimit（限流）、
-                      store（段位存档）、client（联机客户端：断线、重连、服务器重启、非法消息）、lobby（联机大厅：匹配、排位、好友房间）、
+                      db、dbRepo、dbStartup 与 dbBackup（数据库：打开与迁移、仓储与段位、启动、备份）、client（联机客户端：断线、重连、服务器重启、非法消息）、lobby（联机大厅：匹配、排位、好友房间）、
                       onlineGame（联机对局中的请求、点目与回放）、reconnect 与 retry（断线重连的退避与关闭码）、storage（本地存储与设置）、updateNote（新版本提示的本地记录）、
                       fakeNet（联机客户端测试用的假网络与浏览器环境）、layers 与 importGraph（分层与第三方包检查，以语法树找出四种引用形式）、text（标点与更新日志）、i18n 与 uiText（译文齐全、英文的写法、以语法树扫描界面文字）、
                       ratchet（违规棘轮）、coverage（改动行覆盖率）、deps（许可证、依赖漏洞门禁、工作流的 Action 固定）
