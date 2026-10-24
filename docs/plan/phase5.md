@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 性质 | 计划，资料性；实施必须符合 [docs/standards/](../standards/00-general.md)，与规范冲突时以规范为准 |
-| 文件版本 | 1.14 |
+| 文件版本 | 1.15 |
 | 修订日期 | 2026-10-24 |
 | 状态 | 实施中：第 3 章的待决策事项已于 2026-10-16 由项目所有者决定；同日按尚无玩家的前提改为不保留旧数据与旧客户端的兼容，下一版为 3.0.0（[架构决策记录 0009](../adr/0009-no-legacy-compat.md)） |
 | 相关文档 | [roadmap.md](roadmap.md) 第 5 章、[remediation.md](remediation.md) 第 6 章（P2-01、P2-02、P2-04、P2-12）、[03-data.md](../standards/03-data.md)、[07-operations.md](../standards/07-operations.md)、[10-edge-cases.md](../standards/10-edge-cases.md) |
@@ -83,7 +83,7 @@
 | 6 | 对局记录、每手用时与事务内结算 | DAT-024、DAT-040；A8 | 5 | 已完成 |
 | 7 | 在线备份、每小时备份、异地备份与恢复演练 | P2-02；DAT-060 至 DAT-065 | 4 | 已完成（代码与规程；上线后安装备份、更新异地备份并演练恢复，见第 4.11.2 条） |
 | 8 | 按 IP 统计加入房间的失败次数 | API-044；A6 | 3 | 已完成 |
-| 9 | 日志事件码、监控指标与文档 | OPS-060 至 OPS-075、DOC-003 | 5、6、7 | 未开始 |
+| 9 | 日志事件码、监控指标与文档 | OPS-060 至 OPS-075、DOC-003 | 5、6、7 | 已完成 |
 | 6a | 删除旧数据的兼容：`server/store.ts`、`server/db/legacy.ts`、`YI_DATA`、双写，表结构中的 `import` | 架构决策记录 0009 | 6 | 已完成（#175） |
 | 6b | 删除服务端为旧客户端、旧服务端保留的代码：`EXTRA_PORTS`、上线脚本中为 2.0.6 及以前写的分支与 `migrate-layout` | 架构决策记录 0009 | — | 已完成 |
 | 6c | 客户端改连 `wss://yi.lightking.com.cn/ws`，CSP 只放行该地址；`yi.service` 设 `HOST=127.0.0.1` | P2-05；SEC-010 至 SEC-013 | — | 已完成（上线时安装 `yi.service`、关闭 8443） |
@@ -172,6 +172,8 @@
 4.10.1 新增日志事件码（07-operations.md 第 8 节）：数据库打开、迁移开始与完成、迁移失败、完整性检查失败、导入完成、写入失败、备份完成与失败；新增监控指标（第 9 节）：数据库写入失败次数、事务耗时、数据库文件大小。日志中严禁出现 L4 数据（DAT-073）。
 
 4.10.2 同步更新：`README.md`（部署结构、备份与恢复）、[ops.md](../procedures/ops.md)（每日检查、恢复步骤、迁移失败时的处置）、[03-data.md](../standards/03-data.md) 与 [remediation.md](remediation.md) 中各项的现状（DOC-003）。
+
+4.10.3 实施：事件码中的“导入完成”随架构决策记录 0009 取消；“迁移开始”为 `db.migrating`；完整性检查失败、迁移失败等仍为 `db.open-failed`，以 `kind` 字段区分原因，[ops.md](../procedures/ops.md) 第 5.2 条按它分别处置。写入失败（`db.write-failed`、`yi_db_write_failures_total`）与备份（`db.backup-*`）已随第 6、7 步加入。新增指标 `yi_db_transaction_seconds`、`yi_db_file_bytes`，另加第 8 步的 `yi_join_fail_ips`。日志中只有文件路径、条数与错误信息，没有 L4 数据（DAT-073）。
 
 ### 4.11 第 10 步：验收、发布与上线
 
