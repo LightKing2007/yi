@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 文件编号 | YI-STD-001 |
-| 文件版本 | 1.1.60 |
+| 文件版本 | 1.1.61 |
 | 发布日期 | 2026-10-02 |
 | 状态 | 现行；整改项按 [plan/remediation.md](../plan/remediation.md) 的期限实施 |
 | 编制 | LightKing、Claude |
@@ -322,3 +322,4 @@ GB/T 11457—2006 界定的以及下列术语和定义适用于本规范。
 | 1.1.58 | 2026-10-24 | 随阶段 5 计划第 9 步同步 [07-operations.md](07-operations.md)：第 8 节增加事件码 `db.migrating`，`db.open-failed` 增加字段 `kind`；第 9 节增加指标 `yi_db_transaction_seconds`、`yi_db_file_bytes`、`yi_join_fail_ips`；OPS-071 的“现状”更正为满足（#92 已实施）；规定本身不变，规则编号不变 |
 | 1.1.59 | 2026-10-24 | [07-operations.md](07-operations.md) 中 OPS-047 的“现状”更正为满足（#94 已实施上线后 60 分钟内的自动检查）；规定本身不变，规则编号不变 |
 | 1.1.60 | 2026-10-24 | 3.0.0 上线后同步“现状”：[05-security.md](05-security.md) 中 SEC-010、SEC-011、SEC-041 改为满足，SEC-013 注明上线日期；[03-data.md](03-data.md) 中 DAT-060、DAT-062 注明线上运行的日期；规定本身不变，规则编号不变 |
+| 1.1.61 | 2026-10-25 | 修订 [04-api.md](04-api.md) 的 API-060：网站改版，`/` 改为主页，下载页面移至 `/download/`（查询参数只认 `start`，`/download` 重定向到 `/download/`），`/assets/` 的资源供两个页面共用；[09-text-and-i18n.md](09-text-and-i18n.md) 第 2.2 节术语表增加“主页”，“下载页面”的地址相应更新。页面仍不允许任何脚本（API-063）；规则编号不变 |
