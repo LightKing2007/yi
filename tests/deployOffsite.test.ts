@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { SCRIPT, at, calls, deployLog, read, run, setupServer, teardownServer, write } from './fakeServer';
+import { SCRIPT, at, calls, deployLog, layout, read, run, setupServer, teardownServer, write } from './fakeServer';
 
 const SERVER_DIR = path.resolve(__dirname, '../scripts/server');
 const ENV = 'YI_OSS_BUCKET=yi-backup-test\nYI_OSS_ACCESS_KEY_SECRET=secret\n';
@@ -19,6 +19,7 @@ function upload(env?: string) {
 beforeEach(() => {
   setupServer();
   fs.mkdirSync(at('opt'));
+  layout('3.0.0');
 });
 afterEach(teardownServer);
 
@@ -44,6 +45,20 @@ describe('服务器端（offsite）', () => {
       'systemctl start yi-offsite.service',
     ]);
     expect(deployLog()).toEqual(['tester config P1-13 install-offsite ok']);
+  });
+
+  it('线上低于 3.0.0 时中止，不改动任何文件（2.x 的服务端没有 backup 命令）', () => {
+    fs.rmSync(at('opt'), { recursive: true });
+    fs.mkdirSync(at('opt'));
+    layout('2.0.7', '2.0.6');
+    write(at('etc-yi/offsite.env'), 'OLD=1\n');
+    const result = run(['offsite'], upload(ENV));
+    expect(result.code).not.toBe(0);
+    expect(result.out).toContain('线上为 2.0.7，低于 3.0.0');
+    expect(read(at('etc-yi/offsite.env'))).toBe('OLD=1\n');
+    expect([fs.existsSync(at('opt/offsite.cjs')), fs.existsSync(at('systemd/yi-backup.service'))]).toEqual([false, false]);
+    expect(calls().some(line => /^(systemctl|chown)/.test(line))).toBe(false);
+    expect(deployLog()).toEqual([]);
   });
 
   it('没有传配置时保留已有的配置；从未配置过时中止', () => {
