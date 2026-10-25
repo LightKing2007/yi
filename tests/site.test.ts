@@ -58,10 +58,11 @@ async function withSite(run: (get: (route: string, headers?: Record<string, stri
 const refresh = (html: string) => /<meta http-equiv="refresh" content="1;url=([^"]+)">/.exec(html)?.[1];
 
 describe('主页与下载页面', () => {
-  it('/download 重定向到 /download/；页面请求芯片架构的客户端提示，并按这些请求头区分缓存', async () => {
+  it('/download 重定向到 /download/（保留 start）；页面请求芯片架构的客户端提示，并按这些请求头区分缓存', async () => {
     await withSite(async get => {
       const moved = await get('/download');
       expect([moved.status, moved.headers.get('location')]).toEqual([301, '/download/']);
+      expect((await get('/download?start&x=1')).headers.get('location')).toBe('/download/?start'); // 保留 start，其余参数不认
       for (const route of ['/', '/download/']) {
         const page = await get(route);
         expect(page.status).toBe(200);
