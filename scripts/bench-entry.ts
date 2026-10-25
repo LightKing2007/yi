@@ -242,7 +242,7 @@ async function requestTimes(base: string, pathName: string, count: number) {
   return times;
 }
 
-/** 下载页面与校验值的响应耗时（四个模拟安装程序）；HTTP 请求没有频率限制，这里量出单个请求占用服务端的时间 */
+/** 下载页面（/download/）与校验值的响应耗时（四个模拟安装程序）；HTTP 请求没有频率限制，这里量出单个请求占用服务端的时间 */
 async function benchHttp(count: number) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-bench-'));
   const server = http.createServer();
@@ -253,7 +253,7 @@ async function benchHttp(count: number) {
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     for (let i = 0; i < CHECKSUM_WAIT_TRIES && (await fetch(base + '/SHA256SUMS')).status !== HTTP_OK; i++)
       await new Promise(r => setTimeout(r, CHECKSUM_WAIT_MS));
-    const page = await requestTimes(base, '/', count);
+    const page = await requestTimes(base, '/download/', count);
     const sums = await requestTimes(base, '/SHA256SUMS', count);
     const total = page.reduce((sum, ms) => sum + ms, 0);
     return { page: stats(page), sums: stats(sums), pagesPerSec: Math.round((count / total) * MS_PER_SEC) };

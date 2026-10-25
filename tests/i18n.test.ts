@@ -30,9 +30,11 @@ const SKIPPED_FILES: Record<string, string> = {
   'server/backupCommand.ts': '备份命令的结果，只写入备份任务的日志',
   'server/config.ts': '配置校验失败时的期望格式与服务启动的说明，只写入服务端日志',
   'server/db/index.ts': '数据库无法打开或迁移失败的诊断信息，只写入服务端日志',
-  'server/page.ts': '下载页面只有中文，标点由 I18N-011 检查',
-  'server/pageStyle.ts': '下载页面的样式',
-  'server/files.ts': '下载页面的 HTTP 应答，只有中文',
+  'server/page.ts': '网站页面只有中文，标点由 I18N-011 检查',
+  'server/downloadPage.ts': '网站页面只有中文，标点由 I18N-011 检查',
+  'server/pageStyle.ts': '网站页面的样式',
+  'server/downloadStyle.ts': '网站页面的样式',
+  'server/files.ts': '网站页面的 HTTP 应答，只有中文',
 };
 
 /** 不翻译的文字：文件 → { 文字: 原因 }。清单中的每一项都须仍在源码中 */

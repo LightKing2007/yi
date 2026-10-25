@@ -1,9 +1,11 @@
 /**
  * 安装包下载：联机端口上的普通网页请求（不是 WebSocket 的）走这里，不用另开端口。路径白名单（API-060）：
- *   GET /             下载页面（page.ts）
+ *   GET /             下载页面（downloadPage.ts）；网站主页上线前与 /download/ 相同
+ *   GET /download/    下载页面（downloadPage.ts）；带 ?start 时推断确定的访客进入页面即开始下载。/download 重定向到 /download/
  *   GET /<文件名>     下载这个文件，支持断点续传；目录里只认 Yi-版本-平台 这样命名的文件，其他文件与子目录一概不给
  *   GET /SHA256SUMS   各安装程序的 SHA-256（SEC-070）
- *   GET /assets/<名>  下载页面的标题图、图标、备案图标与字体：名单见 ASSET_TYPES，内容在构建时嵌入，运行时不读取磁盘
+ *   GET /assets/<名>  页面的标题图、图标、备案图标与字体：名单见 ASSET_TYPES，内容在构建时嵌入，运行时不读取磁盘
+ * 主页与下载页面按请求头推断访客的操作系统（platform.ts），推荐对应的安装程序；页面不含脚本（API-063）。
  * 每个 IP（经反向代理时按真实地址，clientIp.ts）同时最多 2 个下载、全服最多 8 个，免得下载把带宽占满影响对局；下载速率持续过低的连接被断开（API-047）。
  */
 import { createHash } from 'node:crypto';
@@ -11,7 +13,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { clientIp } from './clientIp';
-import { PLATFORMS, downloadPage, type PagePkg } from './page';
+import { downloadPage } from './downloadPage';
+import { PLATFORMS, type PagePkg } from './page';
+import { CLIENT_HINT_HEADERS, detectPlatform } from './platform';
 
 const PER_IP = 2,
   TOTAL = 8;
@@ -35,11 +39,14 @@ const ASSET_TYPES: Record<string, string> = {
   'title-yi.png': 'image/png',
   'icon.png': 'image/png',
   'yi-serif-900.woff2': 'font/woff2',
+  'yi-serif-400.woff2': 'font/woff2',
   'icp.png': 'image/png',
 };
 
 /** 所有响应都带的头（API-063） */
 const BASE_HEADERS = { 'X-Content-Type-Options': 'nosniff' };
+/** 永久重定向的状态码 */
+const MOVED = 301;
 /** 超出 HTTP 请求频率时的状态码（04-api.md 第 4.1 条） */
 const TOO_MANY_REQUESTS = 429;
 
@@ -57,7 +64,11 @@ const HTML_HEADERS = {
   'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; font-src 'self'",
   'Referrer-Policy': 'no-referrer',
   'Cache-Control': 'no-cache',
+  ...CLIENT_HINT_HEADERS,
 };
+/** 页面的路径（不含开头的斜杠）：主页与下载页面 */
+const HOME = '',
+  DOWNLOAD = 'download/';
 
 interface Pkg {
   file: string;
@@ -173,14 +184,33 @@ function checksums(dir: string) {
   };
 }
 
-/** 下载页面与安装包的请求处理；dir 为安装包所在的目录，stall 为下载速率的下限（测试时可调小） */
+/**
+ * 生成主页与下载页面，并缓存：安装包列表未变、校验值都已算好时沿用上次生成的页面。页面随推断的操作系统与是否自动开始下载而不同，
+ * 按这几项分别缓存；各项的取值都有限（platform.ts），缓存不会无限增长。route 为 HOME 或 DOWNLOAD
+ */
+function pages(pkgs: ReturnType<typeof listing>, sums: ReturnType<typeof checksums>) {
+  let cache = { from: null as Pkg[] | null, bodies: new Map<string, string>() };
+  return (route: string, req: IncomingMessage, starting: boolean) => {
+    const current = pkgs.load();
+    if (cache.from !== current) cache = { from: null, bodies: new Map() };
+    const detected = detectPlatform(req.headers);
+    const key = `${route}|${detected.platform}|${detected.mobile}|${detected.sure}|${starting}`;
+    const cached = cache.bodies.get(key);
+    if (cached !== undefined) return cached;
+    const shown: PagePkg[] = current.map(p => ({ ...p, sha256: sums.get(p) }));
+    const body = downloadPage(shown, detected, __APP_VERSION__, starting);
+    if (shown.every(p => p.sha256)) cache = { from: current, bodies: cache.bodies.set(key, body) }; // 校验值未算完时不缓存，下次重新生成
+    return body;
+  };
+}
+
+/** 主页、下载页面与安装包的请求处理；dir 为安装包所在的目录，stall 为下载速率的下限（测试时可调小） */
 export function fileServer(dir: string, stall: StallLimit = STALL) {
   const perIp = new Map<string, number>();
   let total = 0;
   const sums = checksums(dir);
   const pkgs = listing(dir);
-  /** 下载页面的缓存：安装包列表未变、校验值都已算好时沿用上次生成的页面 */
-  let page = { from: null as Pkg[] | null, body: '' };
+  const render = pages(pkgs, sums);
   const notFound = (res: ServerResponse) => {
     res.writeHead(404, { ...BASE_HEADERS, 'Content-Type': 'text/plain; charset=utf-8' }).end('未找到所请求的文件。');
   };
@@ -190,23 +220,25 @@ export function fileServer(dir: string, stall: StallLimit = STALL) {
       res.writeHead(405, { ...BASE_HEADERS, Allow: 'GET, HEAD' }).end();
       return;
     }
-    let name: string;
+    let name: string, starting: boolean;
     try {
-      name = decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname.slice(1));
+      const url = new URL(req.url ?? '/', 'http://x');
+      name = decodeURIComponent(url.pathname.slice(1));
+      starting = url.searchParams.has('start');
     } catch {
       res.writeHead(400, BASE_HEADERS).end();
       return;
     }
     const head = req.method === 'HEAD';
 
-    if (name === '') {
-      const current = pkgs.load();
-      if (page.from !== current) {
-        const shown: PagePkg[] = current.map(p => ({ ...p, sha256: sums.get(p) }));
-        page = { from: shown.every(p => p.sha256) ? current : null, body: downloadPage(shown, __APP_VERSION__) };
-      }
-      const { body } = page;
+    if (name === HOME || name === DOWNLOAD) {
+      const body = render(name, req, name === DOWNLOAD && starting);
       res.writeHead(200, { ...HTML_HEADERS, 'Content-Length': Buffer.byteLength(body) }).end(head ? undefined : body);
+      return;
+    }
+    // 只保留页面认得的 start：主页的下载按钮若被写成 /download?start，重定向之后仍自动开始下载
+    if (`${name}/` === DOWNLOAD) {
+      res.writeHead(MOVED, { ...BASE_HEADERS, Location: `/${DOWNLOAD}${starting ? '?start' : ''}` }).end();
       return;
     }
 

@@ -17,7 +17,7 @@ Environment=NODE_ENV=production
 # 只接受本机 Caddy 转来的连接，8443 不对外开放（SEC-011）；客户端经 wss://yi.lightking.com.cn/ws 连接
 Environment=HOST=127.0.0.1
 Environment=YI_FILES=/opt/yi/current/download
-Environment=YI_DOWNLOAD=https://yi.lightking.com.cn/
+Environment=YI_DOWNLOAD=https://yi.lightking.com.cn/download/
 Restart=always
 RestartSec=3
 # 存档损坏（65）、无法读取（74）、配置不合法（78，ARC-042）时反复重启无济于事，停下等维护者处理
