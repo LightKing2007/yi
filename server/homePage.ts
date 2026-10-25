@@ -4,30 +4,30 @@
  */
 import { homeStyle } from './homeStyle';
 import { board } from './board';
-import { BURST, LATTICE, ORBITS, RINGS, SHAPES, stream } from './geometry';
+import { BURST, LATTICE, RINGS, SHAPES, stream } from './geometry';
 import { featureRing } from './ring';
-import { ARROW, PLATFORMS, esc, megabytes, shell, type PagePkg } from './page';
+import { ARROW, PLATFORMS, esc, megabytes, recommended, shell, type PagePkg } from './page';
 import type { Detected } from './platform';
 
 /** 下载页面的地址；带 start 时进入页面即开始下载推荐的安装程序 */
 const DOWNLOAD = '/download/';
 const DOWNLOAD_START = '/download/?start';
 
-/** 首屏棋盘（19 路）上依次落下的棋子 */
-const HERO_MOVES = 'pd nc pf jd jj hf lc gi kg';
+/** 首屏棋盘（19 路）上依次落下的棋子：前八手在载入时落下，其余随页面滚动一手一手落下（见 geometry.ts） */
+const HERO_MOVES = 'pd dd pp dp fq cn qf nc jj dj pj jd jp fd qc kc lq cf qn nq oc pb ed ec hq gp mp np ql rk';
 const STARS_19 = 'dd jd pd dj jj pj dp jp pp';
 
 /** 首屏的下载入口：推荐的平台、版本与大小；手机访客与无法推断时改为前往下载页面 */
 function heroAction(pkgs: PagePkg[], detected: Detected) {
-  const pkg = pkgs.find(p => p.platform === detected.platform);
+  const pkg = recommended(pkgs, detected);
   if (!pkg) {
     const note = detected.mobile ? '“弈”为桌面游戏，请在计算机上下载' : '提供 Windows、macOS 及 Linux 版本';
-    return `<a class="btn primary" href="${DOWNLOAD}">${ARROW}<span>前往下载</span></a><span class="hint">${note}</span>`;
+    return `<a class="btn" href="${DOWNLOAD}">${ARROW}<span>前往下载</span></a><span class="hint">${note}</span>`;
   }
   const info = PLATFORMS[pkg.platform];
   if (!info) return '';
   return (
-    `<a class="btn primary" href="${DOWNLOAD_START}">${ARROW}<span>下载 ${esc(info.short)}</span></a>` +
+    `<a class="btn" href="${DOWNLOAD_START}">${ARROW}<span>下载 ${esc(info.short)}</span></a>` +
     `<span class="hint">版本 ${esc(pkg.version)} · ${esc(info.tag)} · ${megabytes(pkg.size)}<a href="${DOWNLOAD}#all">其他版本</a></span>`
   );
 }
@@ -35,14 +35,13 @@ function heroAction(pkgs: PagePkg[], detected: Detected) {
 /** 首屏的棋盘：19 路，可预览落子 */
 const HERO_BOARD = board({ size: 19, stars: STARS_19, moves: HERO_MOVES, cls: 'wood', ghost: true });
 
-/** 首屏只留标题、标语与下载入口；游戏的介绍在“两种棋”一节 */
+/** 首屏只留标题、标语与下载入口（左），棋盘在右；游戏的介绍在“两种棋”一节 */
 function hero(pkgs: PagePkg[], detected: Detected) {
   return `<section class="hero ink" id="top">
-<div class="hero-floor" aria-hidden="true"><div class="hero-shadow"></div>${HERO_BOARD}</div>
-<div class="hero-in">
-<h1 class="hero-title">${ORBITS}<span class="mark" role="img" aria-label="弈"></span><span class="seal">棋</span></h1>
-<div class="hero-copy">
-<div class="motto">以木为枰<br>以石为子</div>
+<div class="hero-floor" aria-hidden="true">${HERO_BOARD}</div>
+<div class="hero-in"><div class="hero-left">
+<div class="hero-mark"><h1 class="hero-title"><span class="mark" role="img" aria-label="弈"></span><span class="seal">棋</span></h1>
+<div class="motto">以木为枰<br>以石为子</div></div>
 <div class="cta">${heroAction(pkgs, detected)}</div>
 </div></div>
 <a class="cue" href="#games"><span>向下</span><i></i></a>
