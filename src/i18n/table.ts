@@ -1,5 +1,6 @@
 /** 界面文字的译文表：[中文原文（也是查表的键）, 文言, English]。新增界面文字时在这里补一行 */
 export const TABLE: [string, string, string][] = [
+  ["新增官方网站主页，介绍游戏的玩法、对局方式、功能与语言。", "新设官方网站之主页，述戏之玩法、对局之式、诸般功用与言语。", "Added an official website home page that introduces the rules, game modes, features and languages of the game."],
   ["改进官方下载页面：页面按访客的操作系统推荐对应的安装程序，点击即可下载，并列出全部版本、安装说明及校验值。", "下载之页更善：依访者之系统荐其安装程序，点之即取，并列诸版本、安装之法及校验值。", "Improved the official download page: it recommends the installer for the visitor’s operating system, which downloads with a single click, and lists all versions, installation instructions and checksums."],
   ["调整联机段位的保存方式：段位改由服务器的数据库保存，每局联机对局均留有记录；本版本起段位重新计算，此前的段位不再保留。", "会友段位之存法改易：段位改由枢纽之数据库存之，每局会友之局皆留其录；自此版起段位重计，前之段位不复存。", "Changed how online ranks are stored: ranks are now kept in the server's database, and every online game is recorded; ranks are recalculated from this version onwards, and earlier ranks are not kept."],
   ["改进联机数据的安全性：服务器每小时备份一次段位与对局记录，并在异地另存一份加密副本。", "会友之数据更安：枢纽每时备段位与对局之录一次，并另存加密之副本于异地。", "Improved the safety of online data: the server backs up ranks and game records every hour and keeps an encrypted copy at another site."],

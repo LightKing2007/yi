@@ -141,7 +141,7 @@ npm run dist:win     # release/Yi-<版本>-win-x64-setup.exe（宜在 Windows �
 npm run dist:linux   # release/Yi-<版本>-linux-x86_64.AppImage（宜在 Linux 上打包）
 ```
 
-正式发行不在本机打包，而是按 [开发与发布规程](docs/procedures/release.md) 由 GitHub Actions 自动完成。面向玩家的下载地址统一为下载页面 <https://yi.lightking.com.cn/download/>；本仓库公开，GitHub Release 中的附件与下载页面上的安装程序相同。
+正式发行不在本机打包，而是按 [开发与发布规程](docs/procedures/release.md) 由 GitHub Actions 自动完成。面向玩家的下载地址统一为下载页面 <https://yi.lightking.com.cn/download/>，网站主页为 <https://yi.lightking.com.cn/>；本仓库公开，GitHub Release 中的附件与下载页面上的安装程序相同。
 
 ### 4.2 版本号
 
@@ -208,7 +208,7 @@ node dist-server/server.cjs --version
 | `YI_LATEST` | 最新客户端版本号，例如 `2.0.2`；客户端版本较旧时，开始菜单及联机对战页面提示有新版本 |
 | `YI_DOWNLOAD` | 新版本的下载地址（`http://` 或 `https://`），提示可点击打开 |
 | `YI_LOG_LEVEL` | 日志级别：`error`、`warn`、`info`（默认）、`debug`（OPS-062） |
-| `YI_FILES` | 安装程序所在目录。设置后，服务端在同一端口提供下载页面 `http://地址:端口/download/`（网站主页上线前，`/` 与之相同）。页面按请求头推断访客的操作系统并推荐对应的安装程序（`server/platform.ts`），带 `?start` 时进入即开始下载；页面列出各平台最新的 `Yi-版本-平台` 安装程序及其 SHA-256 校验值（另有 `/SHA256SUMS`），支持断点续传；每个 IP 同时最多 2 个下载，全服最多 8 个。页面所用的标题图、图标与字体在构建时嵌入服务端（`scripts/page-assets.mjs`），页面不含脚本 |
+| `YI_FILES` | 安装程序所在目录。设置后，服务端在同一端口提供网站：主页 `http://地址:端口/` 与下载页面 `/download/`。两个页面按请求头推断访客的操作系统并推荐对应的安装程序（`server/platform.ts`），下载页面带 `?start` 时进入即开始下载；下载页面列出各平台最新的 `Yi-版本-平台` 安装程序及其 SHA-256 校验值（另有 `/SHA256SUMS`），支持断点续传；每个 IP 同时最多 2 个下载，全服最多 8 个。页面所用的标题图、图标与字体在构建时嵌入服务端（`scripts/page-assets.mjs`），页面不含脚本 |
 
 以上变量与命令行参数由 `server/config.ts` 集中解析并校验（ARC-042）：端口须为 1 至 65535 的整数，`HOST` 须为 IP 地址或主机名，`YI_LATEST` 须为“主版本.次版本.修订号”，`YI_DOWNLOAD` 须为 `http://` 或 `https://` 网址；任一项不合法时，服务端为每一项写一行 `server.config-invalid` 日志（变量名与期望的格式）并以退出码 78 退出。空值与未设置相同。
 
@@ -301,12 +301,12 @@ src/
   ui/                 Preact 界面：panels（菜单、对局、设置、更多）、online（联机对战）、widgets、styles.css、info（“更多”页面的文字）
   i18n/               多语言
 server/               rooms.ts 队列、配对、房间、对局与段位（与传输无关）；ratelimit.ts 限流与违规累计；db/ 数据库（打开与迁移、仓储、段位与对局记录、备份）；backupCommand.ts 备份命令（node server.cjs backup）；record.ts 对局记录与每手用时；serve.ts 服务端的运行（启动、关闭、信号）；main.ts 入口（读取配置后调用 serve.ts）；host.ts 接入 WebSocket（可同时监听多个端口）；
-                      files.ts 同一端口上的网站与下载服务（downloadPage.ts 下载页面，page.ts 外壳与 pageStyle.ts 样式；platform.ts 推断访客的操作系统）；main.ts 入口
+                      files.ts 同一端口上的网站与下载服务（homePage.ts 主页、downloadPage.ts 下载页面，共用 page.ts 外壳与 pageStyle.ts 样式；board.ts 主页上的棋盘；geometry.ts 主页的背景几何；ring.ts 主页随滚动转动的功能环；platform.ts 推断访客的操作系统）；main.ts 入口
 electron/             桌面版主进程（窗口、单实例、匹配成功时的任务栏提醒、错误日志）及预加载脚本
 tests/                vitest：rules（规则与人机）、record（规则层与棋谱）、session（会话与座位）、protocol（消息校验与昵称清洗）、server（联机服务端）、ratelimit（限流）、
                       db、dbRepo、dbStartup 与 dbBackup（数据库：打开与迁移、仓储与段位、启动、备份）、client（联机客户端：断线、重连、服务器重启、非法消息）、lobby（联机大厅：匹配、排位、好友房间）、
                       onlineGame（联机对局中的请求、点目与回放）、reconnect 与 retry（断线重连的退避与关闭码）、storage（本地存储与设置）、updateNote（新版本提示的本地记录）、
-                      fakeNet（联机客户端测试用的假网络与浏览器环境）、layers 与 importGraph（分层与第三方包检查，以语法树找出四种引用形式）、text（标点与更新日志）、site（网站：推断访客的操作系统、下载页面）、i18n 与 uiText（译文齐全、英文的写法、以语法树扫描界面文字）、
+                      fakeNet（联机客户端测试用的假网络与浏览器环境）、layers 与 importGraph（分层与第三方包检查，以语法树找出四种引用形式）、text（标点与更新日志）、site（网站：推断访客的操作系统、主页与下载页面）、i18n 与 uiText（译文齐全、英文的写法、以语法树扫描界面文字）、
                       ratchet（违规棘轮）、coverage（改动行覆盖率）、deps（许可证、依赖漏洞门禁、工作流的 Action 固定）
 scripts/              build-node（打包主进程与服务端）、make-fonts（生成内置字体子集）、page-assets（网站页面的图片与字体）、changelog（读取更新日志、生成发布说明）、
                       release（发版）、deploy.sh（上线）、shots.cjs 与 compare-shots.mjs（场景截图与逐像素对比）、smoke-app（安装后的冒烟检查）、

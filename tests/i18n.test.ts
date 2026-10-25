@@ -31,8 +31,12 @@ const SKIPPED_FILES: Record<string, string> = {
   'server/config.ts': '配置校验失败时的期望格式与服务启动的说明，只写入服务端日志',
   'server/db/index.ts': '数据库无法打开或迁移失败的诊断信息，只写入服务端日志',
   'server/page.ts': '网站页面只有中文，标点由 I18N-011 检查',
+  'server/homePage.ts': '网站页面只有中文，标点由 I18N-011 检查',
   'server/downloadPage.ts': '网站页面只有中文，标点由 I18N-011 检查',
   'server/pageStyle.ts': '网站页面的样式',
+  'server/homeStyle.ts': '网站页面的样式',
+  'server/geometry.ts': '网站页面的样式',
+  'server/ring.ts': '网站页面只有中文，标点由 I18N-011 检查',
   'server/downloadStyle.ts': '网站页面的样式',
   'server/files.ts': '网站页面的 HTTP 应答，只有中文',
 };

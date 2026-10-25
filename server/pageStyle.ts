@@ -157,7 +157,11 @@ const motion = `
   55% { opacity: 1; transform: translate(-50%, -50%) scale(0.95); filter: none; }
   100% { opacity: 1; transform: translate(-50%, -50%); }
 }
-@keyframes circle-in { from { clip-path: circle(3vmax at 50% 0); } to { clip-path: circle(150% at 50% 0); } }
+/* 区块以一枚圆形自下升起：圆心在区块顶边之下、与顶边相切，看到的始终是完整的圆弧而不是被顶边截平的半圆；
+   进入完成时再扩到整个区块，较高的区块下部也不被裁去 */
+@keyframes circle-in {
+  from { clip-path: circle(0 at 50% 0); } 60% { clip-path: circle(70vmax at 50% 70vmax); } to { clip-path: circle(150% at 50% 0); }
+}
 @supports (animation-timeline: view()) {
   .rv { animation: rise linear both; animation-timeline: view(); animation-range: entry 5% entry 75%; }
 }

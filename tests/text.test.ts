@@ -1,12 +1,13 @@
 /**
  * 面向玩家的文字：标点合乎 GB/T 15834，更新日志的版本号与 package.json 对得上（实现 I18N-060、I18N-061、I18N-064、I18N-070，
  * 见 docs/standards/09-text-and-i18n.md；译文是否齐全与英文的写法由 i18n.test.ts 检查）。
- * 标点的检查范围按 I18N-011：“更多”页面、译文表中的全部中文原文与文言译文（含禁着提示与服务端下发的提示）、安装程序文字、下载页面文字。
+ * 标点的检查范围按 I18N-011：“更多”页面、译文表中的全部中文原文与文言译文（含禁着提示与服务端下发的提示）、安装程序文字、主页与下载页面文字。
  * 错误码表随整改项 P2-03 建立，届时其原文同样是译文表的键，由译文表的检查覆盖。
  */
 import fs from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { downloadPage } from '../server/downloadPage';
+import { homePage } from '../server/homePage';
 import { PLATFORMS, type PagePkg } from '../server/page';
 import type { Detected } from '../server/platform';
 import { TABLE } from '../src/i18n/table';
@@ -99,7 +100,7 @@ describe('标点的检查范围（I18N-011）', () => {
     expect([...paragraphs.flatMap(paragraphIssues), ...labels.flatMap(punctuationIssues)]).toEqual([]);
   });
 
-  it('下载页面的文字（有无安装程序、各种访客系统、是否自动开始下载）：段落以句号结尾', () => {
+  it('主页与下载页面的文字（有无安装程序、各种访客系统、是否自动开始下载）：段落以句号结尾', () => {
     const pkgs: PagePkg[] = Object.keys(PLATFORMS).map((platform, i) => ({
       file: `Yi-${platform}`,
       version: '2.0.4',
@@ -113,10 +114,12 @@ describe('标点的检查范围（I18N-011）', () => {
       { platform: null, mobile: true, sure: true },
       { platform: null, mobile: false, sure: false },
     ];
-    const pages = visitors.flatMap(who => [pkgs, []].flatMap(list => [downloadPage(list, who, 'v'), downloadPage(list, who, 'v', true)]));
+    const pages = visitors.flatMap(who =>
+      [pkgs, []].flatMap(list => [homePage(list, who, 'v'), downloadPage(list, who, 'v'), downloadPage(list, who, 'v', true)]),
+    );
     for (const html of pages) {
       const { paragraphs, others } = pageTexts(html);
-      expect(paragraphs.length).toBeGreaterThanOrEqual(15);
+      expect(paragraphs.length).toBeGreaterThanOrEqual(10); // 切分到段落的下限，防止页面结构变化后检查落空
       expect(others.some(text => text.includes('提供 Windows、macOS'))).toBe(true); // 页面描述等属性中的文字
       expect([...paragraphs.flatMap(paragraphIssues), ...others.flatMap(punctuationIssues)]).toEqual([]);
     }
