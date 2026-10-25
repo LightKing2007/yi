@@ -236,8 +236,9 @@ export function fileServer(dir: string, stall: StallLimit = STALL) {
       res.writeHead(200, { ...HTML_HEADERS, 'Content-Length': Buffer.byteLength(body) }).end(head ? undefined : body);
       return;
     }
+    // 只保留页面认得的 start：主页的下载按钮若被写成 /download?start，重定向之后仍自动开始下载
     if (`${name}/` === DOWNLOAD) {
-      res.writeHead(MOVED, { ...BASE_HEADERS, Location: `/${DOWNLOAD}` }).end();
+      res.writeHead(MOVED, { ...BASE_HEADERS, Location: `/${DOWNLOAD}${starting ? '?start' : ''}` }).end();
       return;
     }
 
