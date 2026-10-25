@@ -1,8 +1,9 @@
 /**
- * 网站页面（主页 homePage.ts、下载页面 downloadPage.ts）共用的部分：安装程序与平台的描述、文档外壳、顶栏、页脚、棋盘与棋子。
+ * 网站页面（主页 homePage.ts、下载页面 downloadPage.ts）共用的部分：安装程序与平台的描述、推荐的安装程序、文档外壳、顶栏与页脚。
  * 页面不含任何脚本（API-063）：交互与动画全部以 CSS 实现，访客的操作系统由服务端按请求头推断（platform.ts）。
  */
 import { siteStyle } from './pageStyle';
+import type { Detected } from './platform';
 
 /** 页面上的一个安装程序；sha256 为 null 表示校验值尚在计算 */
 export interface PagePkg {
@@ -42,6 +43,8 @@ export const esc = (text: string) => text.replace(/[&<>"]/g, ch => `&#${ch.charC
 export const megabytes = (bytes: number) => `${(bytes / BYTES_PER_MB).toFixed(0)} MB`;
 /** 安装程序的下载地址 */
 export const fileUrl = (p: PagePkg) => `/${encodeURIComponent(p.file)}`;
+/** 推荐给访客的安装程序：与推断的操作系统对应；手机与无法推断时没有（此时 platform 为 null） */
+export const recommended = (pkgs: PagePkg[], detected: Detected) => pkgs.find(p => p.platform === detected.platform);
 /** 各安装程序中最新的版本号 */
 export const latestVersion = (pkgs: PagePkg[]) => pkgs.map(p => p.version).sort((older, newer) => newer.localeCompare(older, 'en', { numeric: true }))[0];
 
@@ -82,7 +85,7 @@ export function shell(spec: ShellSpec) {
 <style>${siteStyle(version)}${spec.style}</style></head>
 <body>
 <a class="skip" href="#main">跳至正文</a>
-<header class="bar"><a class="logo" href="/" aria-label="弈 主页"><span class="glyph"></span><span class="seal">棋</span></a>
+<header class="bar"><a class="logo" href="/" aria-label="弈 主页"><span class="glyph"></span></a>
 <nav aria-label="页面导航">${nav}</nav><a class="pill" href="${spec.action[0]}">${spec.action[1]}</a></header>
 <main id="main">${spec.body}</main>
 <footer class="foot"><div class="foot-in">

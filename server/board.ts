@@ -1,6 +1,6 @@
 /**
- * 主页上的棋盘：网格与星位、依次落下的棋子、连线与禁手标记、可预览落子的交叉点。坐标按棋谱的写法表示，
- * 样式见本文件的 boardStyle，随滚动落子的动画见 homeStyle.ts；页面不含脚本（API-063）。
+ * 主页上的棋盘：榧木盘面、网格与星位、依次落下的棋子、连线与禁手标记、可预览落子的交叉点。坐标按棋谱的写法表示，
+ * 样式见本文件的 boardStyle，随滚动落子的动画见 homeStyle.ts 与 geometry.ts；页面不含脚本（API-063）。
  */
 
 /** 坐标按棋谱的写法以两个小写字母表示（a 为第 1 路），如 dd 为左上的星位 */
@@ -72,7 +72,10 @@ function ghostCells(size: number, moves: string[]) {
   return `<div class="cells" aria-hidden="true">${cells}</div>`;
 }
 
-/** 棋盘的样式：网格、星位、连线与禁手标记、可预览落子的交叉点；棋子的样式见 pageStyle.ts */
+/**
+ * 棋盘的样式：榧木纹理、网格、星位、棋子、连线与禁手标记、可预览落子的交叉点，以及棋子落下的动画。
+ * 黑子仿云子：窗形的柔光高光、背光一侧透出墨绿；白子仿贝壳：温润的底色、细纹与边缘透光。投影分两层：贴盘的接触阴影与柔和的投影
+ */
 export const boardStyle = `
 .board { position: relative; aspect-ratio: 1; border-radius: 4px; --pad: 5cqi; container-type: inline-size; }
 .grid { position: absolute; inset: var(--pad); }
@@ -87,8 +90,35 @@ export const boardStyle = `
 .cells i { position: relative; }
 .cells i.o { pointer-events: none; }
 .cells i::after { content: ""; position: absolute; inset: 3%; border-radius: 50%; opacity: 0; transform: scale(0.5);
-  background: radial-gradient(circle at 34% 30%, #6a6a6a 0, #1a1a1a 55%, #000 100%);
+  background: var(--stone-b);
   transition: opacity 0.3s var(--ease), transform 0.45s cubic-bezier(0.3, 1.6, 0.5, 1); }
 .cells i:hover::after { opacity: 0.55; transform: scale(1); }
 .cells i:active::after { opacity: 0.9; transform: scale(0.94); }
+.wood { background:
+    radial-gradient(120% 80% at 22% 10%, rgb(255 240 205 / 0.35), transparent 55%),
+    repeating-linear-gradient(91deg, rgb(110 62 18 / 0.08) 0 1px, transparent 1px 7px),
+    repeating-linear-gradient(89.4deg, rgb(110 62 18 / 0.06) 0 2px, transparent 2px 19px),
+    repeating-linear-gradient(90.7deg, rgb(255 236 200 / 0.09) 0 3px, transparent 3px 29px),
+    linear-gradient(170deg, #ecd09a, #ddb673 55%, #c99a52);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.4), inset 0 -2px 0 rgb(0 0 0 / 0.08); }
+.st { position: absolute; width: calc(100% / (var(--n) - 1) * 0.94); aspect-ratio: 1; border-radius: 50%; transform: translate(-50%, -50%);
+  font-size: calc((100cqi - 2 * var(--pad)) / (var(--n) - 1)); }
+.st.b { background:
+    radial-gradient(ellipse 30% 20% at 36% 27%, rgb(255 255 255 / 0.5), rgb(255 255 255 / 0.08) 65%, transparent 100%),
+    radial-gradient(circle at 72% 82%, rgb(70 110 95 / 0.38), transparent 42%),
+    radial-gradient(circle at 42% 36%, #3c3c3b 0, #181817 42%, #070707 78%, #000 100%);
+  box-shadow: 0 0.05em 0.05em rgb(0 0 0 / 0.55), 0.1em 0.2em 0.3em rgb(0 0 0 / 0.38), inset 0 -0.05em 0.1em rgb(0 0 0 / 0.6); }
+.st.w { background:
+    radial-gradient(ellipse 34% 24% at 36% 28%, rgb(255 255 255 / 0.95), transparent 70%),
+    repeating-radial-gradient(circle at 50% 135%, rgb(150 130 100 / 0.07) 0 2.5%, transparent 2.5% 5%),
+    radial-gradient(circle at 70% 84%, rgb(190 205 215 / 0.45), transparent 45%),
+    radial-gradient(circle at 42% 38%, #fdfbf6 0, #efe9de 50%, #d6cdbd 88%, #c2b7a4 100%);
+  box-shadow: 0 0.05em 0.05em rgb(50 30 5 / 0.45), 0.1em 0.2em 0.3em rgb(60 40 10 / 0.3), inset 0 -0.05em 0.12em rgb(120 100 70 / 0.35); }
+.st.last::before { content: ""; position: absolute; left: 50%; top: 50%; width: 24%; height: 24%; border-radius: 50%; transform: translate(-50%, -50%);
+  background: var(--seal); z-index: 1; }
+@keyframes drop {
+  0% { opacity: 0; transform: translate(-50%, -50%) translateY(-30%) scale(1.35); filter: blur(2px); }
+  55% { opacity: 1; transform: translate(-50%, -50%) scale(0.95); filter: none; }
+  100% { opacity: 1; transform: translate(-50%, -50%); }
+}
 `;

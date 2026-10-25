@@ -70,12 +70,13 @@ export const ringStyle = `
     linear-gradient(170deg, #e6c88f, #d2a865 60%, #b98a47); }
 .card-shape i { position: relative; display: grid; place-items: center; }
 .card-shape i.b::after, .card-shape i.w::after { content: ""; width: 78%; aspect-ratio: 1; border-radius: 50%; }
-.card-shape i.b::after { background: radial-gradient(circle at 34% 30%, #6a6a6a 0, #1d1d1d 50%, #000 100%); box-shadow: 1px 3px 4px rgb(0 0 0 / 0.45); }
-.card-shape i.w::after { background: radial-gradient(circle at 35% 30%, #fff 0, #eee8dc 55%, #cbc1af 100%); box-shadow: 1px 3px 4px rgb(60 40 10 / 0.4); }
+.card-shape i.b::after { background: var(--stone-b); box-shadow: 1px 3px 4px rgb(0 0 0 / 0.45); }
+.card-shape i.w::after { background: var(--stone-w); box-shadow: 1px 3px 4px rgb(60 40 10 / 0.4); }
 .card-shape i.x::after { content: "×"; color: var(--seal); font: 700 22px/1 var(--sans); }
 .card-no { display: block; font: 11px/1 var(--mono); letter-spacing: 0.12em; color: var(--faint); }
 .card h3 { margin-top: 10px; font-size: 20px; }
-.card-note { display: block; margin-top: 6px; font-size: 13px; line-height: 1.6; color: var(--dim); }
+/* 说明一律预留两行的高度，说明长短不一时卡片仍等高 */
+.card-note { display: block; min-height: 3.2em; margin-top: 6px; font-size: 13px; line-height: 1.6; color: var(--dim); }
 @keyframes ring-spin { to { transform: rotateX(-12deg) rotateY(-360deg); } }
 
 /* 随滚动转动：区块固定在屏幕上，滚过区块的距离换成圆环转过的角度 */
@@ -102,6 +103,6 @@ export const ringStyle = `
   .ring-stage { perspective: 1700px; }
   .card { padding: 12px 12px 14px; }
   .card h3 { font-size: 17px; }
-  .card-note { font-size: 12px; }
+  .card-note { font-size: 12px; min-height: 4.8em; }
 }
 `;

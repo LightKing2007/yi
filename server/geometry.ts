@@ -1,5 +1,5 @@
 /**
- * 主页的背景几何：首屏“弈”字周围的轨道与天元十字、黑白棋子排成的二进制流（随滚动横移）、随滚动旋转的圆与方、
+ * 主页的背景几何：黑白棋子排成的二进制流（随滚动横移）、随滚动旋转的圆与方、
  * 对局方式背后的同心圆、语言一节的交叉点阵、终章的放射线与涟漪。全部是细线与小圆，只动 transform 与 opacity；
  * 随滚动推进的效果只在支持 animation-timeline 的浏览器中启用，其余浏览器以缓慢的定时动画或静止的图形代替。
  */
@@ -31,11 +31,6 @@ export function stream() {
   return `<div class="stream" aria-hidden="true">${streamRow(BITS, false)}${streamRow(shifted, true)}</div>`;
 }
 
-/** 首屏“弈”字周围的轨道：实线、虚线与带一枚棋子的轨道，以及穿过字心的天元十字 */
-export const ORBITS =
-  '<div class="orbits" aria-hidden="true"><i class="orbit o1"></i><i class="orbit o2"></i><i class="orbit o3"><b></b></i>' +
-  '<i class="axis ax"></i><i class="axis ay"></i></div>';
-
 /** “两种棋”一节背后的圆与方：随滚动升降、旋转 */
 export const SHAPES = '<div class="shapes" aria-hidden="true"><i class="sh-circle"><b></b></i><i class="sh-square"></i><i class="sh-diag"></i></div>';
 
@@ -63,30 +58,10 @@ export const geometryStyle = `
 .shell .stream .b { fill: #141210; stroke: none; }
 .shell .stream .w { fill: transparent; stroke: rgb(20 18 16 / 0.35); }
 @keyframes stream-slide { to { transform: translateX(-50%); } }
-.ringsec > .stream, .tongues > .stream { max-width: none; margin-left: calc(-1 * var(--gut)); margin-right: calc(-1 * var(--gut)); }
-.ringsec > .stream { margin: clamp(40px, 6vh, 72px) 0 0; }
-.tongues > .stream { margin-top: clamp(80px, 12vh, 140px); }
-.games > .shapes, .tongues > .tongues-bg { position: absolute; max-width: none; margin: 0; }
-
-/* 首屏的轨道与天元十字 */
-.orbits { position: absolute; left: 50%; top: 50%; width: 0; height: 0; z-index: -1; pointer-events: none; }
-.orbit { position: absolute; left: 0; top: 0; border-radius: 50%; transform: translate(-50%, -50%); border: 1px solid rgb(236 231 221 / 0.16); }
-.orbits .o1 { width: clamp(300px, 64vh, 680px); aspect-ratio: 1; }
-.orbits .o2 { width: clamp(420px, 88vh, 940px); aspect-ratio: 1; border-style: dashed; border-color: rgb(236 231 221 / 0.2); }
-.orbits .o3 { width: clamp(560px, 116vh, 1240px); aspect-ratio: 1; border-color: rgb(214 169 100 / 0.3); }
-.o3 b { position: absolute; left: 50%; top: -7px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #fff, #d8d0c1 80%); box-shadow: 0 0 18px rgb(255 240 210 / 0.35); }
-.axis { position: absolute; left: 0; top: 0; background: rgb(236 231 221 / 0.12); }
-.ax { width: 200vw; height: 1px; transform: translate(-50%, 0); animation: draw-x 2.2s var(--ease-io) 0.4s both; }
-.ay { width: 1px; height: 200vh; transform: translate(0, -50%); animation: draw-y 2.2s var(--ease-io) 0.6s both; }
-.orbits .o1 { animation: orbit-in 1.6s var(--ease) 0.2s both; }
-.orbits .o2 { animation: orbit-in 1.8s var(--ease) 0.4s both, spin 140s linear infinite; }
-.orbits .o3 { animation: orbit-in 2s var(--ease) 0.6s both, spin-rev 70s linear infinite; }
-@keyframes spin { from { transform: translate(-50%, -50%) rotate(0); } to { transform: translate(-50%, -50%) rotate(360deg); } }
-@keyframes spin-rev { from { transform: translate(-50%, -50%) rotate(360deg); } to { transform: translate(-50%, -50%) rotate(0); } }
-@keyframes orbit-in { from { opacity: 0; scale: 0.6; } to { opacity: 1; scale: 1; } }
-@keyframes draw-x { from { transform: translate(-50%, 0) scaleX(0); } to { transform: translate(-50%, 0) scaleX(1); } }
-@keyframes draw-y { from { transform: translate(0, -50%) scaleY(0); } to { transform: translate(0, -50%) scaleY(1); } }
+.ringsec > .stream { margin-top: clamp(40px, 6vh, 72px); }
+/* 语言一节有左右留白，二进制流以负边距伸到屏幕两侧 */
+.tongues > .stream { max-width: none; margin: clamp(80px, 12vh, 140px) calc(-1 * var(--gut)) 0; }
+.games > .shapes, .tongues > .tongues-bg { max-width: none; margin: 0; }
 
 /* “两种棋”背后的圆与方 */
 .games { position: relative; }
@@ -135,17 +110,18 @@ export const geometryStyle = `
 /*
  * 随滚动推进：各层以不同的速度与方向移动，形成视差。容器一律用 overflow: clip 而不用 hidden：hidden 使容器成为滚动容器，
  * 其中以 view() 计算的进度改以该容器为准，不再随页面滚动。只改 translate、rotate、scale 这几个独立属性，与元素原有的 transform 叠加而不互相覆盖。
- * 首屏：“弈”字慢、标语与按钮快、棋盘反向下沉；两种棋：两块棋盘一升一降并随之转动，圆与方升降旋转；
+ * 首屏：文字上移并淡出、棋盘上移，其余的棋子一手一手落下；两种棋：两块棋盘一升一降并随之转动，圆与方升降旋转；
  * 语言：点阵显现；终章：“入局”放大、放射线随滚动转动
  */
 @supports (animation-timeline: view()) {
 @media (prefers-reduced-motion: no-preference) {
   .stream-track { animation: stream-scroll linear both; animation-timeline: view(); animation-range: cover; }
   .stream-row.rev .stream-track { animation-direction: reverse; }
-  .hero-title { animation: px-title linear both; animation-timeline: scroll(); animation-range: 0 100vh; }
-  .hero-copy { animation: px-copy linear both; animation-timeline: scroll(); animation-range: 0 100vh; }
+  .hero-left { animation: px-hero linear both; animation-timeline: scroll(); animation-range: 0 100vh; }
   .hero-floor { animation: px-floor linear both; animation-timeline: scroll(); animation-range: 0 100vh; }
-  .orbits { animation: orbits-out linear both; animation-timeline: scroll(); animation-range: 0 100vh; }
+  /* 首屏棋盘随滚动略快于页面上升；前八手在载入时落下，此后每向下滚动 2.4% 屏高落下一手，往回滚则依次提起，棋盘离开屏幕前落完 */
+  .hero-floor .st:nth-of-type(n + 9) { animation: drop linear both; animation-timeline: scroll();
+    animation-range: calc((var(--i) - 8) * 2.4vh) calc((var(--i) - 8) * 2.4vh + 4vh); }
   .game-art { animation: px-art linear both; animation-timeline: view(); animation-range: cover; }
   .game + .game .game-art { animation-direction: reverse; }
   .game-num b { animation: px-num linear both; animation-timeline: view(); animation-range: cover; }
@@ -157,10 +133,8 @@ export const geometryStyle = `
   .burst::before { animation: burst-turn linear both; animation-timeline: view(); animation-range: cover; }
   /* 横移的距离约与滚动的距离相当，太快则看不清棋子 */
   @keyframes stream-scroll { to { transform: translateX(-20%); } }
-  @keyframes px-title { to { translate: 0 -14vh; } }
-  @keyframes px-copy { to { translate: 0 -36vh; opacity: 0; } }
-  @keyframes px-floor { to { translate: 0 22vh; scale: 1.2; } }
-  @keyframes orbits-out { to { scale: 1.7; opacity: 0; } }
+  @keyframes px-hero { to { translate: 0 -20vh; opacity: 0.1; } }
+  @keyframes px-floor { to { translate: 0 -10vh; } }
   @keyframes px-art { from { translate: 0 110px; rotate: -6deg; } to { translate: 0 -110px; rotate: 5deg; } }
   @keyframes px-num { from { translate: 0 80px; } to { translate: 0 -60px; } }
   @keyframes sh-circle { from { translate: 0 30vh; rotate: 0deg; } to { translate: 0 -30vh; rotate: 320deg; } }
@@ -180,7 +154,7 @@ export const geometryStyle = `
   .game-art, .game-num b { animation: none; }
 }
 @media (max-width: 960px) {
-  .orbits .o3, .sh-diag { display: none; }
+  .sh-diag { display: none; }
   .rings { right: -50vmin; }
 }
 `;

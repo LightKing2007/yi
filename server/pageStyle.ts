@@ -1,6 +1,6 @@
 /**
- * 网站页面共用的样式（数据文件）：色彩与字体、黑白两种区块、顶栏、按钮、棋盘与棋子、页脚、随滚动出现的动画。
- * 设计以黑白交替为主线：区块分为墨色（.ink）与贝色（.shell）两种，顶栏以 difference 混合模式在两种底色上自动反色；
+ * 网站页面共用的样式（数据文件）：色彩与字体、黑白两种区块、顶栏、按钮、页脚、入场与随滚动出现的动画、圆形升起的转场。
+ * 设计以黑白交替为主线：区块分为墨色（.ink）与贝色（.shell）两种，顶栏为平铺于顶端的深烟色玻璃条，在两种底色上都清楚；
  * 榧木色只用于棋盘与少量强调。动画与交互全部以 CSS 实现，不使用脚本（API-063）。系统设置了“减弱动态效果”时关闭全部动画。
  * 随滚动推进的动画（animation-timeline）只在支持的浏览器中启用，其他浏览器直接显示最终状态。
  */
@@ -8,7 +8,7 @@
 /** 样式中资源地址的版本参数的占位符 */
 const VERSION_SLOT = '{version}';
 /** 页面样式；version 为资源地址的版本参数，换版本时浏览器重新取字体。注释只留在源码里，不发给浏览器 */
-export const siteStyle = (version: string) => minify(base + stones + motion).replaceAll(VERSION_SLOT, version);
+export const siteStyle = (version: string) => minify(base + motion).replaceAll(VERSION_SLOT, version);
 
 /** 去掉注释与多余的空白 */
 export const minify = (css: string) =>
@@ -27,8 +27,13 @@ const base = `
   --sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", system-ui, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --ease: cubic-bezier(0.22, 0.8, 0.2, 1); --ease-io: cubic-bezier(0.65, 0, 0.35, 1);
+  /* 圆形升起的转场中，区块与前一区块重叠的高度 */
+  --overlap: 100vh;
   --gut: clamp(20px, 5vw, 72px); --max: 1280px; --edge: max(var(--gut), (100vw - var(--max)) / 2);
   --title: url("/assets/title-yi.png?v={version}");
+  /* 小号的平面棋子（编号、图例、悬停时的落子预览等），不带纹理 */
+  --stone-b: radial-gradient(circle at 34% 30%, #6a6a6a 0, #1a1a1a 55%, #000 100%);
+  --stone-w: radial-gradient(circle at 35% 30%, #fff 0, #eee8dc 50%, #cfc5b3 100%);
   color-scheme: dark;
 }
 .ink { --bg: var(--ink); --fg: #ece7dd; --dim: #a39b8e; --faint: #8a8276; --line: rgb(236 231 221 / 0.12); --accent: var(--kaya); --on-accent: var(--ink);
@@ -52,13 +57,16 @@ p { margin: 0; }
 .seal { display: inline-flex; align-items: center; justify-content: center; border-radius: 5px; background: var(--seal); color: var(--seal-ink);
   font: 900 1em/1 var(--serif); }
 
-/* 顶栏：白色文字以 difference 混合，在墨色区块上为白、在贝色区块上为黑 */
-.bar { position: fixed; inset: 0 0 auto; z-index: 50; height: 72px; padding: 0 var(--gut); display: flex; align-items: center; gap: 40px;
-  color: #fff; mix-blend-mode: difference; pointer-events: none; }
-.bar a { pointer-events: auto; text-decoration: none; }
+/*
+ * 顶栏：平铺于页面顶端的深烟色玻璃条。半透明底与背后内容的模糊，下缘一道清晰的细线作分界（不做渐隐）；
+ * 底色固定，文字在墨色与贝色区块上都清楚
+ */
+.bar { position: fixed; inset: 0 0 auto; z-index: 50; height: 64px; padding: 0 var(--gut); display: flex; align-items: center; gap: 40px;
+  color: #ece7dd; background: rgb(16 14 12 / 0.8); -webkit-backdrop-filter: blur(20px) saturate(1.5); backdrop-filter: blur(20px) saturate(1.5);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.1); }
+.bar a { text-decoration: none; }
 .logo { display: flex; align-items: center; gap: 10px; }
-.logo .glyph { width: 26px; transition: transform 0.6s var(--ease); }
-.logo .seal { display: none; }
+.logo .glyph { width: 24px; transition: transform 0.6s var(--ease); }
 .logo:hover .glyph { transform: rotate(-6deg) scale(1.06); }
 .bar nav { display: flex; gap: 34px; margin-left: auto; font-size: 14px; letter-spacing: 0.24em; }
 .bar nav a { position: relative; padding: 6px 0; opacity: 0.72; transition: opacity 0.3s var(--ease); }
@@ -66,9 +74,9 @@ p { margin: 0; }
   transform: translateX(-50%) scale(0); transition: transform 0.4s var(--ease); }
 .bar nav a:hover { opacity: 1; }
 .bar nav a:hover::after { transform: translateX(-50%) scale(1); }
-.pill { display: inline-flex; align-items: center; height: 38px; padding: 0 20px; border: 1px solid currentColor; border-radius: 999px;
+.pill { display: inline-flex; align-items: center; height: 36px; padding: 0 19px; border: 1px solid rgb(236 231 221 / 0.35); border-radius: 999px;
   font-size: 14px; letter-spacing: 0.2em; transition: background 0.35s var(--ease), color 0.35s var(--ease); }
-.pill:hover { background: #fff; color: #000; }
+.pill:hover { background: #ece7dd; color: #141210; border-color: #ece7dd; }
 
 /* 区块的通用排版 */
 .sec-head { display: grid; grid-template-columns: auto 1fr; column-gap: 18px; row-gap: 22px; align-items: center; max-width: 52em; }
@@ -112,7 +120,7 @@ h3 { font: 900 clamp(22px, 2vw, 28px)/1.3 var(--serif); }
 .icp { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
 .icp:hover { color: #ece7dd; }
 @media (max-width: 720px) {
-  .bar { height: 60px; }
+  .bar { height: 56px; }
   .bar nav { display: none; }
   .bar .pill { margin-left: auto; }
   .foot-in { grid-template-columns: 1fr; }
@@ -121,49 +129,30 @@ h3 { font: 900 clamp(22px, 2vw, 28px)/1.3 var(--serif); }
 }
 `;
 
-/** 棋子与榧木纹理：带高光与投影的黑白棋子（主页的棋盘与下载页面的卡片共用） */
-const stones = `
-.wood { background:
-    radial-gradient(120% 80% at 22% 10%, rgb(255 240 205 / 0.35), transparent 55%),
-    repeating-linear-gradient(91deg, rgb(110 62 18 / 0.08) 0 1px, transparent 1px 7px),
-    repeating-linear-gradient(89.4deg, rgb(110 62 18 / 0.06) 0 2px, transparent 2px 19px),
-    repeating-linear-gradient(90.7deg, rgb(255 236 200 / 0.09) 0 3px, transparent 3px 29px),
-    linear-gradient(170deg, #ecd09a, #ddb673 55%, #c99a52);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.4), inset 0 -2px 0 rgb(0 0 0 / 0.08); }
-.st { position: absolute; width: calc(100% / (var(--n) - 1) * 0.94); aspect-ratio: 1; border-radius: 50%; transform: translate(-50%, -50%);
-  font-size: calc((100cqi - 2 * var(--pad)) / (var(--n) - 1)); }
-/* 黑子仿云子：窗形的柔光高光、背光一侧透出墨绿；白子仿贝壳：温润的底色、细纹与边缘透光。投影分两层：贴盘的接触阴影与柔和的投影 */
-.st.b { background:
-    radial-gradient(ellipse 30% 20% at 36% 27%, rgb(255 255 255 / 0.5), rgb(255 255 255 / 0.08) 65%, transparent 100%),
-    radial-gradient(circle at 72% 82%, rgb(70 110 95 / 0.38), transparent 42%),
-    radial-gradient(circle at 42% 36%, #3c3c3b 0, #181817 42%, #070707 78%, #000 100%);
-  box-shadow: 0 0.05em 0.05em rgb(0 0 0 / 0.55), 0.1em 0.2em 0.3em rgb(0 0 0 / 0.38), inset 0 -0.05em 0.1em rgb(0 0 0 / 0.6); }
-.st.w { background:
-    radial-gradient(ellipse 34% 24% at 36% 28%, rgb(255 255 255 / 0.95), transparent 70%),
-    repeating-radial-gradient(circle at 50% 135%, rgb(150 130 100 / 0.07) 0 2.5%, transparent 2.5% 5%),
-    radial-gradient(circle at 70% 84%, rgb(190 205 215 / 0.45), transparent 45%),
-    radial-gradient(circle at 42% 38%, #fdfbf6 0, #efe9de 50%, #d6cdbd 88%, #c2b7a4 100%);
-  box-shadow: 0 0.05em 0.05em rgb(50 30 5 / 0.45), 0.1em 0.2em 0.3em rgb(60 40 10 / 0.3), inset 0 -0.05em 0.12em rgb(120 100 70 / 0.35); }
-.st.last::before { content: ""; position: absolute; left: 50%; top: 50%; width: 24%; height: 24%; border-radius: 50%; transform: translate(-50%, -50%);
-  background: var(--seal); z-index: 1; }
-`;
-
 /** 动画：入场、随滚动出现与“减弱动态效果” */
 const motion = `
 @keyframes rise { from { opacity: 0; transform: translateY(28px); } to { opacity: 1; transform: none; } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
-@keyframes drop {
-  0% { opacity: 0; transform: translate(-50%, -50%) translateY(-30%) scale(1.35); filter: blur(2px); }
-  55% { opacity: 1; transform: translate(-50%, -50%) scale(0.95); filter: none; }
-  100% { opacity: 1; transform: translate(-50%, -50%); }
-}
-/* 区块以一枚圆形自下升起：圆心在区块顶边之下、与顶边相切，看到的始终是完整的圆弧而不是被顶边截平的半圆；
-   进入完成时再扩到整个区块，较高的区块下部也不被裁去 */
+/*
+ * 区块以一枚圆形自下升起。进度从区块顶边进入屏幕底端开始，到顶边越过屏幕顶端之后再滚动 90% 屏高为止（见 .reveal-circle 的 animation-range），
+ * 共约两屏的滚动距离，圆长得从容：
+ * 前 100/190（顶边到达屏幕顶端之前）圆心在顶边之下、与顶边相切，屏幕上始终是完整的圆弧，不会被顶边截出直边；
+ * 其后顶边已在屏幕之外，圆继续长大，两侧的边角随滚动连续地补满，被顶边截出的直边始终在屏幕外。
+ * 越过顶端的距离（90% 屏高）须小于与前一区块的重叠（--overlap），边角处露出的才始终是前一区块的底色。
+ * 两段各用缓入缓出，起步与收尾都轻
+ */
 @keyframes circle-in {
-  from { clip-path: circle(0 at 50% 0); } 60% { clip-path: circle(70vmax at 50% 70vmax); } to { clip-path: circle(150% at 50% 0); }
+  from { clip-path: circle(0 at 50% 0); animation-timing-function: cubic-bezier(0.4, 0, 0.6, 1); }
+  52.6% { clip-path: circle(110vmax at 50% 110vmax); animation-timing-function: cubic-bezier(0.3, 0, 0.3, 1); }
+  to { clip-path: circle(150% at 50% 0); }
 }
 @supports (animation-timeline: view()) {
   .rv { animation: rise linear both; animation-timeline: view(); animation-range: entry 5% entry 75%; }
+/* 圆形升起的转场：区块上移 --overlap 与前一区块重叠，前一区块须在末尾留出同样的空白（各页面自行留出） */
+@media (prefers-reduced-motion: no-preference) {
+  .reveal-circle { margin-top: calc(-1 * var(--overlap)); animation: circle-in linear both; animation-timeline: view();
+    animation-range: entry 0% entry 190%; }
+}
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }

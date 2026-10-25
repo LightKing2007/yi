@@ -1,6 +1,6 @@
 /**
- * 主页的样式（数据文件）：首屏的透视棋盘、贝色区块以圆形自上而下铺开（如一枚棋子落下）、对局方式的横向滚动、
- * 光影切换与跟随鼠标的高光（以单选框与 :has() 实现）、语言对照与终章。随滚动推进的效果只在支持 animation-timeline 的浏览器中启用。
+ * 主页的样式（数据文件）：首屏的“弈”字、竖排标语与棋盘，两种棋的对照、对局方式的横向展示、语言对照与数字、终章。
+ * 随滚动推进的效果只在支持 animation-timeline 的浏览器中启用；背景几何见 geometry.ts，功能环见 ring.ts。
  */
 import { boardStyle } from './board';
 import { geometryStyle } from './geometry';
@@ -14,33 +14,32 @@ const hero = `
 .hero { position: relative; min-height: 100svh; overflow: clip; display: grid; align-items: end; background: var(--ink); }
 /* 光晕与棋盘只占首屏，并在首屏底部渐隐为墨色：首屏下方为贝色区块展开留出的墨色空间，两者之间不留接缝 */
 .hero::before { content: ""; position: absolute; inset: 0 0 auto; height: 100svh; pointer-events: none;
-  background: radial-gradient(90% 70% at 72% 78%, #2a2118 0, #14110d 45%, transparent 75%);
+  background: linear-gradient(rgb(236 231 221 / 0.05) 1px, transparent 1px) center / 64px 64px,
+    linear-gradient(90deg, rgb(236 231 221 / 0.05) 1px, transparent 1px) center / 64px 64px,
+    radial-gradient(90% 70% at 72% 78%, #2a2118 0, #14110d 45%, transparent 75%);
   -webkit-mask: linear-gradient(#000 60%, transparent); mask: linear-gradient(#000 60%, transparent); }
-.hero-floor { position: absolute; inset: 0 0 auto; height: 100svh; perspective: 2600px; perspective-origin: 80% 10%;
-  -webkit-mask: linear-gradient(90deg, transparent 62%, #000 74%), linear-gradient(#000 70%, transparent 98%); -webkit-mask-composite: source-in;
-  mask: linear-gradient(90deg, transparent 62%, #000 74%), linear-gradient(#000 70%, transparent 98%); mask-composite: intersect; }
-/* 整块棋盘斜放在右侧：盘面在透视中完整可见，带厚度（前、左两侧的木边）与台面上的投影；棋子在盘面的四角与中腹 */
-.hero-floor .board { position: absolute; left: 92%; top: 58%; width: min(820px, 54vw); --pad: 4.5cqi; transform-style: preserve-3d;
-  transform: translate(-50%, -50%) rotateX(55deg) rotateZ(-22deg); animation: floor-in 2.4s var(--ease) both;
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.5), inset 0 0 10cqi rgb(90 50 10 / 0.28), 0 0 0 1px rgb(120 80 30 / 0.5); }
+.hero-floor { position: absolute; inset: 0 0 auto; height: 100svh; }
+/*
+ * 一块完整的 19 路棋盘俯视、摆正放在标语右侧，整块都在画面之内，像置于案上的一件器物：
+ * 网格与棋子都不经透视变形，线条清晰、棋子浑圆。厚度以叠在下方的两层木边表示，再加一层落在台面上的柔和投影
+ */
+.hero-floor .board { position: absolute; left: 75%; top: 50%; width: min(460px, 31vw);
+  transform: translate(-50%, -50%); animation: floor-in 2s var(--ease) both;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.5), inset 0 0 60px rgb(90 50 10 / 0.25), 0 0 0 1px rgb(120 80 30 / 0.55),
+    0 7px 0 #a87a3e, 0 11px 0 #7a521f, 0 30px 50px -8px rgb(0 0 0 / 0.65), 0 60px 100px rgb(0 0 0 / 0.4); }
 .hero-floor .board .grid::before { content: ""; position: absolute; inset: -6%; pointer-events: none;
-  background: radial-gradient(55% 45% at 30% 45%, rgb(255 236 196 / 0.32), transparent 70%); }
-.hero-floor .board::before, .hero-floor .board::after { content: ""; position: absolute; background: linear-gradient(#a8783c, #7a521f); }
-.hero-floor .board::before { left: 0; right: 0; top: 100%; height: 4.2cqi; transform-origin: 50% 0; transform: rotateX(-90deg);
-  background: repeating-linear-gradient(90deg, rgb(90 55 20 / 0.25) 0 2px, transparent 2px 9px), linear-gradient(#b4844a, #7d5420); }
-.hero-floor .board::after { top: 0; bottom: 0; right: 100%; width: 4.2cqi; transform-origin: 100% 50%; transform: rotateY(90deg);
-  background: linear-gradient(90deg, #6f4a1c, #9a6c34); }
-.hero-floor .grid { transform-style: preserve-3d; }
-.hero-floor .grid line { stroke: rgb(36 20 4 / 0.85); stroke-width: 1.2; }
-.hero-shadow { position: absolute; left: 92%; top: 62%; width: min(900px, 60vw); aspect-ratio: 1.6; translate: -50% -50%; rotate: -14deg;
-  border-radius: 50%; background: radial-gradient(closest-side, rgb(0 0 0 / 0.75), transparent); filter: blur(30px); }
-/* 棋子略高于盘面：与盘面同在一个平面时，立体渲染会把部分棋子遮在盘面之下 */
-.hero-floor .st { translate: 0 0 2px; animation: drop 0.7s cubic-bezier(0.3, 0.7, 0.3, 1) calc(1.4s + var(--i) * 0.38s) both; }
-.hero::after { content: ""; position: absolute; inset: 0 0 auto; height: 100svh; pointer-events: none;
-  background: linear-gradient(90deg, rgb(11 10 9 / 0.9) 0, rgb(11 10 9 / 0.6) 44%, transparent 60%),
-    linear-gradient(0deg, rgb(11 10 9 / 0.7), transparent 30%); }
-.hero-in { position: relative; z-index: 2; width: 100%; max-width: var(--max); margin: 0 auto; padding: 132px var(--gut) clamp(96px, 16vh, 160px);
-  display: grid; grid-template-columns: auto minmax(0, 25em); justify-content: start; gap: clamp(32px, 4.5vw, 80px); align-items: end; pointer-events: none; }
+  background: radial-gradient(55% 45% at 30% 30%, rgb(255 236 196 / 0.3), transparent 70%); }
+.hero-floor .grid line { stroke: rgb(36 20 4 / 0.8); stroke-width: 1.1; }
+.hero-floor .st { animation: drop 0.7s cubic-bezier(0.3, 0.7, 0.3, 1) calc(1.2s + var(--i) * 0.3s) both; }
+/* 压暗左侧以衬托文字：铺满整个首屏区块（含下方留给转场的空白），不设下边缘，棋盘随滚动移动时不会越过一条明暗分界 */
+.hero::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, rgb(11 10 9 / 0.9) 0, rgb(11 10 9 / 0.6) 44%, transparent 60%); }
+/*
+ * 首屏分左右两半：左半为“弈”字，标语竖排在字的右侧（如题款），下载按钮在二者之下；右半为棋盘（.hero-floor 中绝对定位）
+ */
+.hero-in { position: relative; z-index: 2; width: 100%; max-width: var(--max); margin: 0 auto; padding: 120px var(--gut) 110px;
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; align-self: center; pointer-events: none; }
+.hero-mark { display: flex; align-items: flex-start; gap: clamp(28px, 3.4vw, 60px); }
 .hero-in a { pointer-events: auto; }
 .hero-title { position: relative; height: clamp(240px, 52vh, 560px); aspect-ratio: 568 / 646; }
 .hero-title .mark { position: absolute; inset: 0; background: var(--fg);
@@ -48,15 +47,15 @@ const hero = `
   animation: brush 1.8s var(--ease-io) 0.2s both; }
 .hero-title .seal { position: absolute; right: -6%; bottom: 4%; width: 15%; aspect-ratio: 1; font-size: clamp(18px, 3.6vh, 36px);
   box-shadow: 0 8px 22px -8px rgb(178 58 44 / 0.6); animation: stamp 0.8s var(--ease) 1.7s both; }
-.hero-copy { padding-bottom: 6px; }
-.motto { font: 400 clamp(40px, 5vw, 76px)/1.2 var(--serif); letter-spacing: 0.08em; animation: rise 1.1s var(--ease) 0.85s both; }
-.hero .cta { margin-top: 56px; animation: rise 1.1s var(--ease) 1.15s both; }
+.motto { writing-mode: vertical-rl; margin-top: 3%; font: 400 clamp(30px, 3.2vw, 48px)/1.7 var(--serif); letter-spacing: 0.36em;
+  animation: rise 1.1s var(--ease) 0.85s both; }
+.hero .cta { margin-top: clamp(40px, 6vh, 64px); animation: rise 1.1s var(--ease) 1.15s both; }
 .cue { position: absolute; z-index: 2; left: 50%; bottom: 26px; transform: translateX(-50%); display: grid; justify-items: center; gap: 10px;
   font-size: 12px; letter-spacing: 0.4em; text-decoration: none; color: var(--faint); animation: fade 2s var(--ease) 2.4s both; }
 .cue i { position: relative; width: 1px; height: 46px; background: var(--line); overflow: hidden; }
 .cue i::after { content: ""; position: absolute; left: 0; top: -40%; width: 1px; height: 40%; background: var(--fg);
   animation: cue 2.2s var(--ease-io) infinite; }
-@keyframes floor-in { from { opacity: 0; transform: translate(-50%, -38%) rotateX(66deg) rotateZ(-40deg); } to { opacity: 1; } }
+@keyframes floor-in { from { opacity: 0; transform: translate(-50%, -44%) scale(0.96); } to { opacity: 1; } }
 @keyframes brush { from { clip-path: inset(0 0 100% 0); opacity: 0.3; } to { clip-path: inset(0); opacity: 1; } }
 @keyframes stamp {
   0% { opacity: 0; transform: scale(2) rotate(-12deg); } 55% { opacity: 1; transform: scale(0.9) rotate(3deg); } 100% { opacity: 1; transform: none; }
@@ -70,9 +69,9 @@ const games = `
 .split { display: flex; margin-top: clamp(56px, 9vh, 110px); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .game { position: relative; flex: 1 1 0; min-width: 0; padding: 44px clamp(20px, 3vw, 48px) 52px; display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "num art" "text art"; gap: 28px clamp(20px, 3vw, 44px);
-  transition: background 0.6s var(--ease); outline: none; }
+  transition: background 0.6s var(--ease); }
 .game + .game { border-left: 1px solid var(--line); }
-/* 悬停只改底色与棋盘的姿态，不改栏宽：改栏宽会使正文重新换行、在悬停时跳动 */
+/* 悬停只改底色、数字与棋盘的姿态，不改栏宽：改栏宽会使正文重新换行、在悬停时跳动 */
 .game:hover { background: var(--shell-2); }
 .game-num { grid-area: num; display: flex; align-items: baseline; gap: 8px; }
 .game-num b { font: 900 clamp(84px, 10vw, 168px)/0.85 var(--serif); letter-spacing: -0.02em; color: transparent; -webkit-text-stroke: 1.5px var(--fg);
@@ -99,7 +98,7 @@ const modes = `
 .mode { position: relative; padding: 40px clamp(20px, 3vw, 44px) 48px 0; border-bottom: 1px solid var(--line); }
 .mode:nth-child(even) { padding-left: clamp(20px, 3vw, 44px); border-left: 1px solid var(--line); }
 .mode-no { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; font: 900 26px/1 var(--serif);
-  background: radial-gradient(circle at 35% 30%, #fff 0, #f2ede3 40%, #d4cab8 90%); color: var(--ink);
+  background: var(--stone-w); color: var(--ink);
   box-shadow: 0 10px 20px -8px rgb(0 0 0 / 0.8), inset -3px -4px 8px rgb(120 100 70 / 0.25); transition: transform 0.6s cubic-bezier(0.3, 1.5, 0.5, 1); }
 .mode:hover .mode-no { transform: translateY(-4px) rotate(-8deg); }
 .mode h3 { margin-top: 26px; }
@@ -113,7 +112,7 @@ kbd { display: inline-grid; place-items: center; min-width: 38px; height: 38px; 
 kbd:hover { transform: translateY(2px); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.1), 0 1px 0 #050504, 0 3px 6px -3px rgb(0 0 0 / 0.6); }
 .levels { display: flex; gap: 28px; margin-top: 28px; font-size: 13px; color: var(--dim); }
 .levels span { display: flex; align-items: center; gap: 4px; }
-.levels i { width: 12px; height: 12px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff, #d8d0c1 80%); }
+.levels i { width: 12px; height: 12px; border-radius: 50%; background: var(--stone-w); }
 .levels span i:last-of-type { margin-right: 6px; }
 .ways { display: grid; grid-template-columns: repeat(3, auto); gap: 18px 28px; margin: 28px 0 0; }
 .ways dt { font: 900 18px/1.4 var(--serif); }
@@ -136,7 +135,7 @@ const tongues = `
 .phrases > div > span[lang] { font-weight: 400; letter-spacing: 0.01em; }
 .phrases > div > span:nth-child(2) { color: var(--dim); }
 .phrases > div::before { content: ""; position: absolute; left: 6px; top: 50%; width: 20px; height: 20px; margin-top: -10px; border-radius: 50%;
-  background: radial-gradient(circle at 34% 30%, #6a6a6a 0, #1a1a1a 55%, #000 100%); box-shadow: 0 3px 5px rgb(0 0 0 / 0.3);
+  background: var(--stone-b); box-shadow: 0 3px 5px rgb(0 0 0 / 0.3);
   transform: translateY(-14px) scale(1.3); opacity: 0; transition: transform 0.5s cubic-bezier(0.3, 1.5, 0.5, 1), opacity 0.3s var(--ease); }
 .phrases > div:not(.phrases-head):hover { background: var(--shell-2); }
 .phrases > div:not(.phrases-head):hover::before { transform: none; opacity: 1; }
@@ -167,10 +166,9 @@ const finale = `
 const scroll = `
 @supports (animation-timeline: view()) {
 @media (prefers-reduced-motion: no-preference) {
-  .hero:has(+ .reveal-circle) { min-height: calc(100svh + 70vh); grid-template-rows: 100svh; align-content: start; }
-  .hero:has(+ .reveal-circle) .cue { bottom: calc(26px + 70vh); }
-  .tongues:has(+ .reveal-circle) { padding-bottom: calc(clamp(96px, 14vh, 180px) + 70vh); }
-  .reveal-circle { margin-top: -70vh; animation: circle-in linear both; animation-timeline: view(); animation-range: entry 0% entry 100%; }
+  .hero:has(+ .reveal-circle) { min-height: calc(100svh + var(--overlap)); grid-template-rows: 100svh; align-content: start; }
+  .hero:has(+ .reveal-circle) .cue { bottom: calc(26px + var(--overlap)); }
+  .tongues:has(+ .reveal-circle) { padding-bottom: calc(clamp(96px, 14vh, 180px) + var(--overlap)); }
   .games { padding-top: calc(clamp(110px, 16vh, 200px) + 50vh); }
   .finale { padding-top: calc(clamp(140px, 22vh, 240px) + 30vh); }
   .five .st, .go .st { animation: drop linear both; animation-timeline: view();
@@ -205,18 +203,15 @@ const scroll = `
 
 const narrow = `
 @media (min-width: 961px) and (max-width: 1240px) {
-  .hero-floor .board { left: 80%; top: 62%; }
-  .hero::after { background: linear-gradient(90deg, rgb(11 10 9 / 0.92) 0, rgb(11 10 9 / 0.8) 66%, transparent 84%),
-    linear-gradient(0deg, rgb(11 10 9 / 0.7), transparent 30%); }
+  .hero-floor .board { left: 76%; width: 30vw; }
 }
 @media (max-width: 960px) {
-  .hero-in { grid-template-columns: 1fr; gap: 28px; }
-  .hero-in { padding-top: 96px; padding-bottom: 92px; }
+  .hero-in { grid-template-columns: 1fr; gap: 28px; align-self: end; padding-top: 96px; padding-bottom: 92px; }
   .hero-title { height: clamp(180px, 31vh, 320px); }
-  .motto { font-size: clamp(32px, 9vw, 52px); }
+  .motto { font-size: clamp(24px, 6.6vw, 36px); }
   .hero .cta { margin-top: 36px; }
-  .hero-floor .board { left: 62%; top: 70%; width: 120vw; }
-  .hero::after { background: linear-gradient(0deg, rgb(11 10 9 / 0.9) 10%, rgb(11 10 9 / 0.3) 60%, transparent); }
+  .hero-floor .board { left: 76%; top: 22%; width: 34vw; }
+  .hero::after { background: linear-gradient(180deg, transparent 15%, rgb(11 10 9 / 0.55) 30%, rgb(11 10 9 / 0.55)); }
   .split { flex-direction: column; }
   .game + .game { border-left: 0; border-top: 1px solid var(--line); }
   .figures { grid-template-columns: 1fr 1fr; row-gap: 36px; }
