@@ -46,10 +46,16 @@ const ASSET_TYPES: Record<string, string> = {
 
 /** 所有响应都带的头（API-063） */
 const BASE_HEADERS = { 'X-Content-Type-Options': 'nosniff' };
-/** 永久重定向的状态码 */
-const MOVED = 301;
-/** 超出 HTTP 请求频率时的状态码（04-api.md 第 4.1 条） */
-const TOO_MANY_REQUESTS = 429;
+/** 响应的状态码；超出 HTTP 请求频率时回应 TOO_MANY_REQUESTS（04-api.md 第 4.1 条） */
+const OK = 200,
+  PARTIAL = 206,
+  MOVED = 301,
+  BAD_REQUEST = 400,
+  NOT_FOUND = 404,
+  METHOD_NOT_ALLOWED = 405,
+  RANGE_NOT_SATISFIABLE = 416,
+  TOO_MANY_REQUESTS = 429,
+  UNAVAILABLE = 503;
 
 /** 回应超出按 IP 的 HTTP 请求频率（API-041）：429 与 Retry-After（秒） */
 export function tooManyRequests(res: ServerResponse, retryAfterSecs: number) {
@@ -205,144 +211,188 @@ function pages(pkgs: ReturnType<typeof listing>, sums: ReturnType<typeof checksu
   };
 }
 
-/** 主页、下载页面与安装包的请求处理；dir 为安装包所在的目录，stall 为下载速率的下限（测试时可调小） */
-export function fileServer(dir: string, stall: StallLimit = STALL) {
+const MS_PER_SEC = 1000;
+const TEXT = 'text/plain; charset=utf-8';
+
+function notFound(res: ServerResponse) {
+  res.writeHead(NOT_FOUND, { ...BASE_HEADERS, 'Content-Type': TEXT }).end('未找到所请求的文件。');
+}
+
+/** 暂时无法提供（下载并发已满或校验值尚未算完）：503 与 Retry-After */
+function unavailable(res: ServerResponse, text: string) {
+  res.writeHead(UNAVAILABLE, { ...BASE_HEADERS, 'Content-Type': TEXT, 'Retry-After': String(RETRY_AFTER_SECS) }).end(text);
+}
+
+/** 从请求地址取出路径（不含开头的斜杠）与是否带 start；地址无法解析时返回 null */
+function parseUrl(req: IncomingMessage): { name: string; starting: boolean } | null {
+  try {
+    const url = new URL(req.url ?? '/', 'http://x');
+    return { name: decodeURIComponent(url.pathname.slice(1)), starting: url.searchParams.has('start') };
+  } catch {
+    return null; // 路径中的百分号编码不合法
+  }
+}
+
+/** 主页或下载页面 */
+function sendPage(res: ServerResponse, body: string, head: boolean) {
+  res.writeHead(OK, { ...HTML_HEADERS, 'Content-Length': Buffer.byteLength(body) }).end(head ? undefined : body);
+}
+
+/** /assets/ 下的资源：只给 ASSET_TYPES 名单中、构建时已嵌入的 */
+function sendAsset(res: ServerResponse, asset: string, head: boolean) {
+  const type = Object.hasOwn(ASSET_TYPES, asset) ? ASSET_TYPES[asset] : undefined;
+  const data = type && __PAGE_ASSETS__[asset] ? Buffer.from(__PAGE_ASSETS__[asset], 'base64') : undefined;
+  if (!type || !data) {
+    notFound(res);
+    return;
+  }
+  res.writeHead(OK, { ...BASE_HEADERS, 'Content-Type': type, 'Content-Length': data.length, 'Cache-Control': `public, max-age=${ASSET_MAX_AGE_SECS}` });
+  res.end(head ? undefined : data);
+}
+
+/** /SHA256SUMS：各安装程序的校验值；尚未全部算完时回应 503 */
+function sendSums(res: ServerResponse, current: Pkg[], sums: ReturnType<typeof checksums>, head: boolean) {
+  const lines = current.map(p => [sums.get(p), p.file] as const);
+  if (lines.some(([hex]) => !hex)) {
+    unavailable(res, '校验值正在计算，请稍后再试。');
+    return;
+  }
+  const body = lines.map(([hex, file]) => `${hex}  ${file}\n`).join('');
+  res.writeHead(OK, { ...BASE_HEADERS, 'Content-Type': TEXT, 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-cache' });
+  res.end(head ? undefined : body);
+}
+
+/** 要送出的字节区间；partial 为请求带了 Range（回应 206 与 Content-Range） */
+interface Span {
+  start: number;
+  end: number;
+  partial: boolean;
+}
+
+/** 断点续传：只认 bytes=开始-结束 一段；区间不成立时返回 null（回应 416） */
+function parseRange(header: string | undefined, size: number): Span | null {
+  let start = 0,
+    end = size - 1;
+  const range = /^bytes=(\d*)-(\d*)$/.exec(header ?? '');
+  if (range && (range[1] || range[2])) {
+    if (range[1]) {
+      start = Number(range[1]);
+      if (range[2]) end = Math.min(end, Number(range[2]));
+    } else start = Math.max(0, size - Number(range[2]));
+    if (start > end) return null;
+  }
+  return { start, end, partial: Boolean(range) };
+}
+
+/** 下载的并发名额：每个 IP 同时最多 PER_IP 个、全服最多 TOTAL 个 */
+function slots() {
   const perIp = new Map<string, number>();
   let total = 0;
-  const sums = checksums(dir);
-  const pkgs = listing(dir);
-  const render = pages(pkgs, sums);
-  const notFound = (res: ServerResponse) => {
-    res.writeHead(404, { ...BASE_HEADERS, 'Content-Type': 'text/plain; charset=utf-8' }).end('未找到所请求的文件。');
+  return {
+    active: () => total,
+    /** 占用一个名额，返回只生效一次的释放函数；名额已满时返回 null */
+    take(ip: string): (() => void) | null {
+      if ((perIp.get(ip) ?? 0) >= PER_IP || total >= TOTAL) return null;
+      perIp.set(ip, (perIp.get(ip) ?? 0) + 1);
+      total++;
+      let done = false;
+      return () => {
+        if (done) return;
+        done = true;
+        total--;
+        const n = (perIp.get(ip) ?? 1) - 1;
+        if (n > 0) perIp.set(ip, n);
+        else perIp.delete(ip);
+      };
+    },
   };
+}
 
-  const handle = (req: IncomingMessage, res: ServerResponse) => {
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
-      res.writeHead(405, { ...BASE_HEADERS, Allow: 'GET, HEAD' }).end();
-      return;
-    }
-    let name: string, starting: boolean;
-    try {
-      const url = new URL(req.url ?? '/', 'http://x');
-      name = decodeURIComponent(url.pathname.slice(1));
-      starting = url.searchParams.has('start');
-    } catch {
-      res.writeHead(400, BASE_HEADERS).end();
-      return;
-    }
-    const head = req.method === 'HEAD';
+/** 把文件的一段送给对方，速率持续低于 stall 时断开（API-047）；连接关闭时调用 release */
+function pipeFile(res: ServerResponse, file: string, span: Span, opts: { stall: StallLimit; release: () => void }) {
+  const stream = fs.createReadStream(file, { start: span.start, end: span.end });
+  // 管道按对方的读取速度送数据：对方不读时 data 事件随之停下，以此计量实际送出的字节数
+  let sent = 0;
+  stream.on('data', chunk => {
+    sent += chunk.length;
+  });
+  const minBytes = (opts.stall.minBytesPerSec * opts.stall.stallMs) / MS_PER_SEC;
+  const watch = setInterval(() => {
+    if (sent < minBytes) res.destroy();
+    else sent = 0;
+  }, opts.stall.stallMs);
+  stream.on('end', () => clearInterval(watch)); // 文件已读完：剩下的只是套接字缓冲区里有限的数据
+  res.on('close', () => {
+    clearInterval(watch);
+    stream.destroy();
+    opts.release();
+  });
+  stream.on('error', () => res.destroy());
+  stream.pipe(res);
+}
 
-    if (name === HOME || name === DOWNLOAD) {
-      const body = render(name, req, name === DOWNLOAD && starting);
-      res.writeHead(200, { ...HTML_HEADERS, 'Content-Length': Buffer.byteLength(body) }).end(head ? undefined : body);
+/** 安装程序的下载：支持 Range；HEAD 只回头部，不占下载名额 */
+function installers(dir: string, stall: StallLimit) {
+  const pool = slots();
+  const send = (req: IncomingMessage, res: ServerResponse, pkg: Pkg) => {
+    const span = parseRange(req.headers.range, pkg.size);
+    if (!span) {
+      res.writeHead(RANGE_NOT_SATISFIABLE, { ...BASE_HEADERS, 'Content-Range': `bytes */${pkg.size}` }).end();
       return;
-    }
-    // 只保留页面认得的 start：主页的下载按钮若被写成 /download?start，重定向之后仍自动开始下载
-    if (`${name}/` === DOWNLOAD) {
-      res.writeHead(MOVED, { ...BASE_HEADERS, Location: `/${DOWNLOAD}${starting ? '?start' : ''}` }).end();
-      return;
-    }
-
-    if (name.startsWith('assets/')) {
-      const asset = name.slice('assets/'.length);
-      const type = Object.hasOwn(ASSET_TYPES, asset) ? ASSET_TYPES[asset] : undefined;
-      const data = type && __PAGE_ASSETS__[asset] ? Buffer.from(__PAGE_ASSETS__[asset], 'base64') : undefined;
-      if (!type || !data) {
-        notFound(res);
-        return;
-      }
-      res.writeHead(200, { ...BASE_HEADERS, 'Content-Type': type, 'Content-Length': data.length, 'Cache-Control': `public, max-age=${ASSET_MAX_AGE_SECS}` });
-      res.end(head ? undefined : data);
-      return;
-    }
-
-    if (name === 'SHA256SUMS') {
-      const lines = pkgs.load().map(p => [sums.get(p), p.file] as const);
-      if (lines.some(([hex]) => !hex)) {
-        res
-          .writeHead(503, { ...BASE_HEADERS, 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': String(RETRY_AFTER_SECS) })
-          .end('校验值正在计算，请稍后再试。');
-        return;
-      }
-      const body = lines.map(([hex, file]) => `${hex}  ${file}\n`).join('');
-      const type = 'text/plain; charset=utf-8';
-      res.writeHead(200, { ...BASE_HEADERS, 'Content-Type': type, 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-cache' });
-      res.end(head ? undefined : body);
-      return;
-    }
-
-    const pkg = NAME.test(name) ? pkgs.fresh(name) : undefined;
-    if (!pkg) {
-      notFound(res);
-      return;
-    }
-
-    // 断点续传：只认 bytes=开始-结束 一段
-    let start = 0,
-      end = pkg.size - 1;
-    const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? '');
-    if (range && (range[1] || range[2])) {
-      if (range[1]) {
-        start = Number(range[1]);
-        if (range[2]) end = Math.min(end, Number(range[2]));
-      } else start = Math.max(0, pkg.size - Number(range[2]));
-      if (start > end) {
-        res.writeHead(416, { ...BASE_HEADERS, 'Content-Range': `bytes */${pkg.size}` }).end();
-        return;
-      }
     }
     const headers = {
       ...BASE_HEADERS,
       'Content-Type': 'application/octet-stream',
-      'Content-Length': end - start + 1,
+      'Content-Length': span.end - span.start + 1,
       'Content-Disposition': `attachment; filename="${pkg.file}"`,
       'Accept-Ranges': 'bytes',
-      ...(range ? { 'Content-Range': `bytes ${start}-${end}/${pkg.size}` } : {}),
+      ...(span.partial ? { 'Content-Range': `bytes ${span.start}-${span.end}/${pkg.size}` } : {}),
     };
-    if (head) {
-      res.writeHead(range ? 206 : 200, headers).end();
+    const status = span.partial ? PARTIAL : OK;
+    if (req.method === 'HEAD') {
+      res.writeHead(status, headers).end();
       return;
     }
+    const release = pool.take(clientIp(req));
+    if (!release) {
+      unavailable(res, '当前下载请求过多，请稍后再试。');
+      return;
+    }
+    res.writeHead(status, headers);
+    pipeFile(res, path.join(dir, pkg.file), span, { stall, release });
+  };
+  return { send, active: pool.active };
+}
 
-    const ip = clientIp(req);
-    if ((perIp.get(ip) ?? 0) >= PER_IP || total >= TOTAL) {
-      res
-        .writeHead(503, { ...BASE_HEADERS, 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': String(RETRY_AFTER_SECS) })
-        .end('当前下载请求过多，请稍后再试。');
+/** 主页、下载页面与安装包的请求处理；dir 为安装包所在的目录，stall 为下载速率的下限（测试时可调小） */
+export function fileServer(dir: string, stall: StallLimit = STALL) {
+  const sums = checksums(dir);
+  const pkgs = listing(dir);
+  const render = pages(pkgs, sums);
+  const downloads = installers(dir, stall);
+  const handle = (req: IncomingMessage, res: ServerResponse) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      res.writeHead(METHOD_NOT_ALLOWED, { ...BASE_HEADERS, Allow: 'GET, HEAD' }).end();
       return;
     }
-    perIp.set(ip, (perIp.get(ip) ?? 0) + 1);
-    total++;
-    let done = false;
-    const release = () => {
-      if (done) return;
-      done = true;
-      total--;
-      const n = (perIp.get(ip) ?? 1) - 1;
-      if (n > 0) perIp.set(ip, n);
-      else perIp.delete(ip);
-    };
-    res.writeHead(range ? 206 : 200, headers);
-    const stream = fs.createReadStream(path.join(dir, pkg.file), { start, end });
-    // 管道按对方的读取速度送数据：对方不读时 data 事件随之停下，以此计量实际送出的字节数
-    let sent = 0;
-    stream.on('data', chunk => {
-      sent += chunk.length;
-    });
-    const minBytes = (stall.minBytesPerSec * stall.stallMs) / 1000;
-    const watch = setInterval(() => {
-      if (sent < minBytes) res.destroy();
-      else sent = 0;
-    }, stall.stallMs);
-    stream.on('end', () => clearInterval(watch)); // 文件已读完：剩下的只是套接字缓冲区里有限的数据
-    res.on('close', () => {
-      clearInterval(watch);
-      stream.destroy();
-      release();
-    });
-    stream.on('error', () => res.destroy());
-    stream.pipe(res);
+    const url = parseUrl(req);
+    if (!url) {
+      res.writeHead(BAD_REQUEST, BASE_HEADERS).end();
+      return;
+    }
+    const { name, starting } = url;
+    const head = req.method === 'HEAD';
+    if (name === HOME || name === DOWNLOAD) sendPage(res, render(name, req, name === DOWNLOAD && starting), head);
+    // 只保留页面认得的 start：主页的下载按钮若被写成 /download?start，重定向之后仍自动开始下载
+    else if (`${name}/` === DOWNLOAD) res.writeHead(MOVED, { ...BASE_HEADERS, Location: `/${DOWNLOAD}${starting ? '?start' : ''}` }).end();
+    else if (name.startsWith('assets/')) sendAsset(res, name.slice('assets/'.length), head);
+    else if (name === 'SHA256SUMS') sendSums(res, pkgs.load(), sums, head);
+    else {
+      const pkg = NAME.test(name) ? pkgs.fresh(name) : undefined;
+      if (pkg) downloads.send(req, res, pkg);
+      else notFound(res);
+    }
   };
   /** 进行中的下载数（指标 yi_downloads_active） */
-  return Object.assign(handle, { active: () => total });
+  return Object.assign(handle, { active: downloads.active });
 }
