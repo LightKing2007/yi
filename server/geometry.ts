@@ -13,22 +13,28 @@ const STONE_RATIO = 0.34;
 
 /** 一段图形中排列的遍数：使一段宽于最宽的屏幕，横移时不露出空白 */
 const REPEATS = 4;
+/** 一行中图形的段数：两段首尾相接，横移一段的长度即回到原样 */
+const SEGMENTS = 2;
 
-/** 一行二进制流：同一段棋子排两遍，横移一段的长度即首尾相接；reverse 为反向移动 */
-function streamRow(pattern: string, reverse: boolean) {
-  const bits = pattern.repeat(REPEATS);
-  const width = bits.length * STEP;
+/**
+ * 一行二进制流：棋子只写一遍，作为 SVG 的图案（pattern）沿整行平铺，页面不必重复写出数百枚棋子；
+ * id 为图案在页面中唯一的名称，reverse 为反向移动
+ */
+function streamRow(pattern: string, id: string, reverse: boolean) {
+  const period = pattern.length * STEP;
+  const width = period * REPEATS * SEGMENTS;
   const half = STEP / 2;
   const radius = (STEP * STONE_RATIO).toFixed(2);
-  const stones = [...bits].map((bit, i) => `<circle class="${bit === '1' ? 'b' : 'w'}" cx="${i * STEP + half}" cy="${half}" r="${radius}"/>`).join('');
-  const svg = `<svg viewBox="0 0 ${width} ${STEP}" aria-hidden="true">${stones}</svg>`;
-  return `<div class="stream-row${reverse ? ' rev' : ''}"><div class="stream-track">${svg}${svg}</div></div>`;
+  const stones = [...pattern].map((bit, i) => `<circle class="${bit === '1' ? 'b' : 'w'}" cx="${i * STEP + half}" cy="${half}" r="${radius}"/>`).join('');
+  const tile = `<defs><pattern id="${id}" width="${period}" height="${STEP}" patternUnits="userSpaceOnUse">${stones}</pattern></defs>`;
+  const svg = `<svg viewBox="0 0 ${width} ${STEP}" aria-hidden="true">${tile}<rect width="${width}" height="${STEP}" fill="url(#${id})"/></svg>`;
+  return `<div class="stream-row${reverse ? ' rev' : ''}"><div class="stream-track">${svg}</div></div>`;
 }
 
-/** 黑白棋子排成的两行二进制流，两行反向移动 */
-export function stream() {
+/** 黑白棋子排成的两行二进制流，两行反向移动；name 区分同一页面中的几处，使图案的名称不重复 */
+export function stream(name: string) {
   const shifted = BITS.slice(BITS.length / 2) + BITS.slice(0, BITS.length / 2);
-  return `<div class="stream" aria-hidden="true">${streamRow(BITS, false)}${streamRow(shifted, true)}</div>`;
+  return `<div class="stream" aria-hidden="true">${streamRow(BITS, `stream-${name}-a`, false)}${streamRow(shifted, `stream-${name}-b`, true)}</div>`;
 }
 
 /** “两种棋”一节背后的圆与方：随滚动升降、旋转 */

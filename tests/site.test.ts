@@ -106,4 +106,14 @@ describe('主页与下载页面', () => {
       }
     });
   });
+
+  it('页面中的 id 不重复：二进制流的图案按 id 引用，主页有两处流，重名时后一处会画成前一处的图案', async () => {
+    await withSite(async get => {
+      for (const route of ['/', '/download/']) {
+        const ids = [...(await (await get(route, { 'user-agent': UA.winEdge })).text()).matchAll(/\sid="([^"]+)"/g)].map(m => m[1] ?? '');
+        expect(ids.filter((id, i) => ids.indexOf(id) !== i)).toEqual([]);
+        expect(ids.filter(id => id.startsWith('stream-')).length).toBeGreaterThan(0);
+      }
+    });
+  });
 });
