@@ -38,7 +38,7 @@ export function featureRing() {
       `<span class="card-no">No.${no} / ${total}</span><h3>${title}</h3><span class="card-note">${note}</span></article>`
     );
   }).join('');
-  return `<section class="ringsec ink" id="features">${stream()}<div class="ring-pin">
+  return `<section class="ringsec ink" id="features">${stream('ring')}<div class="ring-pin">
 <div class="sec-head"><span class="idx">叁</span><span class="label">功能一览</span><h2>十二项功能，环绕一周</h2></div>
 <div class="ring-stage"><div class="ring">${cards}</div></div></div></section>`;
 }

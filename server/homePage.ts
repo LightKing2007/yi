@@ -141,7 +141,7 @@ function details() {
 <div class="fig rv"><b>3<small>次</small></b><p>联机对局中，悔棋与求和须经对方同意，每局每方各限 3 次。</p></div>
 <div class="fig rv"><b>7.5<small>目</small></b><p>围棋按数子法计分，黑方贴 7.5 目；点目结果须经双方确认。</p></div>
 <div class="fig rv"><b>19<small>个</small></b><p>排位段位自十级、一级、初段直至九段，按 Elo 等级分升降。</p></div>
-</div>${stream()}</section>`;
+</div>${stream('tongues')}</section>`;
 }
 
 function finale(pkgs: PagePkg[], detected: Detected) {

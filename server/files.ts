@@ -196,7 +196,7 @@ function checksums(dir: string) {
  * 按这几项分别缓存；各项的取值都有限（platform.ts），缓存不会无限增长。route 为 HOME 或 DOWNLOAD
  */
 function pages(pkgs: ReturnType<typeof listing>, sums: ReturnType<typeof checksums>) {
-  let cache = { from: null as Pkg[] | null, bodies: new Map<string, string>() };
+  let cache = { from: null as Pkg[] | null, bodies: new Map<string, Buffer>() };
   return (route: string, req: IncomingMessage, starting: boolean) => {
     const current = pkgs.load();
     if (cache.from !== current) cache = { from: null, bodies: new Map() };
@@ -205,7 +205,8 @@ function pages(pkgs: ReturnType<typeof listing>, sums: ReturnType<typeof checksu
     const cached = cache.bodies.get(key);
     if (cached !== undefined) return cached;
     const shown: PagePkg[] = current.map(p => ({ ...p, sha256: sums.get(p) }));
-    const body = route === HOME ? homePage(shown, detected, __APP_VERSION__) : downloadPage(shown, detected, __APP_VERSION__, starting);
+    const html = route === HOME ? homePage(shown, detected, __APP_VERSION__) : downloadPage(shown, detected, __APP_VERSION__, starting);
+    const body = Buffer.from(html);
     if (shown.every(p => p.sha256)) cache = { from: current, bodies: cache.bodies.set(key, body) }; // 校验值未算完时不缓存，下次重新生成
     return body;
   };
@@ -234,8 +235,8 @@ function parseUrl(req: IncomingMessage): { name: string; starting: boolean } | n
 }
 
 /** 主页或下载页面 */
-function sendPage(res: ServerResponse, body: string, head: boolean) {
-  res.writeHead(OK, { ...HTML_HEADERS, 'Content-Length': Buffer.byteLength(body) }).end(head ? undefined : body);
+function sendPage(res: ServerResponse, body: Buffer, head: boolean) {
+  res.writeHead(OK, { ...HTML_HEADERS, 'Content-Length': body.length }).end(head ? undefined : body);
 }
 
 /** /assets/ 下的资源：只给 ASSET_TYPES 名单中、构建时已嵌入的 */

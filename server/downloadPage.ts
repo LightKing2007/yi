@@ -141,7 +141,7 @@ function all(pkgs: PagePkg[], detected: Detected) {
   const rows = pkgs.length
     ? `<div class="rows" role="list">${pkgs.map(p => row(p, p.platform === detected.platform)).join('')}</div>`
     : '<p class="none">暂无可供下载的安装程序。</p>';
-  return `<section class="all ink reveal-circle" id="all">${RINGS}${stream()}
+  return `<section class="all ink reveal-circle" id="all">${RINGS}${stream('all')}
 <div class="sec-head"><span class="idx">贰</span><span class="label">全部版本</span><h2>其他版本</h2>
 <p>如需为其他计算机下载，或使用 Intel 芯片的 Mac，请从下表中选择。下载支持断点续传。</p></div>${rows}</section>`;
 }
