@@ -106,5 +106,5 @@
 | DAT-062 | A | 数据库备份统一使用 SQLite 的在线备份接口（`VACUUM INTO` 或 backup API），严禁直接复制正在写入的数据库文件 | 满足（迁移前备份与 `node server.cjs backup` 均以 `VACUUM INTO` 生成快照，见 `server/db/index.ts`、`server/db/backup.ts`；2026-10-24 起在线上运行） |
 | DAT-063 | A | 异地备份必须先用 age 或 GPG 加密，私钥严禁存放在服务器上 | 满足（P1-13，#82：以 age 加密后上传，私钥只在项目所有者本机；OSS 的访问密钥只有两个前缀的 PutObject 权限） |
 | DAT-064 | A | 每个备份文件必须同时保存 SHA-256 校验和；备份任务失败必须写 `error` 日志，并在当日运维检查中处理 | 满足（`scripts/server/backup.sh` 为每份写 `.sha256`，失败写 error 级别日志；3.0.0 起由 `node server.cjs backup` 写 `.sha256`，失败写 `db.backup-failed`；异地备份上传前核对 `.sha256`，上传时以 Content-MD5 与 ETag 核对；每日检查见 [ops.md](../procedures/ops.md) 第 2 章） |
-| DAT-065 | D | 每季度必须演练一次恢复：从异地备份恢复到临时目录，校验条数与校验和，并把结果记入 `docs/audits/` | 满足（2026-10-05 首次演练通过，见 [audits/2026-10-05-restore-drill.md](../audits/2026-10-05-restore-drill.md)；下一次在 2027 年第 1 季度） |
+| DAT-065 | D | 每季度必须演练一次恢复：从异地备份恢复到临时目录，校验条数与校验和，并把结果记入 `docs/audits/` | 满足（2026-10-05 首次演练通过，见 [audits/2026-10-05-restore-drill.md](../audits/2026-10-05-restore-drill.md)；2026-10-29 以数据库的异地备份再次演练通过，见 [audits/2026-10-29-restore-drill.md](../audits/2026-10-29-restore-drill.md)；下一次在 2027 年第 1 季度） |
 | DAT-066 | A | 执行任何会修改生产数据的手工操作前，必须先手工备份一次 | 满足（未成文） |
