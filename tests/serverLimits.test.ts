@@ -9,120 +9,128 @@ import { PENDING_MAX } from '../server/rooms';
 import { HTTP_LIMITS, hardenHttp, startHost } from '../server/host';
 import { fileServer } from '../server/files';
 import { CLOSE_CODE, HELLO_SECS, PROTO_VERSION, type S2C } from '../src/shared/protocol';
+import { must } from './must';
 import { expectClientAccepts, newUid, Client, world, startGame } from './serverWorld';
 
-describe('限流与违规（API-042 至 API-046）', () => {
-  const LIMITED = { t: 'error', text: '操作过于频繁，请稍后再试' };
-  /** 绕过类型检查，发一条任意内容的消息 */
-  const raw = (c: Client, m: unknown) => {
-    c.sess = c.srv.message(c.sess, m, c.conn);
-  };
+const LIMITED = { t: 'error', text: '操作过于频繁，请稍后再试' };
+/** 绕过类型检查，发一条任意内容的消息 */
+const raw = (client: Client, m: unknown) => {
+  client.sess = client.srv.message(client.sess, m, client.conn);
+};
 
+describe('限流与违规（API-042 至 API-046）', () => {
   it('消息洪泛：超出令牌桶的消息被丢弃且只提示一次，持续洪泛即以 1008 断开，5 分钟内同一身份连不上', () => {
     const { srv, advance } = world();
-    const a = new Client(srv, '甲');
-    a.drain();
-    for (let i = 0; i < 50; i++) a.send({ t: 'ping' }); // 握手已用掉 1 个令牌，余 39 个
-    expect(a.inbox.filter(m => m.t === 'pong')).toHaveLength(39);
-    expect(a.inbox.filter(m => m.t === 'error')).toEqual([LIMITED]);
-    expect(a.closeCode).toBe(CLOSE_CODE.policy); // 第 10 条被丢弃的消息累计到上限
-    const again = new Client(srv, '甲', undefined, a.uid);
+    const jia = new Client(srv, '甲');
+    jia.drain();
+    for (let i = 0; i < 50; i++) jia.send({ t: 'ping' }); // 握手已用掉 1 个令牌，余 39 个
+    expect(jia.inbox.filter(m => m.t === 'pong')).toHaveLength(39);
+    expect(jia.inbox.filter(m => m.t === 'error')).toEqual([LIMITED]);
+    expect(jia.closeCode).toBe(CLOSE_CODE.policy); // 第 10 条被丢弃的消息累计到上限
+    const again = new Client(srv, '甲', undefined, jia.uid);
     expect(again.welcome).toBeUndefined();
     expect(again.inbox).toEqual([LIMITED]);
     expect(again.closeCode).toBe(CLOSE_CODE.policy);
     expect(new Client(srv, '乙').welcome).toBeTruthy(); // 其他身份不受影响
     advance(5 * 60);
-    expect(new Client(srv, '甲', undefined, a.uid).welcome).toBeTruthy();
+    expect(new Client(srv, '甲', undefined, jia.uid).welcome).toBeTruthy();
   });
 
   it('令牌按每秒 20 个恢复：洪泛停下 1 秒后照常处理', () => {
     const { srv, advance } = world();
-    const a = new Client(srv, '甲');
-    for (let i = 0; i < 40; i++) a.send({ t: 'ping' });
-    expect(a.inbox.at(-1)).toEqual(LIMITED);
+    const jia = new Client(srv, '甲');
+    for (let i = 0; i < 40; i++) jia.send({ t: 'ping' });
+    expect(jia.inbox.at(-1)).toEqual(LIMITED);
     advance(1);
-    a.drain();
-    for (let i = 0; i < 20; i++) a.send({ t: 'ping' });
-    expect(a.inbox).toEqual(Array(20).fill({ t: 'pong' }));
-    expect(a.closed).toBe(false);
+    jia.drain();
+    for (let i = 0; i < 20; i++) jia.send({ t: 'ping' });
+    expect(jia.inbox).toEqual(Array(20).fill({ t: 'pong' }));
+    expect(jia.closed).toBe(false);
   });
 
   it('对局中 60 秒内累计 10 次非法消息即被断开，带令牌也重连不上，到时按掉线判负', () => {
     const { srv, idle } = world();
-    const a = new Client(srv, '甲'),
-      b = new Client(srv, '乙');
-    startGame(a, b);
-    for (let i = 0; i < 9; i++) raw(a, { t: 'move', x: -1, y: 0 });
-    expect(a.closed).toBe(false);
-    raw(a, { t: 'move', x: -1, y: 0 });
-    expect(a.closeCode).toBe(CLOSE_CODE.policy);
-    expect(b.expect('peer')?.online).toBe(false);
-    const back = new Client(srv, '甲', a.token, a.uid);
+    const jia = new Client(srv, '甲'),
+      yi = new Client(srv, '乙');
+    startGame(jia, yi);
+    for (let i = 0; i < 9; i++) raw(jia, { t: 'move', x: -1, y: 0 });
+    expect(jia.closed).toBe(false);
+    raw(jia, { t: 'move', x: -1, y: 0 });
+    expect(jia.closeCode).toBe(CLOSE_CODE.policy);
+    expect(yi.expect('peer')?.online).toBe(false);
+    const back = new Client(srv, '甲', jia.token, jia.uid);
     expect(back.closeCode).toBe(CLOSE_CODE.policy);
-    idle(61, b);
-    expect(b.expect('over')).toEqual({ t: 'over', winner: 2, reason: 'disconnect' });
+    idle(61, yi);
+    expect(yi.expect('over')).toEqual({ t: 'over', winner: 2, reason: 'disconnect' });
   });
 
   it('违规分散在 60 秒以外的不累计', () => {
     const { srv, idle } = world();
-    const a = new Client(srv, '甲');
-    for (let i = 0; i < 9; i++) raw(a, { t: 'nope' });
-    idle(60, a);
-    for (let i = 0; i < 9; i++) raw(a, { t: 'nope' });
-    expect(a.closed).toBe(false);
+    const jia = new Client(srv, '甲');
+    for (let i = 0; i < 9; i++) raw(jia, { t: 'nope' });
+    idle(60, jia);
+    for (let i = 0; i < 9; i++) raw(jia, { t: 'nope' });
+    expect(jia.closed).toBe(false);
   });
+});
 
+describe('握手时限、改名与匹配队列的次数（API-044）', () => {
   it('握手超时：10 秒内没有发来合法的 hello 即以 4008 关闭，心跳回应不延长时限', () => {
     const { srv, advance } = world();
     let code: number | undefined;
-    const s = srv.connect({
-      send: () => {},
-      close: c => {
-        code = c;
-      },
-    })!;
-    srv.message(s, { t: 'ping' });
+    const sess = must(
+      srv.connect({
+        send: () => {},
+        close: closeCode => {
+          code = closeCode;
+        },
+      }) ?? undefined,
+      '服务端接受的连接',
+    );
+    srv.message(sess, { t: 'ping' });
     advance(HELLO_SECS - 1);
-    srv.touch(s);
+    srv.touch(sess);
     expect(code).toBeUndefined();
     advance(2);
     expect(code).toBe(CLOSE_CODE.helloTimeout);
-    const a = new Client(srv, '甲');
+    const jia = new Client(srv, '甲');
     advance(HELLO_SECS * 2);
-    expect(a.closed).toBe(false);
+    expect(jia.closed).toBe(false);
   });
 
   it('改名：与当前昵称相同的不计次数，真正改名每 10 秒至多 1 次（API-044）', () => {
     const { srv } = world();
-    const a = new Client(srv, '甲'),
-      b = new Client(srv, '丁');
-    a.drain();
-    for (let i = 0; i < 5; i++) a.send({ t: 'name', name: '甲' }); // 客户端每次匹配前都会发一次
-    a.send({ t: 'name', name: '乙' });
-    expect(a.inbox).toEqual([]);
-    a.send({ t: 'name', name: '丙' });
-    expect(a.inbox).toEqual([LIMITED]);
-    a.send({ t: 'queue', mode: 'match', type: 0, size: 15 });
-    b.send({ t: 'queue', mode: 'match', type: 0, size: 15 });
-    expect(b.expect('found')?.opp.name).toBe('乙');
+    const jia = new Client(srv, '甲'),
+      ding = new Client(srv, '丁');
+    jia.drain();
+    for (let i = 0; i < 5; i++) jia.send({ t: 'name', name: '甲' }); // 客户端每次匹配前都会发一次
+    jia.send({ t: 'name', name: '乙' });
+    expect(jia.inbox).toEqual([]);
+    jia.send({ t: 'name', name: '丙' });
+    expect(jia.inbox).toEqual([LIMITED]);
+    jia.send({ t: 'queue', mode: 'match', type: 0, size: 15 });
+    ding.send({ t: 'queue', mode: 'match', type: 0, size: 15 });
+    expect(ding.expect('found')?.opp.name).toBe('乙');
   });
 
   it('进入、退出匹配队列合计每 10 秒至多 10 次（API-044）', () => {
     const { srv, idle } = world();
-    const a = new Client(srv, '甲');
+    const jia = new Client(srv, '甲');
     for (let i = 0; i < 5; i++) {
-      a.send({ t: 'queue', mode: 'match', type: 0, size: 15 });
-      a.send({ t: 'unqueue' });
+      jia.send({ t: 'queue', mode: 'match', type: 0, size: 15 });
+      jia.send({ t: 'unqueue' });
     }
-    a.drain();
-    a.send({ t: 'queue', mode: 'match', type: 0, size: 15 });
-    expect(a.inbox).toEqual([LIMITED]);
+    jia.drain();
+    jia.send({ t: 'queue', mode: 'match', type: 0, size: 15 });
+    expect(jia.inbox).toEqual([LIMITED]);
     expect(srv.queued('match', 0)).toBe(0);
-    idle(10, a);
-    a.send({ t: 'queue', mode: 'match', type: 0, size: 15 });
+    idle(10, jia);
+    jia.send({ t: 'queue', mode: 'match', type: 0, size: 15 });
     expect(srv.queued('match', 0)).toBe(1);
   });
+});
 
+describe('全局上限（API-046）', () => {
   it('满员时对局中掉线的玩家带令牌重连，仍能回到原来的对局，不被告知服务器繁忙', () => {
     const { srv } = world();
     const jia = new Client(srv, '甲'),
@@ -184,8 +192,8 @@ describe('连接层的限制（API-041、API-042、API-047）', () => {
   };
 
   it('同一 IP 每分钟新建连接超过 30 次即以 1013 关闭，此后 60 秒内仍被拒', async () => {
-    let t = 1000;
-    const host = await startHost(0, { host: '127.0.0.1', now: () => t });
+    let clock = 1000;
+    const host = await startHost(0, { host: '127.0.0.1', now: () => clock });
     const url = `ws://127.0.0.1:${host.port}`;
     try {
       for (let i = 0; i < 30; i++) {
@@ -193,9 +201,9 @@ describe('连接层的限制（API-041、API-042、API-047）', () => {
         await until(() => host.server.online() === 0); // 等服务端处理完断开，免得撞上同时连接数的上限
       }
       expect(await attempt(url)).toBe(CLOSE_CODE.overload);
-      t += 59;
+      clock += 59;
       expect(await attempt(url)).toBe(CLOSE_CODE.overload);
-      t += 1;
+      clock += 1;
       expect(await attempt(url)).toBe('welcome');
     } finally {
       await host.close();
@@ -225,10 +233,12 @@ describe('连接层的限制（API-041、API-042、API-047）', () => {
       await host.close();
     }
   });
+});
 
+describe('连接与下载的超时（API-047）', () => {
   it('真实连接上握手超时以 4008 关闭', async () => {
-    let t = 1000;
-    const host = await startHost(0, { host: '127.0.0.1', now: () => t });
+    let clock = 1000;
+    const host = await startHost(0, { host: '127.0.0.1', now: () => clock });
     try {
       const ws = new WebSocket(`ws://127.0.0.1:${host.port}`);
       const closed = new Promise<number>(r => ws.on('close', code => r(code)));
@@ -236,7 +246,7 @@ describe('连接层的限制（API-041、API-042、API-047）', () => {
         ws.on('open', res);
         ws.on('error', rej);
       });
-      t += HELLO_SECS + 1;
+      clock += HELLO_SECS + 1;
       expect(await closed).toBe(CLOSE_CODE.helloTimeout);
     } finally {
       await host.close();
@@ -244,13 +254,13 @@ describe('连接层的限制（API-041、API-042、API-047）', () => {
   });
 
   it('HTTP 服务器设有超时与请求头上限（API-047）', () => {
-    const s = http.createServer();
-    hardenHttp(s);
+    const server = http.createServer();
+    hardenHttp(server);
     expect({
-      headersTimeout: s.headersTimeout,
-      requestTimeout: s.requestTimeout,
-      keepAliveTimeout: s.keepAliveTimeout,
-      maxHeadersCount: s.maxHeadersCount,
+      headersTimeout: server.headersTimeout,
+      requestTimeout: server.requestTimeout,
+      keepAliveTimeout: server.keepAliveTimeout,
+      maxHeadersCount: server.maxHeadersCount,
     }).toEqual(HTTP_LIMITS);
   });
 

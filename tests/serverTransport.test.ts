@@ -8,29 +8,31 @@ import { describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { startHost } from '../server/host';
 import { PROTO_VERSION, type S2C } from '../src/shared/protocol';
-import { newUid } from './serverWorld';
+import { newUid, type Msg } from './serverWorld';
 
 describe('WebSocket 传输', () => {
   it('两个真实连接开一局并在断线后重连', async () => {
     const host = await startHost(0, { host: '127.0.0.1' });
     const url = `ws://127.0.0.1:${host.port}`;
     const open = (name: string, token?: string) =>
-      new Promise<{ ws: WebSocket; next: (t: S2C['t']) => Promise<any> }>((res, rej) => {
+      new Promise<{ ws: WebSocket; next: <T extends S2C['t']>(type: T) => Promise<Msg<T>> }>((res, rej) => {
         const ws = new WebSocket(url),
           inbox: S2C[] = [],
           waiters: [S2C['t'], (m: S2C) => void][] = [];
-        ws.on('message', d => {
-          const m = JSON.parse(String(d)) as S2C;
-          const w = waiters.findIndex(([t]) => t === m.t);
-          if (w >= 0) waiters.splice(w, 1)[0]?.[1](m);
+        ws.on('message', data => {
+          const m = JSON.parse(String(data)) as S2C;
+          const idx = waiters.findIndex(([type]) => type === m.t);
+          if (idx >= 0) waiters.splice(idx, 1)[0]?.[1](m);
           else inbox.push(m);
         });
-        const next = (t: S2C['t']) =>
-          new Promise<S2C>(r => {
-            const i = inbox.findIndex(m => m.t === t);
+        /** 等到下一条该类型的消息 */
+        const next = <T extends S2C['t']>(type: T) =>
+          new Promise<Msg<T>>(r => {
+            const deliver = (m: S2C) => r(m as Msg<T>);
+            const i = inbox.findIndex(m => m.t === type);
             const found = i >= 0 ? inbox.splice(i, 1)[0] : undefined;
-            if (found) r(found);
-            else waiters.push([t, r]);
+            if (found) deliver(found);
+            else waiters.push([type, deliver]);
           });
         ws.on('open', () => {
           ws.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, name, uid: newUid(), token }));
@@ -39,25 +41,25 @@ describe('WebSocket 传输', () => {
         ws.on('error', rej);
       });
     try {
-      const a = await open('甲'),
-        b = await open('乙');
-      await a.next('welcome');
-      const wb = await b.next('welcome');
-      a.ws.send(JSON.stringify({ t: 'create', type: 0, size: 15, hostColor: 0, renju: true, moveTime: 0 }));
-      const { code } = await a.next('created');
-      b.ws.send(JSON.stringify({ t: 'join', code }));
-      expect((await b.next('start')).color).toBe(2);
-      a.ws.send(JSON.stringify({ t: 'move', x: 7, y: 7 }));
-      expect(await b.next('moved')).toEqual({ t: 'moved', x: 7, y: 7 });
-      a.ws.send('不是 JSON'); // 不是 JSON 的内容按非法消息回复，连接照常
-      expect(await a.next('error')).toEqual({ t: 'error', text: '消息格式错误' });
-      b.ws.terminate();
-      expect((await a.next('peer')).online).toBe(false);
-      const b2 = await open('乙', wb.token);
-      expect((await b2.next('sync')).acts).toEqual([{ k: 'M', x: 7, y: 7 }]);
-      expect((await a.next('peer')).online).toBe(true);
-      a.ws.close();
-      b2.ws.close();
+      const jia = await open('甲'),
+        yi = await open('乙');
+      await jia.next('welcome');
+      const wb = await yi.next('welcome');
+      jia.ws.send(JSON.stringify({ t: 'create', type: 0, size: 15, hostColor: 0, renju: true, moveTime: 0 }));
+      const { code } = await jia.next('created');
+      yi.ws.send(JSON.stringify({ t: 'join', code }));
+      expect((await yi.next('start')).color).toBe(2);
+      jia.ws.send(JSON.stringify({ t: 'move', x: 7, y: 7 }));
+      expect(await yi.next('moved')).toEqual({ t: 'moved', x: 7, y: 7 });
+      jia.ws.send('不是 JSON'); // 不是 JSON 的内容按非法消息回复，连接照常
+      expect(await jia.next('error')).toEqual({ t: 'error', text: '消息格式错误' });
+      yi.ws.terminate();
+      expect((await jia.next('peer')).online).toBe(false);
+      const yi2 = await open('乙', wb.token);
+      expect((await yi2.next('sync')).acts).toEqual([{ k: 'M', x: 7, y: 7 }]);
+      expect((await jia.next('peer')).online).toBe(true);
+      jia.ws.close();
+      yi2.ws.close();
     } finally {
       await host.close();
     }
@@ -112,14 +114,16 @@ describe('安装包下载', () => {
       fs.rmSync(dir, { recursive: true });
     }
   });
+});
 
+describe('网站页面', () => {
   it('主页与下载页面带安全响应头，只提供名单内的资源，页脚有 ICP 备案号；SHA256SUMS 与页面上的校验值一致（API-060、API-063、SEC-070）', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-files-'));
     fs.writeFileSync(path.join(dir, 'Yi-2.0.3-win-x64-setup.exe'), 'windows');
     fs.writeFileSync(path.join(dir, 'Yi-2.0.3-linux-x86_64.AppImage'), 'linux');
     const host = await startHost(0, { host: '127.0.0.1', files: dir });
     const base = `http://127.0.0.1:${host.port}`;
-    const sha = (s: string) => createHash('sha256').update(s).digest('hex');
+    const sha = (text: string) => createHash('sha256').update(text).digest('hex');
     try {
       for (const route of ['/', '/download/', '/download/?start']) {
         const page = await fetch(base + route);
@@ -162,7 +166,9 @@ describe('安装包下载', () => {
       fs.rmSync(dir, { recursive: true });
     }
   });
+});
 
+describe('下载名额与未设安装包目录', () => {
   it('经本机反向代理的下载按真实地址计数：同一地址同时至多 2 个，其他地址照常下载', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-files-'));
     fs.writeFileSync(path.join(dir, 'Yi-2.0.9-linux-x86_64.AppImage'), Buffer.alloc(16 * 1024 * 1024)); // 足够大，暂停读取时下载一直进行
