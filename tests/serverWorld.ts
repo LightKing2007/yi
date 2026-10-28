@@ -3,6 +3,7 @@ import { expect } from 'vitest';
 import { MemoryStore, RoomServer, type Conn, type RatingStore, type RoomServerOptions, type Session } from '../server/rooms';
 import { PROTO_VERSION, type C2S, type S2C } from '../src/shared/protocol';
 import { parseS2C } from '../src/shared/parse';
+import { must } from './must';
 
 export type Msg<T extends S2C['t']> = Extract<S2C, { t: T }>;
 
@@ -42,27 +43,27 @@ export class Client {
         this.closeCode = code;
       },
     };
-    this.sess = srv.connect(this.conn)!;
+    this.sess = must(srv.connect(this.conn) ?? undefined, '服务端接受的连接');
     this.send({ t: 'hello', v: PROTO_VERSION, name, uid, token });
-    const w = (this.welcome = this.expect('welcome'));
-    if (w) {
-      this.id = w.id;
-      this.token = w.token;
+    const welcome = (this.welcome = this.expect('welcome'));
+    if (welcome) {
+      this.id = welcome.id;
+      this.token = welcome.token;
     }
   }
   send(m: C2S) {
     this.sess = this.srv.message(this.sess, m, this.conn);
   }
   /** 取出第一条该类型（且满足条件）的消息，连同它之前的消息一起丢掉 */
-  expect<T extends S2C['t']>(t: T, where?: (m: Msg<T>) => boolean): Msg<T> | undefined {
-    const i = this.inbox.findIndex(m => m.t === t && (!where || where(m as Msg<T>)));
+  expect<T extends S2C['t']>(type: T, where?: (m: Msg<T>) => boolean): Msg<T> | undefined {
+    const i = this.inbox.findIndex(m => m.t === type && (!where || where(m as Msg<T>)));
     if (i < 0) return undefined;
     const m = this.inbox[i] as Msg<T>;
     this.inbox.splice(0, i + 1);
     return m;
   }
-  has(t: S2C['t']) {
-    return this.inbox.some(m => m.t === t);
+  has(type: S2C['t']) {
+    return this.inbox.some(m => m.t === type);
   }
   drain() {
     this.inbox = [];
@@ -86,46 +87,57 @@ export function clientAt(srv: RoomServer, name: string, ip: string) {
 }
 
 export function world(store: RatingStore = new MemoryStore(), opt: RoomServerOptions = {}) {
-  let t = 1000;
-  const srv = new RoomServer({ now: () => t, random: () => 0.3, store, ...opt });
-  const advance = (s: number) => {
-    t += s;
+  let clock = 1000;
+  const srv = new RoomServer({ now: () => clock, random: () => 0.3, store, ...opt });
+  const advance = (secs: number) => {
+    clock += secs;
     srv.tick();
   };
   /** 时间流逝，期间这些客户端照常每 10 秒发一次心跳 */
-  const idle = (s: number, ...cs: Client[]) => {
-    while (s > 0) {
-      const d = Math.min(s, 10);
-      cs.forEach(c => c.send({ t: 'ping' }));
-      advance(d);
-      s -= d;
+  const idle = (secs: number, ...cs: Client[]) => {
+    while (secs > 0) {
+      const step = Math.min(secs, 10);
+      cs.forEach(client => client.send({ t: 'ping' }));
+      advance(step);
+      secs -= step;
     }
   };
   return { srv, advance, idle, store };
 }
 
 /** 按顺序落子，每一手双方都必须收到 `moved` */
-export function play(a: Client, b: Client, seq: [Client, number, number][]) {
+export function play(first: Client, second: Client, seq: [Client, number, number][]) {
   for (const [who, x, y] of seq) {
     who.send({ t: 'move', x, y });
-    expect(a.expect('moved')).toBeTruthy();
-    expect(b.expect('moved')).toBeTruthy();
+    expect(first.expect('moved')).toBeTruthy();
+    expect(second.expect('moved')).toBeTruthy();
   }
 }
 
-/** 好友房间开一局：a 开房间，b 用房号加入 */
-export function startGame(a: Client, b: Client, o: Partial<Extract<C2S, { t: 'create' }>> = {}) {
-  a.send({ t: 'create', type: 0, size: 15, hostColor: 0, renju: true, moveTime: 0, ...o });
-  const code = a.expect('created')!.code;
-  b.send({ t: 'join', code });
-  return { code, sa: a.expect('start')!, sb: b.expect('start')! };
+/** 好友房间开一局：host 开房间，guest 用房号加入 */
+export function startGame(host: Client, guest: Client, options: Partial<Extract<C2S, { t: 'create' }>> = {}) {
+  host.send({ t: 'create', type: 0, size: 15, hostColor: 0, renju: true, moveTime: 0, ...options });
+  const { code } = must(host.expect('created'), '开房间的回应');
+  guest.send({ t: 'join', code });
+  return { code, sa: must(host.expect('start'), '房主的开局消息'), sb: must(guest.expect('start'), '加入者的开局消息') };
+}
+
+/** 9 路围棋开一局（host 执黑）：黑子占满第 3 列、白子占满第 7 列，再在白地里落一颗孤零零的黑子 (7, 4)，留待点目时标为死子 */
+export function startWithDeadStone(host: Client, guest: Client) {
+  startGame(host, guest, { type: 1, size: 9 });
+  for (let y = 0; y < 9; y++)
+    play(host, guest, [
+      [host, 2, y],
+      [guest, 6, y],
+    ]);
+  play(host, guest, [[host, 7, 4]]);
 }
 
 /** 两人进同一队列并都接受，返回双方的开局消息 */
-export function matchUp(a: Client, b: Client, mode: 'match' | 'ranked' = 'match', type = 0) {
-  a.send({ t: 'queue', mode, type, size: 19 });
-  b.send({ t: 'queue', mode, type, size: 19 });
-  a.send({ t: 'confirm', ok: true });
-  b.send({ t: 'confirm', ok: true });
-  return { sa: a.expect('start')!, sb: b.expect('start')! };
+export function matchUp(first: Client, second: Client, mode: 'match' | 'ranked' = 'match', type = 0) {
+  first.send({ t: 'queue', mode, type, size: 19 });
+  second.send({ t: 'queue', mode, type, size: 19 });
+  first.send({ t: 'confirm', ok: true });
+  second.send({ t: 'confirm', ok: true });
+  return { sa: must(first.expect('start'), '先进队列一方的开局消息'), sb: must(second.expect('start'), '后进队列一方的开局消息') };
 }
