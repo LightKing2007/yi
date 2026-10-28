@@ -9,7 +9,7 @@ import type { LogEntry, LogLevel } from '../server/log';
 import { Metrics } from '../server/metrics';
 import { replay, type GameRecord } from '../src/core/record';
 import { MOVES_MAX, type C2S, type S2C } from '../src/shared/protocol';
-import { Client, matchUp, play, startGame, world } from './serverWorld';
+import { Client, matchUp, play, startGame, startWithDeadStone, world } from './serverWorld';
 import { MemoryStore } from '../server/rooms';
 import type { GameEnd, GameStart, Settle } from '../server/roomTypes';
 
@@ -135,13 +135,7 @@ describe('对局记录的种类与终局', () => {
     const { srv, record } = dbWorld();
     const jia = new Client(srv, '甲'),
       yi = new Client(srv, '乙');
-    startGame(jia, yi, { type: 1, size: 9 });
-    for (let y = 0; y < 9; y++)
-      play(jia, yi, [
-        [jia, 2, y],
-        [yi, 6, y],
-      ]);
-    play(jia, yi, [[jia, 7, 4]]);
+    startWithDeadStone(jia, yi);
     for (const who of [yi, jia]) who.send({ t: 'pass' });
     yi.send({ t: 'mark', x: 7, y: 4 });
     jia.send({ t: 'agree' });

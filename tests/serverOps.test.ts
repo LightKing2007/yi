@@ -10,26 +10,26 @@ import type { Log, LogEntry, LogLevel } from '../server/log';
 import { CLOSE_CODE, CONFIRM_SECS, PROTO_VERSION, type C2S } from '../src/shared/protocol';
 import { newUid, Client, world, play, startGame, matchUp } from './serverWorld';
 
-describe('服务端日志的事件（07-operations.md 第 8 节）', () => {
-  /** 带日志的服务端：logs 依次记下每一行的级别、事件码与内容 */
-  const logged = () => {
-    const logs: { level: LogLevel; event: string; entry: LogEntry }[] = [];
-    const w = world(new MemoryStore(), { log: (level, event, entry = {}) => logs.push({ level, event, entry }) });
-    const events = (...names: string[]) => logs.filter(row => names.includes(row.event));
-    return { ...w, logs, events };
-  };
+/** 带日志的服务端：logs 依次记下每一行的级别、事件码与内容 */
+const logged = () => {
+  const logs: { level: LogLevel; event: string; entry: LogEntry }[] = [];
+  const env = world(new MemoryStore(), { log: (level, event, entry = {}) => logs.push({ level, event, entry }) });
+  const events = (...names: string[]) => logs.filter(row => names.includes(row.event));
+  return { ...env, logs, events };
+};
 
+describe('服务端日志的事件：对局（07-operations.md 第 8 节）', () => {
   it('排位一局：上线、配对、开局、终局、两人的段位变化依次记下，带玩家、房间与对局编号', () => {
     const { srv, events } = logged();
-    const a = new Client(srv, '甲'),
-      b = new Client(srv, '乙');
-    const { sa } = matchUp(a, b, 'ranked');
-    const [blk, wht] = sa.color === 1 ? [a, b] : [b, a];
+    const jia = new Client(srv, '甲'),
+      yi = new Client(srv, '乙');
+    const { sa } = matchUp(jia, yi, 'ranked');
+    const [blk, wht] = sa.color === 1 ? [jia, yi] : [yi, jia];
     blk.send({ t: 'move', x: 7, y: 7 });
     wht.send({ t: 'resign' });
-    expect(events('player.online').map(row => row.entry.playerId)).toEqual([a.id, b.id]);
+    expect(events('player.online').map(row => row.entry.playerId)).toEqual([jia.id, yi.id]);
     expect(events('match.paired', 'game.start', 'game.over', 'rating.changed').map(row => [row.event, row.entry])).toEqual([
-      ['match.paired', expect.objectContaining({ mode: 'ranked', playerId: b.id, opponentId: a.id })],
+      ['match.paired', expect.objectContaining({ mode: 'ranked', playerId: yi.id, opponentId: jia.id })],
       ['game.start', expect.objectContaining({ roomId: 1, gameId: 1, kind: 'ranked' })],
       ['game.over', expect.objectContaining({ roomId: 1, gameId: 1, winner: 1, reason: 'resign', moves: 1 })],
       ['rating.changed', expect.objectContaining({ playerId: blk.id, roomId: 1, gameId: 1, before: 1200, after: 1216 })],
@@ -39,13 +39,13 @@ describe('服务端日志的事件（07-operations.md 第 8 节）', () => {
 
   it('好友房间：开房间记下房间号；再来一局换新的对局编号，房间号不变', () => {
     const { srv, events } = logged();
-    const a = new Client(srv, '甲'),
-      b = new Client(srv, '乙');
-    startGame(a, b);
-    a.send({ t: 'resign' });
-    a.send({ t: 'rematch' });
-    b.send({ t: 'reply', kind: 'rematch', ok: true });
-    expect(events('room.created')).toEqual([{ level: 'info', event: 'room.created', entry: expect.objectContaining({ roomId: 1, playerId: a.id }) }]);
+    const jia = new Client(srv, '甲'),
+      yi = new Client(srv, '乙');
+    startGame(jia, yi);
+    jia.send({ t: 'resign' });
+    jia.send({ t: 'rematch' });
+    yi.send({ t: 'reply', kind: 'rematch', ok: true });
+    expect(events('room.created')).toEqual([{ level: 'info', event: 'room.created', entry: expect.objectContaining({ roomId: 1, playerId: jia.id }) }]);
     expect(events('game.start').map(row => [row.entry.roomId, row.entry.gameId])).toEqual([
       [1, 1],
       [1, 2],
@@ -58,28 +58,30 @@ describe('服务端日志的事件（07-operations.md 第 8 节）', () => {
     const gomoku = startGame(new Client(srv, '丙'), new Client(srv, '丁'), { type: 0, size: 19 });
     expect([go.sa.size, go.sa.renju, gomoku.sa.size, gomoku.sa.renju]).toEqual([19, false, 15, true]);
   });
+});
 
+describe('服务端日志的事件：连接（07-operations.md 第 8 节）', () => {
   it('断开与重连：断开时记下关闭码，重连时记下回到的房间', () => {
     const { srv, events } = logged();
-    const a = new Client(srv, '甲'),
-      c = new Client(srv, '丙');
-    startGame(a, c);
-    srv.disconnect(c.sess, c.conn, 1006);
-    new Client(srv, '丙', c.token);
+    const jia = new Client(srv, '甲'),
+      bing = new Client(srv, '丙');
+    startGame(jia, bing);
+    srv.disconnect(bing.sess, bing.conn, 1006);
+    new Client(srv, '丙', bing.token);
     expect(events('player.offline', 'player.resumed').map(row => [row.event, row.entry])).toEqual([
-      ['player.offline', expect.objectContaining({ playerId: c.id, code: 1006 })],
-      ['player.resumed', expect.objectContaining({ playerId: c.id, roomId: 1 })],
+      ['player.offline', expect.objectContaining({ playerId: bing.id, code: 1006 })],
+      ['player.resumed', expect.objectContaining({ playerId: bing.id, roomId: 1 })],
     ]);
   });
 
   it('消息洪泛：限流每秒只记一行并带累计违规次数，断开时记下 1008', () => {
     const { srv, events } = logged();
-    const a = new Client(srv, '甲');
-    for (let i = 0; i < 50; i++) a.send({ t: 'ping' });
+    const jia = new Client(srv, '甲');
+    for (let i = 0; i < 50; i++) jia.send({ t: 'ping' });
     expect(events('rate.limited', 'conn.kicked', 'player.offline').map(row => [row.level, row.event, row.entry])).toEqual([
-      ['warn', 'rate.limited', { playerId: a.id, count: 1 }],
-      ['warn', 'conn.kicked', expect.objectContaining({ playerId: a.id, code: CLOSE_CODE.policy })],
-      ['info', 'player.offline', expect.objectContaining({ playerId: a.id, code: CLOSE_CODE.policy })],
+      ['warn', 'rate.limited', { playerId: jia.id, count: 1 }],
+      ['warn', 'conn.kicked', expect.objectContaining({ playerId: jia.id, code: CLOSE_CODE.policy })],
+      ['info', 'player.offline', expect.objectContaining({ playerId: jia.id, code: CLOSE_CODE.policy })],
     ]);
   });
 
