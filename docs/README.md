@@ -45,9 +45,11 @@
 
 | 文件 | 内容 |
 |---|---|
-| [roadmap.md](plan/roadmap.md) | 架构改造路线图：目标、决策记录、未完成的阶段 5 至阶段 9、风险 |
+| [roadmap.md](plan/roadmap.md) | 架构改造路线图：目标、决策记录、已完成的阶段 4、5，后续阶段 6 至阶段 9 及风险 |
 | [remediation.md](plan/remediation.md) | 规范整改路线图：P0、P1、P2 整改项与待决策事项 |
-| [phase5.md](plan/phase5.md) | 阶段 5 开发计划：现状与差距、待决策事项、工作分解、验收、风险 |
+| [phase5.md](plan/phase5.md) | 阶段 5 开发与验收记录：2026-10-29 全部验收完成，保留决策、实施经过与风险说明 |
+| [next-development.md](plan/next-development.md) | 下一步开发计划：阶段 5 完成后的工作顺序、账号与协议升级的前置决策、实施批次及进度 |
+| [phase6-7.md](plan/phase6-7.md) | 阶段 6、7 设计草案：已确认账号规则、存储与身份边界、接口、协议约束及待定事项 |
 
 ### 2.4 架构决策记录（`adr/`）
 
@@ -57,6 +59,7 @@
 
 | 文件 | 内容 |
 |---|---|
+| [2026-10-30-account-foundations.md](audits/2026-10-30-account-foundations.md) | 账号基础与仓储开发验证：邮箱保护、八位 UID、迁移、事务及查询计划；不代替阶段验收 |
 | [2026-10-02-baseline.md](audits/2026-10-02-baseline.md) | 基线审查报告：16 项既有规范的审查、38 项发现、实测数据 |
 | [2026-10-03-full-audit.md](audits/2026-10-03-full-audit.md) | 全面审计报告：150 个文件的代码审计、安全扫描、依赖更新，22 项发现 |
 | [2026-10-05-restore-drill.md](audits/2026-10-05-restore-drill.md) | 恢复演练记录（DAT-065）：从 OSS 的异地备份解密，与服务器上的本地备份逐字节一致 |
