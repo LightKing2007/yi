@@ -26,3 +26,26 @@ export const LOGIN_FAILURES = 5;
 export const LOGIN_IP_ATTEMPTS = 10;
 /** 登录来源统计窗口。 */
 export const LOGIN_IP_WINDOW_MS = MINUTE_MS;
+
+const CODE_TTL_MINUTES = 10;
+const CODE_SEND_TIMEOUT_SECS = 30;
+/** 验证码有效十分钟，精确到期即不可用。 */
+export const CODE_TTL_MS = CODE_TTL_MINUTES * MINUTE_MS;
+/** 同一挑战最多五次错误，之后须按原限额重新申请。 */
+export const CODE_ATTEMPTS = 5;
+/** 同邮箱所有用途共享六十秒冷却。 */
+export const CODE_COOLDOWN_MS = MINUTE_MS;
+/** 同邮箱滚动一天最多十次，发送失败也计入。 */
+export const CODE_EMAIL_BUDGET = 10;
+/** 同来源滚动一小时最多十次。 */
+export const CODE_SOURCE_BUDGET = 10;
+/** 来源统计窗口。 */
+export const CODE_SOURCE_WINDOW_MS = MINUTES_PER_HOUR * MINUTE_MS;
+/** 邮箱日限额的窗口。 */
+export const CODE_EMAIL_WINDOW_MS = DAY_MS;
+/** 全局预算由装配层必填，本常量仅定义其一分钟窗口。 */
+export const CODE_GLOBAL_WINDOW_MS = MINUTE_MS;
+/** 单次发送等待上限；超时不能确认交付，标记 unknown。 */
+export const CODE_SEND_TIMEOUT_MS = CODE_SEND_TIMEOUT_SECS * MS_PER_SECOND;
+/** 随机挑战编号碰撞重试上限。 */
+export const CODE_ID_ATTEMPTS = 5;

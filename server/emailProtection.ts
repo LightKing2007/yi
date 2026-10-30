@@ -12,7 +12,7 @@ const ALGORITHM = 'aes-256-gcm';
 
 /** 用途与不可变内部记录编号共同绑定密文；挑战不能直接作为已注册账号的邮箱密文。 */
 export interface EmailContext {
-  purpose: 'account-email' | 'registration-email';
+  purpose: 'account-email' | 'registration-email' | 'challenge-email';
   recordId: string;
 }
 
@@ -42,7 +42,7 @@ function validEmail(email: string): boolean {
 /** 版本、字段用途、密钥编号和记录编号用 JSON 元组编码，避免拼接分隔符的歧义。 */
 function aad(context: EmailContext, keyId: string): Buffer {
   const { purpose, recordId } = context;
-  if ((purpose !== 'account-email' && purpose !== 'registration-email') || typeof recordId !== 'string' || !recordId.length) {
+  if (!['account-email', 'registration-email', 'challenge-email'].includes(purpose) || typeof recordId !== 'string' || !recordId.length) {
     throw new Error('email-context-invalid');
   }
   if (Buffer.byteLength(recordId, 'utf8') > RECORD_MAX_BYTES) throw new Error('email-context-invalid');
