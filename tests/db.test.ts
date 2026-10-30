@@ -47,7 +47,7 @@ const failure = (fn: () => unknown) => {
   throw new Error('没有抛出 DbOpenError');
 };
 
-const V2: Migration = { version: 2, name: '0002_notes', sql: 'CREATE TABLE notes (id INTEGER PRIMARY KEY, note_text TEXT NOT NULL) STRICT;' };
+const V3: Migration = { version: 3, name: '0003_notes', sql: 'CREATE TABLE notes (id INTEGER PRIMARY KEY, note_text TEXT NOT NULL) STRICT;' };
 
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-db-'));
@@ -64,13 +64,13 @@ describe('打开数据库', () => {
   it('新建的数据库执行全部迁移，结构版本为最新；PRAGMA 按 DAT-002 设置', () => {
     const db = open(file);
     expect(version(db)).toBe(String(MIGRATIONS.at(-1)?.version));
-    expect(tables(db)).toEqual(['devices', 'games', 'meta', 'rating_changes', 'ratings', 'users']);
+    expect(tables(db)).toEqual(['accounts', 'consents', 'devices', 'games', 'meta', 'rating_changes', 'ratings', 'users']);
     expect(db.prepare('PRAGMA journal_mode').get()?.journal_mode).toBe('wal');
     expect(db.prepare('PRAGMA foreign_keys').get()?.foreign_keys).toBe(1);
     expect(db.prepare('PRAGMA busy_timeout').get()?.timeout).toBe(3000);
     expect(db.prepare('PRAGMA synchronous').get()?.synchronous).toBe(1); // NORMAL
     expect(logs.map(([event]) => event)).toEqual(['db.migrating', 'db.migrated', 'db.opened']);
-    expect(logs[1]?.[1]).toEqual(expect.objectContaining({ from: 0, to: 1, backup: undefined })); // 新建的空数据库不备份
+    expect(logs[1]?.[1]).toEqual(expect.objectContaining({ from: 0, to: 2, backup: undefined })); // 新建的空数据库不备份
     expect(fs.existsSync(path.join(dir, 'backup'))).toBe(false);
   });
 
@@ -78,14 +78,14 @@ describe('打开数据库', () => {
     close(open(file));
     logs = [];
     const db = open(file);
-    expect(version(db)).toBe('1');
+    expect(version(db)).toBe('2');
     expect(logs.map(([event]) => event)).toEqual(['db.opened']);
     expect(fs.existsSync(path.join(dir, 'backup'))).toBe(false);
   });
 
   it('内存数据库同样执行迁移，不备份', () => {
-    const db = open(MEMORY, [...MIGRATIONS, V2]);
-    expect(version(db)).toBe('2');
+    const db = open(MEMORY, [...MIGRATIONS, V3]);
+    expect(version(db)).toBe('3');
     expect(tables(db)).toContain('notes');
   });
 });
@@ -96,37 +96,37 @@ describe('迁移', () => {
     first.prepare("INSERT INTO users (kind, name, created_at, last_seen_at) VALUES ('guest', '甲', 1, 1)").run();
     close(first);
     logs = [];
-    const db = open(file, [...MIGRATIONS, V2]);
-    expect(version(db)).toBe('2');
+    const db = open(file, [...MIGRATIONS, V3]);
+    expect(version(db)).toBe('3');
     expect(db.prepare('SELECT name FROM users').all()).toEqual([{ name: '甲' }]);
     const saved = path.join(dir, 'backup', 'pre-migrate-2.0.8-20261016T013000Z.db');
-    expect(logs[0]).toEqual(['db.migrating', expect.objectContaining({ from: 1, to: 2, backup: saved })]);
-    expect(logs[1]).toEqual(['db.migrated', expect.objectContaining({ from: 1, to: 2, backup: saved })]);
+    expect(logs[0]).toEqual(['db.migrating', expect.objectContaining({ from: 2, to: 3, backup: saved })]);
+    expect(logs[1]).toEqual(['db.migrated', expect.objectContaining({ from: 2, to: 3, backup: saved })]);
     const copy = open(saved);
-    expect(version(copy)).toBe('1');
+    expect(version(copy)).toBe('2');
     expect(tables(copy)).not.toContain('notes');
     expect(copy.prepare('SELECT name FROM users').all()).toEqual([{ name: '甲' }]);
   });
 
   it('迁移失败时回滚整个迁移、拒绝启动，结构版本不变', () => {
     close(open(file));
-    const broken: Migration = { version: 2, name: '0002_broken', sql: 'CREATE TABLE half (id INTEGER PRIMARY KEY) STRICT; INSERT INTO nowhere VALUES (1);' };
+    const broken: Migration = { version: 3, name: '0003_broken', sql: 'CREATE TABLE half (id INTEGER PRIMARY KEY) STRICT; INSERT INTO nowhere VALUES (1);' };
     logs = [];
     const err = failure(() => open(file, [...MIGRATIONS, broken]));
     expect([err.exitCode, err.kind]).toEqual([65, 'migration']);
-    expect(err.message).toContain('0002_broken');
+    expect(err.message).toContain('0003_broken');
     expect(logs.map(([event]) => event)).toEqual(['db.migrating']); // 迁移开始时已写下，失败后没有 db.migrated
     const db = open(file);
-    expect(version(db)).toBe('1');
+    expect(version(db)).toBe('2');
     expect(tables(db)).not.toContain('half');
   });
 
   it('数据库的结构版本高于程序支持时拒绝启动，不作任何写入（VER-012）', () => {
-    close(open(file, [...MIGRATIONS, V2]));
+    close(open(file, [...MIGRATIONS, V3]));
     const before = fs.readFileSync(file);
     const err = failure(() => open(file));
     expect([err.exitCode, err.kind]).toEqual([65, 'schema-version']);
-    expect(err.message).toContain('结构版本 2 高于本程序支持的 1');
+    expect(err.message).toContain('结构版本 3 高于本程序支持的 2');
     expect(fs.readFileSync(file).equals(before)).toBe(true);
   });
 
