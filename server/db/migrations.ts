@@ -1,6 +1,7 @@
 /** 数据库迁移的清单：每一项对应 server/db/migrations/ 下的一个 SQL 文件（DAT-017），按序号排列，以文本形式打包进 server.cjs */
 import init from './migrations/0001_init.sql?raw';
 import accounts from './migrations/0002_accounts.sql?raw';
+import sessions from './migrations/0003_sessions.sql?raw';
 
 /** 一个迁移：结构版本号即文件名的序号 */
 export interface Migration {
@@ -16,4 +17,5 @@ export interface Migration {
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: '0001_init', sql: init },
   { version: 2, name: '0002_accounts', sql: accounts },
+  { version: 3, name: '0003_sessions', sql: sessions },
 ];
