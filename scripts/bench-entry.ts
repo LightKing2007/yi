@@ -16,6 +16,7 @@ import { GameType, MAXN, Rng } from '../src/core/types';
 import { fileServer } from '../server/files';
 import { RoomServer, type Conn } from '../server/rooms';
 import { PROTO_VERSION, type S2C } from '../src/shared/protocol';
+import { sampleHttp, sampleSync } from './bench-sampling';
 
 /** 一组耗时（毫秒）的统计 */
 export interface Stats {
@@ -36,8 +37,14 @@ export interface BenchOptions {
   connections: number;
   /** 服务端每条连接发送消息的轮数 */
   rounds: number;
-  /** 下载页面请求的次数 */
+  /** 独立测量 tick 的次数，与落子轮数分开 */
+  tickSamples: number;
+  /** tick 正式采样前的预热次数 */
+  tickWarmup: number;
+  /** 每个 HTTP 地址的正式请求次数 */
   httpRequests: number;
+  /** 每个 HTTP 地址正式采样前的预热次数 */
+  httpWarmup: number;
 }
 
 const GOMOKU_N = 15;
@@ -187,8 +194,10 @@ function pickMove(player: FakePlayer, rng: Rng) {
 }
 
 /** 服务端：connections 条连接两两开好友房间，交替落子与心跳，测每条消息的处理耗时、tick 耗时与内存（TST-045） */
-function benchServer(connections: number, rounds: number) {
-  const srv = new RoomServer();
+export function benchServer(opt: Pick<BenchOptions, 'connections' | 'rounds' | 'tickSamples' | 'tickWarmup'>) {
+  const { connections, rounds } = opt;
+  // 固定业务时钟，采样增加时不会因机器速度或握手耗时触发掉线；计时仍用单调真实时钟。
+  const srv = new RoomServer({ now: () => 0 });
   const rng = new Rng(SERVER_SEED);
   const players: FakePlayer[] = [];
   const times: number[] = [];
@@ -208,7 +217,6 @@ function benchServer(connections: number, rounds: number) {
   }
   for (const player of players) syncMirror(player);
   const handled: number[] = [];
-  const tickTimes: number[] = [];
   const start = performance.now();
   for (let round = 0; round < rounds; round++) {
     for (const player of players) {
@@ -217,9 +225,10 @@ function benchServer(connections: number, rounds: number) {
       send(srv, player, move ? { t: 'move', x: move.x, y: move.y } : { t: 'ping' }, handled);
       syncMirror(player);
     }
-    tickTimes.push(timed(() => srv.tick())[1]);
+    srv.tick();
   }
   const busyMs = performance.now() - start;
+  const tickTimes = sampleSync(() => srv.tick(), { count: opt.tickSamples, warmup: opt.tickWarmup, now: () => performance.now() });
   const after = process.memoryUsage();
   return {
     message: stats(handled),
@@ -230,37 +239,49 @@ function benchServer(connections: number, rounds: number) {
   };
 }
 
-/** 依次请求 count 次，返回每次的耗时 */
-async function requestTimes(base: string, pathName: string, count: number) {
-  const times: number[] = [];
-  for (let i = 0; i < count; i++) {
-    const start = performance.now();
-    const res = await fetch(base + pathName);
-    await res.arrayBuffer();
-    times.push(performance.now() - start);
-  }
-  return times;
-}
-
-/** 下载页面（/download/）与校验值的响应耗时（四个模拟安装程序）；HTTP 请求没有频率限制，这里量出单个请求占用服务端的时间 */
-async function benchHttp(count: number) {
+/** 主页、下载页面与校验值的响应耗时；四个模拟安装程序，直接访问 fileServer，不经过生产限流。 */
+export async function benchHttp(count: number, warmup: number) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-bench-'));
   const server = http.createServer();
   try {
     for (const name of FAKE_INSTALLERS) fs.writeFileSync(path.join(dir, name), Buffer.alloc(FAKE_INSTALLER_BYTES));
     server.on('request', fileServer(dir));
-    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', () => {
+        server.off('error', reject);
+        resolve();
+      });
+    });
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-    for (let i = 0; i < CHECKSUM_WAIT_TRIES && (await fetch(base + '/SHA256SUMS')).status !== HTTP_OK; i++)
-      await new Promise(r => setTimeout(r, CHECKSUM_WAIT_MS));
-    const page = await requestTimes(base, '/download/', count);
-    const sums = await requestTimes(base, '/SHA256SUMS', count);
+    await waitForChecksums(base);
+    const sampling = { count, warmup, now: () => performance.now() };
+    const home = await sampleHttp(base + '/', sampling);
+    const page = await sampleHttp(base + '/download/', sampling);
+    const sums = await sampleHttp(base + '/SHA256SUMS', sampling);
     const total = page.reduce((sum, ms) => sum + ms, 0);
-    return { page: stats(page), sums: stats(sums), pagesPerSec: Math.round((count / total) * MS_PER_SEC) };
+    return { home: stats(home), page: stats(page), sums: stats(sums), pagesPerSec: Math.round((count / total) * MS_PER_SEC) };
   } finally {
-    server.close();
-    fs.rmSync(dir, { recursive: true, force: true });
+    try {
+      server.closeAllConnections();
+      if (server.listening) await new Promise<void>((resolve, reject) => server.close(err => (err ? reject(err) : resolve())));
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   }
+}
+
+/** 校验值尚未算完时限次等待；每次读完正文，失败时不把错误页计入基准。 */
+async function waitForChecksums(base: string) {
+  const unavailable = 503;
+  for (let i = 0; i < CHECKSUM_WAIT_TRIES; i++) {
+    const response = await fetch(base + '/SHA256SUMS');
+    await response.arrayBuffer();
+    if (response.status === HTTP_OK) return;
+    if (response.status !== unavailable) throw new Error(`校验值预热返回 HTTP ${response.status}`);
+    await new Promise(resolve => setTimeout(resolve, CHECKSUM_WAIT_MS));
+  }
+  throw new Error(`校验值在 ${CHECKSUM_WAIT_TRIES} 次检查后仍未就绪`);
 }
 
 /** 运行全部基准 */
@@ -268,5 +289,5 @@ export async function runBench(opt: BenchOptions) {
   const gomoku = Object.fromEntries([0, 1, 2].map(level => [level, benchGomoku(level, opt.gomokuGames)]));
   const go: Record<string, ReturnType<typeof benchGo>> = {};
   for (const size of Object.keys(GO_WARMUP_MOVES).map(Number)) for (const level of [1, 2]) go[`${size}-${level}`] = benchGo(size, level, opt.goMoves);
-  return { gomoku, go, dead: benchDead(), server: benchServer(opt.connections, opt.rounds), http: await benchHttp(opt.httpRequests) };
+  return { gomoku, go, dead: benchDead(), server: benchServer(opt), http: await benchHttp(opt.httpRequests, opt.httpWarmup) };
 }
