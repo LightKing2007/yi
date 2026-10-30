@@ -89,3 +89,15 @@ it('事件数组有界，超限申请不扩大持久化记录', () => {
   const row = world.db.prepare('SELECT history FROM auth_limits').get();
   expect(JSON.parse(String(row?.history)).times).toHaveLength(1000);
 }, 10000);
+
+it('配额与冷却同时阻止时等待较晚期限，按提示重试即可成功', () => {
+  const combined = { ...rule, max: 2, cooldownMs: 90 };
+  expect(limits.take(combined, 1000)).toBe(0);
+  expect(limits.take(combined, 1090)).toBe(0);
+  const before = world.db.prepare('SELECT history, updated_at FROM auth_limits').get();
+  expect(limits.take(combined, 1091)).toBe(89);
+  expect(limits.take(combined, 1100)).toBe(80);
+  expect(limits.take(combined, 1179)).toBe(1);
+  expect(world.db.prepare('SELECT history, updated_at FROM auth_limits').get()).toEqual(before);
+  expect(limits.take(combined, 1180)).toBe(0);
+});

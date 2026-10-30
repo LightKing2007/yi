@@ -90,10 +90,11 @@ export class AuthLimitRepo {
     }
     return transaction(this.db, () => {
       const state = history(this.get.get(rule.scope, rule.subject), now, rule.windowMs);
-      if (state.blockedUntil > now) return state.blockedUntil - now;
-      if (state.times.length >= rule.max) return (state.times[0] ?? now) + rule.windowMs - now;
+      const quota = state.times.length >= rule.max ? (state.times[0] ?? now) + rule.windowMs - now : 0;
       const last = state.times.at(-1);
-      if (last !== undefined && now - last < cooldown) return last + cooldown - now;
+      const cooling = last === undefined ? 0 : last + cooldown - now;
+      const retry = Math.max(0, state.blockedUntil - now, quota, cooling);
+      if (retry) return retry;
       state.times.push(now);
       this.write(rule.scope, rule.subject, { times: state.times, blockedUntil: 0 }, now);
       return 0;
