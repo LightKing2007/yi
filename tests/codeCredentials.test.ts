@@ -108,8 +108,20 @@ it('默认随机入口生成协议要求的编号和保留前导零的六位数�
   expect(randomInt).toHaveBeenLastCalledWith(1000000);
 });
 
-it('邮箱域名拒绝 URL 分隔符和转义，不得截成另一个收件地址', () => {
-  for (const email of ['a@example.com/path', 'a@example.com?x', 'a@example.com#x', 'a@example.com\\path', 'a@example%2ecom', 'a@example.com:80']) {
+it('邮箱域名拒绝 URL 分隔符、转义和 IP 字面值，不得改写收件地址', () => {
+  for (const email of [
+    'a@example.com/path',
+    'a@example.com?x',
+    'a@example.com#x',
+    'a@example.com\\path',
+    'a@example%2ecom',
+    'a@example.com:80',
+    'a@127.1',
+    'a@0x7f.1',
+    'a@0177.0.0.1',
+    'a@127.0.0.1',
+    'a@0x7f000001',
+  ]) {
     expect(normalizeEmail(email)).toBeUndefined();
   }
 });

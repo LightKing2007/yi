@@ -1,5 +1,6 @@
 /** 账号邮箱的统一规范化入口；支持 ASCII 非引号本地部分和 IDNA 域名，不折叠服务商专有别名。 */
 import { domainToASCII } from 'node:url';
+import { isIP } from 'node:net';
 
 const RAW_MAX_BYTES = 1024;
 const EMAIL_MAX_BYTES = 254;
@@ -31,6 +32,7 @@ export function normalizeEmail(value: unknown): string | undefined {
   const domainInput = parts[1] ?? '';
   if (DOMAIN_DELIMITERS.some(delimiter => domainInput.includes(delimiter))) return undefined;
   const domain = domainToASCII(domainInput);
+  if (isIP(domain)) return undefined;
   if (!validLocal(local)) return undefined;
   const labels = domain.split('.');
   if (labels.length < 2 || labels.some(label => label.length > LABEL_MAX_BYTES || !LABEL_FORMAT.test(label))) return undefined;
