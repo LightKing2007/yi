@@ -83,7 +83,7 @@
 
 ### 3.1 环境
 
-开发环境应使用 Node.js 22.13 或更高版本（见 `.nvmrc`）。
+开发环境与服务端最低使用 Node.js 24；项目当前版本见 `.nvmrc`。账号会话事务使用 Node.js 24 提供的 SQLite 事务状态接口，版本依据见 [决策 0012](docs/adr/0012-auth-node24.md)。
 
 ```bash
 npm install          # 安装依赖，并启用 .githooks 中的 Git 钩子
