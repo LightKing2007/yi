@@ -18,8 +18,8 @@ const KB = 1024;
 
 /** 完整与快速两种规模 */
 const SCALE = {
-  full: { gomokuGames: 6, goMoves: 3, connections: 500, rounds: 20, httpRequests: 300 },
-  quick: { gomokuGames: 1, goMoves: 1, connections: 50, rounds: 4, httpRequests: 20 },
+  full: { gomokuGames: 6, goMoves: 3, connections: 500, rounds: 20, tickSamples: 1000, tickWarmup: 100, httpRequests: 2000, httpWarmup: 100 },
+  quick: { gomokuGames: 1, goMoves: 1, connections: 50, rounds: 4, tickSamples: 20, tickWarmup: 5, httpRequests: 20, httpWarmup: 5 },
 };
 
 /** 前端产物的 gzip 体积（TST-044：主包 ≤ 150 KB，单个 Worker ≤ 30 KB） */
