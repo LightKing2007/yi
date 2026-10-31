@@ -49,6 +49,7 @@ it('通过校验才切换版本，保留上一版并可单独回滚；损坏文�
   const next = release(path.join(dir, 'next'), 'b');
   try {
     await installWebsite(ctx, path.join(dir, 'old'), old.tag);
+    await installWebsite(ctx, path.join(dir, 'old'), old.tag);
     await expect(installWebsite(ctx, path.join(dir, 'next'), old.tag)).rejects.toThrow('标签');
     expect(websiteLink(ctx.root, 'current')).toBe(`releases/${old.commit}`);
     await installWebsite(ctx, path.join(dir, 'next'), next.tag);
@@ -58,7 +59,8 @@ it('通过校验才切换版本，保留上一版并可单独回滚；损坏文�
     fs.appendFileSync(path.join(dir, 'next', 'web.cjs'), 'corrupt');
     await expect(installWebsite(ctx, path.join(dir, 'next'), next.tag)).rejects.toThrow('校验不符');
     expect(websiteLink(ctx.root, 'current')).toBe(`releases/${old.commit}`);
-    expect(actions).toEqual(['restart', 'restart', 'restart']);
+    expect(actions).toEqual(['restart', 'restart', 'restart', 'restart']);
+    expect(fs.readdirSync(ctx.root).filter(name => name.startsWith('.incoming-'))).toEqual([]);
   } finally {
     fs.rmSync(dir, { recursive: true });
   }

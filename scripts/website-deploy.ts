@@ -109,24 +109,28 @@ async function activateWebsite(ctx: WebsiteDeployment, target: string, commit: s
 export async function installWebsite(ctx: WebsiteDeployment, source: string, tag: string): Promise<string> {
   fs.mkdirSync(path.join(ctx.root, 'releases'), { recursive: true });
   const stage = fs.mkdtempSync(path.join(ctx.root, '.incoming-'));
-  fs.chmodSync(path.join(ctx.root, 'releases'), DIRECTORY_MODE);
-  for (const name of [...FILES, 'SHA256SUMS']) ctx.copy(path.join(source, name), path.join(stage, name));
-  verifyWebsiteFiles(stage);
-  const commit = websiteCommit(path.join(stage, 'manifest.json'));
-  if (tag !== `web-${commit.slice(0, CACHE_ID_LENGTH)}`) throw new Error('官网标签与提交号不符');
-  const target = path.join('releases', commit);
-  const destination = path.join(ctx.root, target);
-  if (fs.existsSync(destination)) {
-    verifyWebsiteFiles(destination);
-    if (fs.readFileSync(path.join(destination, 'SHA256SUMS'), 'utf8') !== fs.readFileSync(path.join(stage, 'SHA256SUMS'), 'utf8'))
-      throw new Error('同一官网提交不能替换产物');
-  } else {
-    for (const file of [...FILES, 'SHA256SUMS']) fs.chmodSync(path.join(stage, file), FILE_MODE);
-    fs.chmodSync(stage, DIRECTORY_MODE);
-    fs.renameSync(stage, destination);
+  try {
+    fs.chmodSync(path.join(ctx.root, 'releases'), DIRECTORY_MODE);
+    for (const name of [...FILES, 'SHA256SUMS']) ctx.copy(path.join(source, name), path.join(stage, name));
+    verifyWebsiteFiles(stage);
+    const commit = websiteCommit(path.join(stage, 'manifest.json'));
+    if (tag !== `web-${commit.slice(0, CACHE_ID_LENGTH)}`) throw new Error('官网标签与提交号不符');
+    const target = path.join('releases', commit);
+    const destination = path.join(ctx.root, target);
+    if (fs.existsSync(destination)) {
+      verifyWebsiteFiles(destination);
+      if (fs.readFileSync(path.join(destination, 'SHA256SUMS'), 'utf8') !== fs.readFileSync(path.join(stage, 'SHA256SUMS'), 'utf8'))
+        throw new Error('同一官网提交不能替换产物');
+    } else {
+      for (const file of [...FILES, 'SHA256SUMS']) fs.chmodSync(path.join(stage, file), FILE_MODE);
+      fs.chmodSync(stage, DIRECTORY_MODE);
+      fs.renameSync(stage, destination);
+    }
+    await activateWebsite(ctx, target, commit);
+    return commit;
+  } finally {
+    fs.rmSync(stage, { recursive: true, force: true });
   }
-  await activateWebsite(ctx, target, commit);
-  return commit;
 }
 
 /** 只回滚官网；核对旧产物后重启独立网站服务，游戏目录和数据库不在操作范围内。 */

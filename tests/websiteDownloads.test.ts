@@ -15,6 +15,7 @@ it('只安装并公布指定已发布版本的四个程序，校验失败时保�
     expect(websitePackages('3.1.0')).toEqual(files);
     expect(() => websitePackages('../invalid')).toThrow();
     installWebsiteDownloads(options);
+    installWebsiteDownloads(options);
     const current = path.join(root, 'downloads/current');
     expect(fs.readlinkSync(current)).toBe('releases/3.1.0');
     expect(fs.readdirSync(current).sort()).toEqual(['SHA256SUMS', ...files].sort());
@@ -28,6 +29,7 @@ it('只安装并公布指定已发布版本的四个程序，校验失败时保�
     ).toThrow('校验不符');
     expect(fs.readlinkSync(current)).toBe('releases/3.1.0');
     expect(() => installWebsiteDownloads({ ...options, sums: '' })).toThrow('项数');
+    expect(fs.readdirSync(path.join(root, 'downloads')).filter(name => name.startsWith('.incoming-'))).toEqual([]);
   } finally {
     fs.rmSync(root, { recursive: true });
   }

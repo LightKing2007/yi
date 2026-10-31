@@ -26,22 +26,26 @@ export function installWebsiteDownloads(opt: DownloadInstallation): void {
   const root = path.join(opt.root, 'downloads');
   fs.mkdirSync(path.join(root, 'releases'), { recursive: true });
   const stage = fs.mkdtempSync(path.join(root, '.incoming-'));
-  const sums = opt.sums.split('\n').filter(line => files.includes(line.trim().split(/\s+/)[1] ?? ''));
-  fs.writeFileSync(path.join(stage, 'SHA256SUMS'), sums.join('\n') + '\n');
-  for (const file of files) opt.fetch(file, path.join(stage, file));
-  verifyWebsiteFiles(stage, files);
-  const relative = path.join('releases', opt.version);
-  const target = path.join(root, relative);
-  if (fs.existsSync(target)) {
-    verifyWebsiteFiles(target, files);
-    if (fs.readFileSync(path.join(target, 'SHA256SUMS'), 'utf8') !== fs.readFileSync(path.join(stage, 'SHA256SUMS'), 'utf8'))
-      throw new Error('同一游戏版本的安装程序不可替换');
-  } else {
-    for (const file of [...files, 'SHA256SUMS']) fs.chmodSync(path.join(stage, file), FILE_MODE);
-    fs.chmodSync(stage, DIRECTORY_MODE);
-    fs.renameSync(stage, target);
+  try {
+    const sums = opt.sums.split('\n').filter(line => files.includes(line.trim().split(/\s+/)[1] ?? ''));
+    fs.writeFileSync(path.join(stage, 'SHA256SUMS'), sums.join('\n') + '\n');
+    for (const file of files) opt.fetch(file, path.join(stage, file));
+    verifyWebsiteFiles(stage, files);
+    const relative = path.join('releases', opt.version);
+    const target = path.join(root, relative);
+    if (fs.existsSync(target)) {
+      verifyWebsiteFiles(target, files);
+      if (fs.readFileSync(path.join(target, 'SHA256SUMS'), 'utf8') !== fs.readFileSync(path.join(stage, 'SHA256SUMS'), 'utf8'))
+        throw new Error('同一游戏版本的安装程序不可替换');
+    } else {
+      for (const file of [...files, 'SHA256SUMS']) fs.chmodSync(path.join(stage, file), FILE_MODE);
+      fs.chmodSync(stage, DIRECTORY_MODE);
+      fs.renameSync(stage, target);
+    }
+    fs.chmodSync(root, DIRECTORY_MODE);
+    fs.chmodSync(path.join(root, 'releases'), DIRECTORY_MODE);
+    switchWebsiteLink(root, 'current', relative);
+  } finally {
+    fs.rmSync(stage, { recursive: true, force: true });
   }
-  fs.chmodSync(root, DIRECTORY_MODE);
-  fs.chmodSync(path.join(root, 'releases'), DIRECTORY_MODE);
-  switchWebsiteLink(root, 'current', relative);
 }
