@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { startHost } from '../server/host';
+import { startWebsite } from '../server/websiteHost';
 import { detectPlatform } from '../server/platform';
 
 const UA = {
@@ -43,7 +43,7 @@ async function withSite(run: (get: (route: string, headers?: Record<string, stri
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-site-'));
   for (const file of ['Yi-3.0.0-win-x64-setup.exe', 'Yi-3.0.0-mac-arm64.dmg', 'Yi-3.0.0-mac-x64.dmg', 'Yi-3.0.0-linux-x86_64.AppImage'])
     fs.writeFileSync(path.join(dir, file), file);
-  const host = await startHost(0, { host: '127.0.0.1', files: dir });
+  const host = await startWebsite({ port: 0, commit: 'test', files: dir, now: () => 1 });
   const get = (route: string, headers: Record<string, string> = {}) => fetch(`http://127.0.0.1:${host.port}${route}`, { headers, redirect: 'manual' });
   try {
     // 校验值算完之后页面才进入缓存：先等它们算完，使缓存的行为也在检查之内

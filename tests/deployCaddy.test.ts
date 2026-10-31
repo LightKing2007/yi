@@ -100,8 +100,17 @@ describe('仓库中的 yi.caddy', () => {
     .map(line => line.replace(/#.*/, '').trim())
     .filter(Boolean);
 
-  it('只为 yi.lightking.com.cn 转发到本机的服务端，屏蔽 /healthz 与 /metrics（API-061），不开访问日志（DAT-073）', () => {
-    expect(lines).toEqual(['yi.lightking.com.cn {', '@internal path /healthz /metrics', 'respond @internal 404', 'reverse_proxy 127.0.0.1:8443', '}']);
+  it('同域名先屏蔽内部接口，再将 WebSocket 与 API 转给游戏，其余转给独立官网，且不开访问日志', () => {
+    expect(lines[0]).toBe('yi.lightking.com.cn {');
+    expect(lines).toContain('@internal path /healthz /metrics /admin /admin/*');
+    expect(lines).toContain('header Connection *Upgrade*');
+    expect(lines).toContain('header Upgrade websocket');
+    const route = lines.slice(lines.indexOf('route {') + 1);
+    expect(route[0]).toBe('respond @internal 404');
+    expect(route).toContain('reverse_proxy @websocket 127.0.0.1:8443 {');
+    expect(route).toContain('reverse_proxy /api/* 127.0.0.1:8443');
+    expect(route.at(-3)).toBe('reverse_proxy 127.0.0.1:8444');
+    expect(lines.some(line => line.startsWith('log'))).toBe(false);
   });
 });
 

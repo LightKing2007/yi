@@ -49,4 +49,4 @@ npm run build:node
 
 ## 官网独立运行
 
-官网可用 `npm run build:website` 单独构建；产物为 `dist-website/web.cjs` 与构建清单。以 `YI_WEB_FILES=/安装包目录 node dist-website/web.cjs` 运行，仅监听本机 8444，不启动联机或打开数据库。正式目录为 `/opt/www/yi.lightking.com.cn`，部署与回滚随独立官网流程交付（[决策 0013](../../docs/adr/0013-independent-website.md)）。
+官网可用 `npm run build:website` 单独构建；产物为 `dist-website/web.cjs` 与构建清单。以 `YI_WEB_FILES=/安装包目录 node dist-website/web.cjs` 运行，仅监听本机 8444，不启动联机或打开数据库。正式目录为 `/opt/www/yi.lightking.com.cn`，后续发布、部署与回滚见[独立官网规程](../../docs/procedures/website.md)（[决策 0013](../../docs/adr/0013-independent-website.md)）。

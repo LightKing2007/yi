@@ -1,5 +1,5 @@
 /**
- * 安装包下载：联机端口上的普通网页请求（不是 WebSocket 的）走这里，不用另开端口。路径白名单（API-060）：
+ * 独立官网的网页与安装程序请求处理。路径白名单（API-060）：
  *   GET /             主页（homePage.ts）
  *   GET /download/    下载页面（downloadPage.ts）；带 ?start 时推断确定的访客进入页面即开始下载。/download 重定向到 /download/
  *   GET /agreement   文书目录；三份文件各用 /文件名 访问（agreementText.ts）；尾斜杠重定向至规范路径
@@ -57,15 +57,7 @@ const OK = 200,
   NOT_FOUND = 404,
   METHOD_NOT_ALLOWED = 405,
   RANGE_NOT_SATISFIABLE = 416,
-  TOO_MANY_REQUESTS = 429,
   UNAVAILABLE = 503;
-
-/** 回应超出按 IP 的 HTTP 请求频率（API-041）：429 与 Retry-After（秒） */
-export function tooManyRequests(res: ServerResponse, retryAfterSecs: number) {
-  res
-    .writeHead(TOO_MANY_REQUESTS, { ...BASE_HEADERS, 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': String(retryAfterSecs) })
-    .end('请求过于频繁，请稍后再试。');
-}
 
 /** 页面的路径（不含开头的斜杠）：主页与下载页面 */
 const HOME = '',

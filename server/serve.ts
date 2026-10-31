@@ -87,7 +87,7 @@ export async function serve(deps: ServeDeps): Promise<void> {
 /** 监听端口；失败时写 server.listen-failed 日志并返回 undefined */
 async function listen(deps: ServeDeps, persistence: Persistence, metrics: Metrics): Promise<Host | undefined> {
   const { config } = deps;
-  const { host, latest, download, files } = config;
+  const { host, latest, download } = config;
   const ports = [config.port];
   try {
     return await startHost(ports, {
@@ -96,7 +96,6 @@ async function listen(deps: ServeDeps, persistence: Persistence, metrics: Metric
       host,
       latest,
       download,
-      files,
       build: deps.build,
       metrics,
       eventLoopLag: deps.eventLoopLag,

@@ -1,6 +1,7 @@
 /** 独立官网 HTTP 进程：复用网页与下载处理，不创建联机房间、WebSocket 或数据库。 */
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
+import type { Log } from './log';
 import { fromThisHost } from './clientIp';
 import { fileServer } from './files';
 import { hardenHttp, withHttpLimit } from './http';
@@ -22,6 +23,7 @@ export interface WebsiteOptions {
   files: string;
   commit: string;
   now: () => number;
+  log?: Log;
   every?: (task: () => void, ms: number) => () => void;
 }
 
@@ -29,10 +31,10 @@ export interface WebsiteOptions {
 export async function startWebsite(opt: WebsiteOptions) {
   const files = fileServer(opt.files);
   const gate = new HttpGate();
-  const web = withHttpLimit(files, gate, opt.now);
+  const web = withHttpLimit(files, gate, opt.now, opt.log);
   const server = http.createServer((req, res) => {
     if (req.url === '/healthz' && req.method === 'GET' && fromThisHost(req)) {
-      res.writeHead(HTTP_OK, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.writeHead(HTTP_OK, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
       res.end(JSON.stringify({ service: 'yi-web', commit: opt.commit }));
     } else web(req, res);
   });

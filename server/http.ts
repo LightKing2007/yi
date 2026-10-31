@@ -3,7 +3,6 @@ import type http from 'node:http';
 import type { Web } from './health';
 import type { Log } from './log';
 import { clientIp, fromThisHost } from './clientIp';
-import { tooManyRequests } from './files';
 import { HttpGate } from './ratelimit';
 
 /** 限流日志的最短间隔（秒）。 */
@@ -46,4 +45,12 @@ export function withHttpLimit(next: Web, gate: HttpGate, now: () => number, log?
     loggedAt = now();
     limited = 0;
   };
+}
+
+/** HTTP 请求超出频率限制；官网和联机端口共用相同的状态码与等待提示。 */
+export function tooManyRequests(res: import('node:http').ServerResponse, retryAfterSecs: number) {
+  const status = 429;
+  res
+    .writeHead(status, { 'X-Content-Type-Options': 'nosniff', 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': String(retryAfterSecs) })
+    .end('请求过于频繁，请稍后再试。');
 }

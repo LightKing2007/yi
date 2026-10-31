@@ -151,3 +151,7 @@ ssh root@yi.lightking.com.cn 'echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) LightKing con
 ```
 
 6.2 应急处置的经过记入对应的 Issue；复盘报告按第 5.1 条提交。
+
+## 7 独立官网
+
+官网统一位于 `/opt/www/yi.lightking.com.cn`，服务为 `yi-web`，由 Caddy 转到本机 8444。游戏服务、数据库和备份仍按本规程前六章维护。官网的发布、安装程序更新、首次迁移和回滚按 [website.md](website.md) 执行；不要通过更新游戏服务端来更新文书。日常另查看 `yi-web` 服务及其日志；首次配置切换须确认没有对局，保留 Caddy 原配置。

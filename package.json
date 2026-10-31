@@ -34,6 +34,7 @@
     "app:dev": "npm run build:node && YI_DEV_URL=http://localhost:5173 electron .",
     "release": "node scripts/release.mjs",
     "deploy": "sh scripts/deploy.sh",
+    "deploy:website": "node scripts/deploy-website.mjs",
     "offsite": "node scripts/offsite.ts",
     "dist": "npm run build && electron-builder",
     "dist:mac": "npm run build && electron-builder --mac",

@@ -43,6 +43,7 @@ const SKIPPED_FILES: Record<string, string> = {
   'server/ring.ts': '网站页面只有中文，标点由 I18N-011 检查',
   'server/downloadStyle.ts': '网站页面的样式',
   'server/files.ts': '网站页面的 HTTP 应答，只有中文',
+  'server/http.ts': 'HTTP 限流应答与诊断日志，不显示在游戏界面上',
 };
 
 /** 不翻译的文字：文件 → { 文字: 原因 }。清单中的每一项都须仍在源码中 */

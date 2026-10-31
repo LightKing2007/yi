@@ -144,10 +144,10 @@ describe('服务端配置的读取', () => {
 });
 
 describe('服务启动日志', () => {
-  it('说明文字按配置写出监听地址、最新客户端与安装包目录，并附端口、协议版本范围与数据库文件', () => {
+  it('联机启动说明只写监听地址与最新客户端，并附端口、协议版本范围与数据库文件', () => {
     const full = parseConfig([], { HOST: '127.0.0.1', YI_LATEST: '3.0.0', YI_FILES: '/opt/yi/current/download' }, CWD).config;
     expect(startEntry(full, [8443])).toEqual({
-      msg: '弈 联机服务端已启动，地址 127.0.0.1，最新客户端 3.0.0，安装包目录 /opt/yi/current/download',
+      msg: '弈 联机服务端已启动，地址 127.0.0.1，最新客户端 3.0.0',
       ports: [8443],
       protoRange: [PROTO_VERSION, PROTO_VERSION],
       dbFile: '/srv/yi/yi.db',

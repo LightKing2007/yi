@@ -1,7 +1,7 @@
 /**
  * 健康检查 GET /healthz 与指标 GET /metrics（API-061）：只回应由本机直接发出的请求，经反向代理转来的外部请求不算（clientIp.ts）。/healthz 供上线脚本在重启前读取活跃对局数、
  * 重启后核对版本（OPS-045、OPS-046）；/metrics 为 Prometheus 文本格式的监控指标（OPS-071）。
- * 其他来源、其他方法与其他路径一律交给下一个处理者（下载页对白名单以外的路径返回 404）。
+ * 其他来源、其他方法与其他路径一律交给下一个处理者；联机入口对非接口路径返回 404。
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { PROTO_VERSION } from '../src/shared/protocol';

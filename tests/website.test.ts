@@ -31,7 +31,9 @@ describe('独立官网', () => {
       }
       const part = await fetch(base + '/Yi-3.1.0-win-x64-setup.exe', { headers: { Range: 'bytes=4-6' } });
       expect([part.status, await part.text()]).toEqual([206, '456']);
-      expect(await (await fetch(base + '/healthz')).json()).toEqual({ service: 'yi-web', commit: 'web-commit' });
+      const health = await fetch(base + '/healthz');
+      expect(health.headers.get('x-content-type-options')).toBe('nosniff');
+      expect(await health.json()).toEqual({ service: 'yi-web', commit: 'web-commit' });
       expect((await fetch(base + '/healthz', { headers: { 'X-Forwarded-For': '198.51.100.1' } })).status).toBe(404);
       expect((await fetch(base + '/metrics')).status).toBe(404);
       expect(fs.readdirSync(dir)).toEqual(['Yi-3.1.0-win-x64-setup.exe']);
