@@ -18,10 +18,13 @@ const HASH_FORMAT = /^[0-9a-f]{64}$/;
 const DUMMY_SALT_BYTES = 16;
 const DUMMY_KEY_BYTES = 64;
 const DUMMY_PASSWORD_HASH = `scrypt$131072$8$1$${'00'.repeat(DUMMY_SALT_BYTES)}$${'00'.repeat(DUMMY_KEY_BYTES)}`;
-/** 内部业务失败，HTTP 层另行映射公开错误码；不携带输入或数据库异常详情。 */
+/**
+ * 内部业务失败，HTTP 层另行映射公开错误码；不携带输入或数据库异常详情。
+ * taken 只在已证明能收信后给出；session 表示令牌失效，与旧密码错误的 denied 区分（账号接口契约第 3.5、3.11 条）。
+ */
 export class AuthenticationError extends Error {
   constructor(
-    readonly reason: 'invalid' | 'denied' | 'consent' | 'limited',
+    readonly reason: 'invalid' | 'denied' | 'consent' | 'limited' | 'taken' | 'session',
     readonly retryAfterMs = 0,
   ) {
     super(`auth-${reason}`);
@@ -98,6 +101,7 @@ export class Authentication {
     const { email, password, lookup } = this.credentials(input, true);
     const proof = this.codes.check({ ...input, email, purpose: 'register' });
     if (!proof) throw new AuthenticationError('denied');
+    if (this.accounts.byEmailLookup(lookup)) throw new AuthenticationError('taken');
     const passwordHash = await this.passwords.hash(password);
     try {
       return transaction(this.db, () => {
@@ -108,7 +112,7 @@ export class Authentication {
         return this.issue(stored);
       });
     } catch (error) {
-      if (error instanceof Error && error.message === 'account-email-taken') throw new AuthenticationError('denied');
+      if (error instanceof Error && error.message === 'account-email-taken') throw new AuthenticationError('taken');
       throw error;
     }
   }
@@ -160,7 +164,7 @@ export class Authentication {
     if (old === undefined || password === undefined) throw new AuthenticationError('invalid');
     this.admit(input.sourceHash);
     const identity = this.current(token);
-    if (!identity) throw new AuthenticationError('denied');
+    if (!identity) throw new AuthenticationError('session');
     this.unlocked(identity.account.emailLookup);
     if (!(await this.passwords.verify(old, identity.account.passwordHash))) this.failed(identity.account.emailLookup);
     const passwordHash = await this.passwords.hash(password);
@@ -172,7 +176,7 @@ export class Authentication {
         current.account.authVersion !== identity.account.authVersion ||
         !this.sessionRepo.changePassword(identity.account.userId, identity.account.authVersion, passwordHash)
       )
-        throw new AuthenticationError('denied');
+        throw new AuthenticationError('session');
       this.limits.clearFailures(identity.account.emailLookup);
     });
     this.opt.onRevoke?.({ userId: identity.account.userId });
@@ -190,11 +194,23 @@ export class Authentication {
     return identity && this.profile(identity.account).onlineAllowed ? identity.session : undefined;
   }
 
-  /** 登录后明确接受新必需版本；令牌在最终写入事务中重新鉴权。 */
+  /** 修改雅号不改变公开 UID；写入与鉴权同一事务，并更新会话活动时间。 */
+  rename(token: unknown, value: unknown): AccountProfile {
+    this.autocommit();
+    const name = accountName(value);
+    if (!name) throw new AuthenticationError('invalid');
+    return transaction(this.db, () => {
+      const identity = this.current(token, true);
+      if (!identity || !this.accounts.rename(identity.account.userId, name)) throw new AuthenticationError('session');
+      return this.profile({ ...identity.account, name });
+    });
+  }
+
+  /** 登录后明确接受新必需版本；令牌在最终写入事务中重新鉴权，并更新会话活动时间。 */
   acceptConsents(token: unknown, value: unknown): boolean {
     this.autocommit();
     return transaction(this.db, () => {
-      const identity = this.current(token);
+      const identity = this.current(token, true);
       return !!identity && this.consents.accept(identity.account.userId, value, this.now());
     });
   }

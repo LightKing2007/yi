@@ -40,6 +40,7 @@ function statements(db: DatabaseSync) {
         "sent_at = CASE WHEN $state = 'sent' AND created_at <= $now AND expires_at > $now THEN $now END " +
         "WHERE challenge_id = $id AND is_current = 1 AND state = 'sending'",
     ),
+    status: db.prepare(`SELECT state, expires_at FROM email_challenges WHERE challenge_id = $id AND ${live} AND attempts < $attempts`),
     ready: db.prepare(`SELECT code_mac, code_key_id FROM email_challenges WHERE ${same} AND ${ready}`),
     wrong: db.prepare(`UPDATE email_challenges SET attempts = attempts + 1 WHERE ${same} AND ${ready}`),
     consume: db.prepare(`UPDATE email_challenges SET state = 'consumed', is_current = 0, ${erase} WHERE ${same} AND ${ready} AND code_mac = $mac`),
@@ -82,6 +83,12 @@ export class EmailChallengeRepo {
   /** 当前发送必须落终态并清除机密；回退、到期或 null 时钟统一为 unknown。 */
   finish(id: string, state: 'sent' | 'unknown' | 'failed', now: number | null): void {
     this.sql.finish.run({ $id: id, $now: now, $state: state });
+  }
+
+  /** 当前且未用尽的挑战的状态与期限；不返回地址或凭据。 */
+  status(id: string, now: number): { state: string; expiresAt: number } | undefined {
+    const row = this.sql.status.get({ $id: id, $now: now, $attempts: CODE_ATTEMPTS });
+    return row ? { state: String(row.state), expiresAt: Number(row.expires_at) } : undefined;
   }
 
   /** 不返回地址，核验仅需凭据；时钟倒退不把未来发送当作有效。 */

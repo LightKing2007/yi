@@ -9,6 +9,7 @@ import {
   CODE_SEND_TIMEOUT_MS,
   CODE_SOURCE_BUDGET,
   CODE_SOURCE_WINDOW_MS,
+  CODE_TTL_MS,
 } from './authPolicy';
 import { CodeCredentials, newChallengeId, newEmailCode, validCodeContext, type CodePurpose } from './codeCredentials';
 import { AuthLimitRepo } from './db/authLimits';
@@ -22,6 +23,8 @@ const CHALLENGE_ID_LENGTH = 32;
 const HASH_FORMAT = /^[0-9a-f]{64}$/;
 const MAX_GLOBAL_BUDGET = 1000;
 const GLOBAL_SUBJECT = '0'.repeat(HASH_LENGTH);
+/** 存储状态到对外进度；consumed、superseded 已不是当前挑战，查询语句不会返回。 */
+const DELIVERY: Readonly<Record<string, CodeDelivery>> = { queued: 'pending', sending: 'pending', sent: 'sent', failed: 'retry', unknown: 'retry' };
 /** 发信资料只交给受控适配器，不得写入日志或持久化队列。 */
 export interface CodeMail {
   email: string;
@@ -38,8 +41,10 @@ export interface EmailCodeOptions {
   nextId?: () => string;
   nextCode?: () => string;
 }
-/** 接受只表示进入队列，不透露账号存在性或发送结果；工作者另行发送。 */
-export type CodeAdmission = { challengeId: string } | { retryAfterMs: number };
+/** 接受只表示进入队列，不透露账号存在性或发送结果；工作者另行发送。到期与冷却供客户端提示。 */
+export type CodeAdmission = { challengeId: string; expiresAt: number; resendAfterMs: number } | { retryAfterMs: number };
+/** 对外的发送进度：不区分失败与结果不明，二者都须重新申请。 */
+export type CodeDelivery = 'pending' | 'sent' | 'retry';
 /** 来源必须由可信入口根据连接生成 HMAC，不能直接取请求体的自称 IP。 */
 export interface CodeRequest {
   email: string;
@@ -117,7 +122,9 @@ export class EmailCodes {
         const context = { challengeId: (this.opt.nextId ?? newChallengeId)(), emailLookup: lookup, purpose: input.purpose };
         if (!validCodeContext(context)) throw new Error('code-random-invalid');
         const sealed = this.vault.seal(email, { purpose: 'challenge-email', recordId: context.challengeId });
-        if (this.repo.queue({ ...context, email: sealed, now })) return { challengeId: context.challengeId };
+        if (this.repo.queue({ ...context, email: sealed, now })) {
+          return { challengeId: context.challengeId, expiresAt: now + CODE_TTL_MS, resendAfterMs: CODE_COOLDOWN_MS };
+        }
       }
       throw new Error('code-id-exhausted');
     });
@@ -162,6 +169,14 @@ export class EmailCodes {
       }
       return { ...context, mac: stored.mac };
     });
+  }
+
+  /** 只读查询当前挑战的发送进度，不改变状态与错误次数；已失效、用尽或不存在时为空。 */
+  delivery(challengeId: string): { state: CodeDelivery; expiresAt: number } | undefined {
+    const stored = this.repo.status(challengeId, this.now());
+    if (!stored) return undefined;
+    const state = DELIVERY[stored.state];
+    return state ? { state, expiresAt: stored.expiresAt } : undefined;
   }
 
   /** 在注册或改密最终事务内再次校验并删除凭据；回滚时恢复未消费状态。 */

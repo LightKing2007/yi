@@ -288,3 +288,66 @@ it('发送后时钟损坏仍先清除机密，再明确拒绝而不留下 sendin
   await expect(ctx.codes.deliver(id)).rejects.toThrow('auth-clock-invalid');
   expect(ctx.row(id)).toMatchObject({ state: 'unknown', email_payload: null, code_mac: null, code_key_id: null, sent_at: null });
 });
+
+it('受理结果带十分钟期限与六十秒冷却，与实际冷却拒绝一致', () => {
+  const ctx = world();
+  const admitted = ctx.codes.request({ email: 'a@example.com', purpose: 'register', sourceHash: 'a'.repeat(64) });
+  expect(admitted).toEqual({ challengeId: expect.any(String), expiresAt: ctx.now + CODE_TTL_MS, resendAfterMs: CODE_COOLDOWN_MS });
+  expect(ctx.codes.request({ email: 'a@example.com', purpose: 'register', sourceHash: 'a'.repeat(64) })).toEqual({ retryAfterMs: CODE_COOLDOWN_MS });
+  if (!('challengeId' in admitted)) throw new Error('test-admission-rejected');
+  expect(ctx.row(admitted.challengeId)?.expires_at).toBe(admitted.expiresAt);
+});
+
+it('发送进度按状态映射且只读，失效、替换、消费、用尽或不存在时为空', async () => {
+  const ctx = world();
+  const id = ctx.request();
+  const expiresAt = ctx.now + CODE_TTL_MS;
+  expect(ctx.codes.delivery(id)).toEqual({ state: 'pending', expiresAt });
+  await ctx.codes.deliver(id);
+  expect(ctx.codes.delivery(id)).toEqual({ state: 'sent', expiresAt });
+  for (let i = 0; i < 4; i++) ctx.check(id, '999999');
+  expect(ctx.codes.delivery(id)?.state).toBe('sent');
+  expect(ctx.row(id)).toMatchObject({ state: 'sent', attempts: 4 });
+  ctx.check(id, '999999');
+  expect(ctx.codes.delivery(id)).toBeUndefined();
+  expect(ctx.codes.delivery('f'.repeat(32))).toBeUndefined();
+  ctx.now += CODE_COOLDOWN_MS;
+  const used = ctx.request();
+  await ctx.codes.deliver(used);
+  const proof = ctx.check(used);
+  if (!proof) throw new Error('test-proof-missing');
+  ctx.codes.consume(proof);
+  expect(ctx.codes.delivery(used)).toBeUndefined();
+  const old = ctx.request('b@example.com');
+  ctx.now += CODE_COOLDOWN_MS;
+  ctx.request('b@example.com');
+  expect(ctx.codes.delivery(old)).toBeUndefined();
+  const late = ctx.request('c@example.com');
+  ctx.now += CODE_TTL_MS;
+  expect(ctx.codes.delivery(late)).toBeUndefined();
+});
+
+it('发送失败与超时结果不明都提示重新申请', async () => {
+  const failing = world({ sender: async () => Promise.reject(new Error('fixture-send')) });
+  const failed = failing.request();
+  await failing.codes.deliver(failed);
+  expect(failing.row(failed)?.state).toBe('failed');
+  expect(failing.codes.delivery(failed)?.state).toBe('retry');
+  const started = deferred();
+  const complete = deferred();
+  const hanging = world({
+    sender: async () => {
+      started.resolve();
+      await complete.promise;
+    },
+  });
+  const unknown = hanging.request();
+  const pending = hanging.codes.deliver(unknown);
+  await started.promise;
+  expect(hanging.codes.delivery(unknown)?.state).toBe('pending');
+  hanging.deadlines[0]?.fire();
+  await pending;
+  complete.resolve();
+  expect(hanging.row(unknown)?.state).toBe('unknown');
+  expect(hanging.codes.delivery(unknown)?.state).toBe('retry');
+});

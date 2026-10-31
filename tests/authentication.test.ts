@@ -232,7 +232,7 @@ it('改密派生期间退出，旧会话不能完成改密', async () => {
     return AUTH_CHANGED_HASH;
   });
   const pending = ctx.auth.changePassword({ token, oldPassword: 'old-password', password: 'new-password', sourceHash: 'a'.repeat(64) });
-  const rejected = expect(pending).rejects.toThrow('auth-denied');
+  const rejected = expect(pending).rejects.toThrow('auth-session');
   await started.promise;
   ctx.auth.logout(token);
   complete.resolve();
@@ -311,3 +311,61 @@ it('真实 scrypt 完成注册、登录、重置和改密，原文口令和旧�
   expect((await auth.login({ email: proof.email, password: 'changed-password', sourceHash: 'a'.repeat(64) })).user.onlineAllowed).toBe(true);
   expect(events).toEqual([true, true, true]);
 }, 30000);
+
+it('验证码有效但邮箱已注册时给出 taken，不派生、不消费验证码', async () => {
+  const ctx = world();
+  const proof = await ctx.code('player@example.com');
+  await expect(ctx.auth.register(ctx.registration(proof))).rejects.toMatchObject({ reason: 'taken' });
+  expect(ctx.passwords.hash).not.toHaveBeenCalled();
+  expect(ctx.row(proof.challengeId)?.state).toBe('sent');
+  await expect(ctx.auth.register({ ...ctx.registration(proof), code: '999999' })).rejects.toMatchObject({ reason: 'denied' });
+});
+
+it('派生期间同一邮箱被注册时回滚为 taken，验证码保留', async () => {
+  const ctx = world();
+  const proof = await ctx.code();
+  ctx.passwords.hash.mockImplementation(async () => {
+    ctx.account(proof.email);
+    return AUTH_CHANGED_HASH;
+  });
+  await expect(ctx.auth.register(ctx.registration(proof))).rejects.toMatchObject({ reason: 'taken' });
+  expect(ctx.db.prepare('SELECT count(*) AS total FROM accounts').get()?.total).toBe(2);
+  expect(ctx.row(proof.challengeId)?.state).toBe('sent');
+});
+
+it('改密时令牌失效为 session，旧密码错误为 denied', async () => {
+  const ctx = world();
+  const token = (await ctx.login()).token;
+  const input = { token, oldPassword: 'old-password', password: 'new-password', sourceHash: 'a'.repeat(64) };
+  await expect(ctx.auth.changePassword({ ...input, token: 'f'.repeat(32) })).rejects.toMatchObject({ reason: 'session' });
+  await expect(ctx.auth.changePassword({ ...input, oldPassword: 'wrong' })).rejects.toMatchObject({ reason: 'denied' });
+  expect(ctx.passwords.hash).not.toHaveBeenCalled();
+});
+
+it('修改雅号规范化并保留 UID，更新活动时间；格式不符或令牌失效时不写入', async () => {
+  const ctx = world();
+  const token = (await ctx.login()).token;
+  const before = ctx.auth.me(token);
+  ctx.now += 60000;
+  const renamed = ctx.auth.rename(token, '  新雅号  ');
+  expect(renamed).toEqual({ ...before, name: '新雅号' });
+  expect(ctx.auth.me(token)).toEqual(renamed);
+  expect(ctx.accounts.byUserId(ctx.user.userId)?.publicId).toBe(before?.publicId);
+  expect(ctx.db.prepare('SELECT last_seen_at FROM sessions').get()?.last_seen_at).toBe(ctx.now);
+  expect(() => ctx.auth.rename(token, '‮棋')).toThrow('auth-invalid');
+  expect(() => ctx.auth.rename(token, '')).toThrow('auth-invalid');
+  ctx.auth.logout(token);
+  expect(() => ctx.auth.rename(token, '另一个')).toThrow('auth-session');
+  expect(ctx.accounts.byUserId(ctx.user.userId)?.name).toBe('新雅号');
+});
+
+it('补签协议更新活动时间，只读资料不更新', async () => {
+  const ctx = world();
+  const token = (await ctx.login()).token;
+  const created = ctx.now;
+  ctx.now += 60000;
+  ctx.auth.me(token);
+  expect(ctx.db.prepare('SELECT last_seen_at FROM sessions').get()?.last_seen_at).toBe(created);
+  expect(ctx.auth.acceptConsents(token, { accepted: true, privacy: 'v1', terms: 'v1' })).toBe(true);
+  expect(ctx.db.prepare('SELECT last_seen_at FROM sessions').get()?.last_seen_at).toBe(ctx.now);
+});
