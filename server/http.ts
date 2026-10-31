@@ -29,7 +29,8 @@ export function hardenHttp(server: http.Server) {
  * 本机直接发出的请求（上线脚本读健康检查）不计。被限流时至多每 HTTP_LIMITED_LOG_SECS 秒写一行 warn 日志，
  * 只记次数，不记 IP（DAT-073）
  */
-export function withHttpLimit(next: Web, gate: HttpGate, now: () => number, log?: Log, limited: Limited = tooManyRequests): Web {
+export function withHttpLimit(next: Web, gate: HttpGate, now: () => number, opt: { log?: Log; limited?: Limited } = {}): Web {
+  const { log, limited = tooManyRequests } = opt;
   let count = 0,
     loggedAt = -Infinity;
   return (req, res) => {

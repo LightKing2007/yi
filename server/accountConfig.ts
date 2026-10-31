@@ -28,10 +28,10 @@ const BUDGET = /^[1-9][0-9]{0,3}$/;
 const BUDGET_MAX = 1000;
 const BUDGET_DEFAULT = 30;
 
-/** 必填的文本项：未设置或不合格时记为一项错误 */
-function required(env: Env, variable: string, format: RegExp, expected: string, fail: Fail): string {
+/** 协议版本：必填，未设置或不合格时记为一项错误 */
+function version(env: Env, variable: string, fail: Fail): string {
   const value = env[variable] ?? '';
-  if (!format.test(value)) fail(variable, expected);
+  if (!VERSION.test(value)) fail(variable, '1 至 32 位字母、数字、点或连字符');
   return value;
 }
 
@@ -40,9 +40,8 @@ export function parseAccountConfig(env: Env, fail: Fail): AccountConfig | undefi
   const flag = env.YI_ACCOUNTS ?? '';
   if (flag !== '' && flag !== '0' && flag !== '1') fail('YI_ACCOUNTS', '0 或 1');
   if (flag !== '1') return undefined;
-  const version = '1 至 32 位字母、数字、点或连字符';
-  const privacyVersion = required(env, 'YI_PRIVACY_VERSION', VERSION, version, fail);
-  const termsVersion = required(env, 'YI_TERMS_VERSION', VERSION, version, fail);
+  const privacyVersion = version(env, 'YI_PRIVACY_VERSION', fail);
+  const termsVersion = version(env, 'YI_TERMS_VERSION', fail);
   const credentialsDir = env.CREDENTIALS_DIRECTORY ?? '';
   if (!credentialsDir.startsWith('/')) fail('CREDENTIALS_DIRECTORY', '由 systemd 的 LoadCredential= 设置的绝对路径');
   const budgetText = env.YI_CODE_BUDGET;

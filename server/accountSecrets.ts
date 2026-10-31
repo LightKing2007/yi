@@ -11,8 +11,9 @@ import { isRecord } from '../src/shared/check';
 import type { CodeKeyring } from './codeCredentials';
 import type { EmailKeyring } from './emailProtection';
 
-/** 凭据名，与 yi.service 中 LoadCredential= 的名称一致 */
+/** 账号密钥的凭据名，与 yi-accounts.conf 中 LoadCredential= 的名称一致 */
 export const KEYS_CREDENTIAL = 'yi-account-keys';
+/** 发信配置的凭据名，与 yi-accounts.conf 中 LoadCredential= 的名称一致 */
 export const SMTP_CREDENTIAL = 'yi-smtp';
 const KEY_BYTES = 32;
 const KEY_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/;
@@ -74,15 +75,21 @@ function parseKeys(value: Record<string, unknown> | undefined) {
   return { email: { currentKeyId: email.currentKeyId, encryption: email.keys, lookup }, code: { currentKeyId: code.currentKeyId, keys: code.keys }, source };
 }
 
+/** 不含换行与空字符、长度在 1 至 max 个码点之间的文本：口令与发件人名称会进入 SMTP 命令或邮件头部 */
+const plain = (value: unknown, max: number): value is string =>
+  typeof value === 'string' && value.length > 0 && [...value].length <= max && !/[\r\n\0]/.test(value);
+/** 符合正则的字符串 */
+const matches = (value: unknown, format: RegExp): value is string => typeof value === 'string' && format.test(value);
+/** 1 至 65535 的整数端口 */
+const isPort = (value: unknown): value is number => Number.isInteger(value) && Number(value) >= 1 && Number(value) <= PORT_MAX;
+
 /** 发信部分 */
 function parseSmtp(value: Record<string, unknown> | undefined): AccountSecrets['smtp'] | undefined {
   if (!value) return undefined;
   const { host, port, username, password, fromAddress, fromName } = value;
-  if (typeof host !== 'string' || !HOST.test(host) || !Number.isInteger(port) || Number(port) < 1 || Number(port) > PORT_MAX) return undefined;
-  if (typeof username !== 'string' || !ADDRESS.test(username) || typeof fromAddress !== 'string' || !ADDRESS.test(fromAddress)) return undefined;
-  if (typeof password !== 'string' || !password.length || password.length > PASSWORD_MAX || /[\r\n\0]/.test(password)) return undefined;
-  if (typeof fromName !== 'string' || !fromName.length || [...fromName].length > NAME_MAX || /[\r\n\0]/.test(fromName)) return undefined;
-  return { host, port: Number(port), username, password, from: { address: fromAddress, name: fromName } };
+  if (!matches(host, HOST) || !isPort(port) || !matches(username, ADDRESS) || !matches(fromAddress, ADDRESS)) return undefined;
+  if (!plain(password, PASSWORD_MAX) || !plain(fromName, NAME_MAX)) return undefined;
+  return { host, port, username, password, from: { address: fromAddress, name: fromName } };
 }
 
 /** 读取凭据目录；任何一份不合格时抛出 AccountSecretsError */

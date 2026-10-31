@@ -8,10 +8,10 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { AccountConfig } from './accountConfig';
 import { apiLimited, withAccountApi } from './accountApi';
 import type { AccountSecrets } from './accountSecrets';
+import { MINUTE_MS } from './authPolicy';
 import { Authentication } from './authentication';
 import { CodeCredentials } from './codeCredentials';
-import { AuthLimitRepo } from './db/authLimits';
-import { LoginSessionRepo } from './db/loginSessions';
+import { authPruner } from './db/authPrune';
 import { EmailCodes, type CodeMail } from './emailCodes';
 import { EmailProtection } from './emailProtection';
 import type { Web } from './health';
@@ -19,8 +19,10 @@ import { tooManyRequests, type Limited } from './http';
 import type { Log } from './log';
 import { smtpSender } from './smtp';
 
+/** 定时清理的间隔（分钟） */
+const PRUNE_MINUTES = 10;
 /** 定时清理的间隔 */
-export const ACCOUNT_PRUNE_MS = 10 * 60_000;
+export const ACCOUNT_PRUNE_MS = PRUNE_MINUTES * MINUTE_MS;
 /** 生产环境的桌面页面来源（账号接口契约第 2.4.2 条） */
 const APP_ORIGIN = 'app://yi';
 /** EHLO 中报出的本机名 */
@@ -52,13 +54,11 @@ const mailImage = () => Buffer.from(__MAIL_IMAGE__, 'base64');
 
 /** 过期数据的定时清理：验证码挑战、登录会话与限流记录 */
 function pruner(db: DatabaseSync, codes: EmailCodes, now: () => number) {
-  const sessions = new LoginSessionRepo(db);
-  const limits = new AuthLimitRepo(db);
+  const auth = authPruner(db);
   return () => {
     const at = now();
     codes.repo.prune(at);
-    sessions.prune(at);
-    limits.prune(at);
+    auth(at);
   };
 }
 

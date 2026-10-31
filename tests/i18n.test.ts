@@ -31,6 +31,8 @@ const SKIPPED_FILES: Record<string, string> = {
   'server/websiteConfig.ts': '官网配置错误仅向运维输出，不进入网页或游戏界面',
   'server/serve.ts': '服务端运行时的日志文字，只写入服务端日志',
   'server/backupCommand.ts': '备份命令的结果，只写入备份任务的日志',
+  'server/accountConfig.ts': '账号功能配置校验失败时的期望格式，只写入服务端日志',
+  'server/accountSecrets.ts': '账号凭据校验失败时的期望格式，只写入服务端日志',
   'server/config.ts': '配置校验失败时的期望格式与服务启动的说明，只写入服务端日志',
   'server/db/index.ts': '数据库无法打开或迁移失败的诊断信息，只写入服务端日志',
   'server/page.ts': '网站页面只有中文，标点由 I18N-011 检查',

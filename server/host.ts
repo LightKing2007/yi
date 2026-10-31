@@ -204,7 +204,7 @@ export async function startHost(ports: number | number[], opt: HostOptions = {})
   const httpGate = new HttpGate();
   const api = opt.accounts ? opt.accounts.api(notFound) : notFound;
   const health = withHealth(build, () => server.health(), api, metrics ? () => metrics.render(gauges()) : undefined);
-  const web = withHttpLimit(health, httpGate, now, opt.log, opt.accounts?.limited);
+  const web = withHttpLimit(health, httpGate, now, { log: opt.log, limited: opt.accounts?.limited });
   const listening = await listenAll(Array.isArray(ports) ? ports : [ports], opt.host, web);
   servers = listening.map(item => item.wss);
   const limits = new IpLimits(now);

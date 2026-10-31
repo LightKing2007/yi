@@ -86,7 +86,8 @@ it('重启时把中断的发送记为结果不明；定时清理删去过期的�
   const ctx = await world();
   ctx.db.exec(
     'INSERT INTO email_challenges (challenge_id, email_lookup, purpose, state, is_current, email_payload, code_mac, code_key_id, created_at, expires_at) ' +
-      `VALUES ('${'a'.repeat(32)}', '${'b'.repeat(64)}', 'register', 'sending', 1, '{}', '${'c'.repeat(64)}', 'k1', ${Date.UTC(2026, 10, 1)}, ${Date.UTC(2026, 10, 1) + CODE_TTL_MS})`,
+      `VALUES ('${'a'.repeat(32)}', '${'b'.repeat(64)}', 'register', 'sending', 1, '{}', '${'c'.repeat(64)}', 'k1', ` +
+      `${Date.UTC(2026, 10, 1)}, ${Date.UTC(2026, 10, 1) + CODE_TTL_MS})`,
   );
   ctx.db.exec(
     'INSERT INTO email_challenges (challenge_id, email_lookup, purpose, state, is_current, created_at, expires_at) ' +
