@@ -157,7 +157,8 @@ function verify() {
 <div class="col"><span class="idx">肆</span><h3>系统要求</h3><dl class="reqs">${reqs}</dl></div>
 <div class="col"><span class="idx">伍</span><h3>更新与隐私</h3>
 <p>有新版本时，游戏的开始菜单及联机对战页面会给出提示，点击提示即可打开本页面。安装新版本即可完成更新，设置与段位均予以保留。</p>
-<p>游戏不收集使用数据，也不上传日志，错误日志仅保存在本机。联机时，服务器仅保存匿名身份的散列值、昵称及段位分。</p></div>
+<p>单机对局在本机运行，客户端错误日志不会自动上传。联网对战会处理昵称、身份关联标记、段位和对局记录。
+详情见<a href="/privacy-policy">隐私政策（草案）</a>。</p></div>
 </div></section>`;
 }
 

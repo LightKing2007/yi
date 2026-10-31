@@ -6,6 +6,8 @@
  */
 import fs from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { agreementPage } from '../server/agreementPage';
+import { AGREEMENT_DOCUMENTS } from '../server/agreementText';
 import { downloadPage } from '../server/downloadPage';
 import { homePage } from '../server/homePage';
 import { PLATFORMS, type PagePkg } from '../server/page';
@@ -89,6 +91,14 @@ function pageTexts(html: string) {
 }
 
 describe('标点的检查范围（I18N-011）', () => {
+  it('文书目录与独立文件页的文字：中文标点成对且段落以句号结尾', () => {
+    for (const html of [agreementPage('v'), ...AGREEMENT_DOCUMENTS.map(doc => agreementPage('v', doc))]) {
+      const { paragraphs, others } = pageTexts(html);
+      expect(paragraphs.length).toBeGreaterThan(0);
+      expect([...paragraphs.flatMap(paragraphIssues), ...others.flatMap(punctuationIssues)]).toEqual([]);
+    }
+  });
+
   it('译文表中的全部中文原文与文言译文：界面文字、禁着提示与服务端下发的提示', () => {
     expect(TABLE.flatMap(r => [...punctuationIssues(r[0]), ...punctuationIssues(r[1])])).toEqual([]);
   });

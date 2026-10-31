@@ -113,7 +113,7 @@ h3 { font: 900 clamp(22px, 2vw, 28px)/1.3 var(--serif); }
 .foot-brand { display: flex; align-items: center; gap: 16px; color: #ece7dd; }
 .foot-brand .glyph { width: 30px; }
 .foot-motto { font: 400 15px/1 var(--serif); letter-spacing: 0.3em; color: #a39b8e; }
-.foot-links { display: flex; gap: 28px; align-items: center; }
+.foot-links { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px 28px; align-items: center; }
 .foot-links a { text-decoration: none; transition: color 0.3s var(--ease); }
 .foot-links a:hover { color: #ece7dd; }
 .foot-legal { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 28px; padding-top: 24px; border-top: 1px solid rgb(236 231 221 / 0.08); }
@@ -124,7 +124,7 @@ h3 { font: 900 clamp(22px, 2vw, 28px)/1.3 var(--serif); }
   .bar nav { display: none; }
   .bar .pill { margin-left: auto; }
   .foot-in { grid-template-columns: 1fr; }
-  .foot-links { flex-wrap: wrap; gap: 12px 24px; }
+  .foot-links { justify-content: flex-start; gap: 12px 24px; }
   .btn { height: 54px; }
 }
 `;

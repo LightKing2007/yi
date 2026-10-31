@@ -2,6 +2,7 @@
  * 安装包下载：联机端口上的普通网页请求（不是 WebSocket 的）走这里，不用另开端口。路径白名单（API-060）：
  *   GET /             主页（homePage.ts）
  *   GET /download/    下载页面（downloadPage.ts）；带 ?start 时推断确定的访客进入页面即开始下载。/download 重定向到 /download/
+ *   GET /agreement   文书目录；三份文件各用 /文件名 访问（agreementText.ts）；尾斜杠重定向至规范路径
  *   GET /<文件名>     下载这个文件，支持断点续传；目录里只认 Yi-版本-平台 这样命名的文件，其他文件与子目录一概不给
  *   GET /SHA256SUMS   各安装程序的 SHA-256（SEC-070）
  *   GET /assets/<名>  页面的标题图、图标、备案图标与字体：名单见 ASSET_TYPES，内容在构建时嵌入，运行时不读取磁盘
@@ -13,10 +14,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { clientIp } from './clientIp';
+import { agreementPages } from './agreementPage';
 import { downloadPage } from './downloadPage';
 import { homePage } from './homePage';
 import { PLATFORMS, type PagePkg } from './page';
-import { CLIENT_HINT_HEADERS, detectPlatform } from './platform';
+import { sendDocument, sendPage } from './pageResponse';
+import { detectPlatform } from './platform';
 
 const PER_IP = 2,
   TOTAL = 8;
@@ -64,15 +67,6 @@ export function tooManyRequests(res: ServerResponse, retryAfterSecs: number) {
     .end('请求过于频繁，请稍后再试。');
 }
 
-/** HTML 响应另带的头（API-063）：不允许任何脚本 */
-const HTML_HEADERS = {
-  ...BASE_HEADERS,
-  'Content-Type': 'text/html; charset=utf-8',
-  'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; font-src 'self'",
-  'Referrer-Policy': 'no-referrer',
-  'Cache-Control': 'no-cache',
-  ...CLIENT_HINT_HEADERS,
-};
 /** 页面的路径（不含开头的斜杠）：主页与下载页面 */
 const HOME = '',
   DOWNLOAD = 'download/';
@@ -234,11 +228,6 @@ function parseUrl(req: IncomingMessage): { name: string; starting: boolean } | n
   }
 }
 
-/** 主页或下载页面 */
-function sendPage(res: ServerResponse, body: Buffer, head: boolean) {
-  res.writeHead(OK, { ...HTML_HEADERS, 'Content-Length': body.length }).end(head ? undefined : body);
-}
-
 /** /assets/ 下的资源：只给 ASSET_TYPES 名单中、构建时已嵌入的 */
 function sendAsset(res: ServerResponse, asset: string, head: boolean) {
   const type = Object.hasOwn(ASSET_TYPES, asset) ? ASSET_TYPES[asset] : undefined;
@@ -370,6 +359,7 @@ export function fileServer(dir: string, stall: StallLimit = STALL) {
   const sums = checksums(dir);
   const pkgs = listing(dir);
   const render = pages(pkgs, sums);
+  const agreements = agreementPages(__APP_VERSION__);
   const downloads = installers(dir, stall);
   const handle = (req: IncomingMessage, res: ServerResponse) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') {
@@ -383,6 +373,7 @@ export function fileServer(dir: string, stall: StallLimit = STALL) {
     }
     const { name, starting } = url;
     const head = req.method === 'HEAD';
+    if (sendDocument(res, agreements, name, head)) return;
     if (name === HOME || name === DOWNLOAD) sendPage(res, render(name, req, name === DOWNLOAD && starting), head);
     // 只保留页面认得的 start：主页的下载按钮若被写成 /download?start，重定向之后仍自动开始下载
     else if (`${name}/` === DOWNLOAD) res.writeHead(MOVED, { ...BASE_HEADERS, Location: `/${DOWNLOAD}${starting ? '?start' : ''}` }).end();
