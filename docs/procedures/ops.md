@@ -3,8 +3,8 @@
 | 项目 | 内容 |
 |---|---|
 | 性质 | 规程，强制执行；依据 [07-operations.md](../standards/07-operations.md)、[03-data.md](../standards/03-data.md)、[05-security.md](../standards/05-security.md) |
-| 文件版本 | 1.2.4 |
-| 修订日期 | 2026-10-31 |
+| 文件版本 | 1.3.0 |
+| 修订日期 | 2026-11-01 |
 | 适用范围 | 线上服务器 yi.lightking.com.cn 的日常检查、备份与恢复、回滚、应急处置 |
 | 相关文档 | [release.md](release.md)（发版与上线）、[README.md](../../README.md) 第 5.3、5.4 节（部署结构） |
 
@@ -155,3 +155,17 @@ ssh root@yi.lightking.com.cn 'echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) LightKing con
 ## 7 独立官网
 
 官网统一位于 `/opt/www/yi.lightking.com.cn`，服务为 `yi-web`，由 Caddy 转到本机 8444。游戏服务、数据库和备份仍按本规程前六章维护。官网的发布、安装程序更新、首次迁移和回滚按 [website.md](website.md) 执行；不要通过更新游戏服务端来更新文书。日常另查看 `yi-web` 服务及其日志；首次配置切换须确认没有对局，保留 Caddy 原配置。
+
+## 8 账号功能
+
+8.1 账号功能由开关 `YI_ACCOUNTS` 控制，默认关闭，关闭时 `/api/*` 一律 404。打开账号功能须项目所有者决定，且只能在 4.0 的数据库升级与恢复演练通过之后进行；主分支程序启动即把数据库升到结构第 5 版，旧版程序随后无法打开该数据库。
+
+8.2 打开时，由 root 在服务器上依次执行，全程不把密钥或口令发到聊天、提交到仓库或写进日志：
+
+1. 建立凭据目录：`install -d -m 0700 -o root -g root /etc/yi/credentials`。
+2. 生成账号密钥：`umask 077 && node /opt/yi/current/server.cjs account-keys > /etc/yi/credentials/yi-account-keys`。密钥只在服务器上生成，丢失后已注册玩家的邮箱无法解密、登录无法查找，须与数据库分开另行加密备份（决策 0010）。
+3. 写入发信配置 `/etc/yi/credentials/yi-smtp`（`umask 077`），字段为 `host`（如 `smtpdm.aliyun.com`）、`port`（465）、`username`（阿里云发信地址）、`password`（SMTP 口令）、`fromAddress`（与发信地址相同）、`fromName`（如“弈”），格式见 `server/accountSecrets.ts`。
+4. 把 `scripts/server/yi-accounts.conf` 安装为 `/etc/systemd/system/yi.service.d/accounts.conf`，填入文书正式生效的版本号，执行 `systemctl daemon-reload`。
+5. 按 [发布规程](release.md) 经上线脚本重启；日志中出现 `account.enabled` 即已启用。凭据缺失或格式不符时服务写 `account.secrets-invalid` 并以退出码 78 停止，日志只给出凭据名与期望的格式。
+
+8.3 关闭时删除 `accounts.conf`，执行 `systemctl daemon-reload` 后经上线脚本重启；凭据文件保留，以便再次打开时已有账号仍可使用。每次真实发信的验证须先经项目所有者确认收件邮箱。

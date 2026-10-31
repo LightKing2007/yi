@@ -17,3 +17,8 @@ const SOURCES = {
 export function pageAssets(root) {
   return Object.fromEntries(Object.entries(SOURCES).map(([name, file]) => [name, fs.readFileSync(new URL(file, root)).toString('base64')]));
 }
+
+/** 验证码邮件内嵌的墨色“弈”字图（base64），经 define 嵌入联机服务端（__MAIL_IMAGE__）；root 为仓库根目录的 URL */
+export function mailImage(root) {
+  return fs.readFileSync(new URL('server/assets/mail-yi.png', root)).toString('base64');
+}

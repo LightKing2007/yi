@@ -3,6 +3,7 @@ import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { build } from 'esbuild';
+import { mailImage } from './page-assets.mjs';
 
 // 版本号与提交号写进程序里：服务端启动时打出来，线上跑的是哪一版一看便知
 const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
@@ -43,6 +44,7 @@ await Promise.all([
     outfile: 'dist-server/server.cjs',
     plugins: [rawText],
     banner: { js: '#!/usr/bin/env node' },
+    define: { ...common.define, __MAIL_IMAGE__: JSON.stringify(mailImage(new URL('../', import.meta.url))) },
   }),
   build({ ...common, entryPoints: ['scripts/offsite.ts'], outfile: 'dist-server/offsite.cjs' }), // 异地加密备份，在服务器上由 yi-offsite.service 运行（P1-13）
 ]);

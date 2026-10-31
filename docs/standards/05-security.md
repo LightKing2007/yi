@@ -3,8 +3,8 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.16 |
-| 修订日期 | 2026-10-31 |
+| 文件版本 | 1.1.17 |
+| 修订日期 | 2026-11-01 |
 | 规则前缀 | `SEC` |
 
 参考：ISO/IEC 27001:2022、ISO/IEC 27002:2022；GB/T 22239—2019（第二级）；GB/T 20984—2022；OWASP ASVS 5.0；Electron Security Checklist；CIS Ubuntu Linux 24.04 LTS Benchmark；ISO/IEC 29147:2018、ISO/IEC 30111:2019。
@@ -72,7 +72,7 @@
 | 编号 | 等级 | 规定 | 现状 |
 |---|---|---|---|
 | SEC-050 | A | 严禁在仓库中提交任何密钥、令牌、口令、私钥、`.env` 文件；CI 必须运行密钥扫描（gitleaks），发现即阻断 | 满足（P1-03，#24：CI 以 gitleaks 扫描提交历史；P1-19 起为规则集 `main` 的必需检查） |
-| SEC-051 | A | 服务器上的密钥文件权限统一为 `0600`，属主为使用它的服务用户；环境变量中的密钥统一通过 systemd 的 `LoadCredential=` 传入，严禁写入 `Environment=` | 不适用 |
+| SEC-051 | A | 服务器上的密钥文件权限统一为 `0600`，属主为使用它的服务用户；环境变量中的密钥统一通过 systemd 的 `LoadCredential=` 传入，严禁写入 `Environment=` | 部分满足（账号功能的密钥与发信凭据经 `LoadCredential=` 传入：`scripts/server/yi-accounts.conf`、`server/accountSecrets.ts`；尚未在服务器上启用。凭据文件属主为 root、权限 0600，由 systemd 交给服务读取，服务用户不能直接读源文件） |
 | SEC-052 | A | CI 中的密钥只允许存放在 GitHub Secrets，并只授予需要它的 job；发布用的 SSH 部署密钥必须是仅能执行上线命令的受限密钥（`command=` 限制） | 不适用 |
 | SEC-053 | D | 所有密钥每 365 日轮换一次；人员变动或疑似泄露时，必须在 24 小时内轮换 | 不适用 |
 

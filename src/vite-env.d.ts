@@ -15,3 +15,5 @@ declare const __APP_VERSION__: string;
 declare const __APP_COMMIT__: string;
 /** 下载页面的资源：文件名 → base64 内容（构建时嵌入，只有服务端引用，见 scripts/page-assets.mjs） */
 declare const __PAGE_ASSETS__: Record<string, string>;
+/** 验证码邮件内嵌的墨色“弈”字图（base64，构建时嵌入，只有联机服务端引用，见 scripts/page-assets.mjs） */
+declare const __MAIL_IMAGE__: string;

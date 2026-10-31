@@ -29,8 +29,8 @@ export function hardenHttp(server: http.Server) {
  * 本机直接发出的请求（上线脚本读健康检查）不计。被限流时至多每 HTTP_LIMITED_LOG_SECS 秒写一行 warn 日志，
  * 只记次数，不记 IP（DAT-073）
  */
-export function withHttpLimit(next: Web, gate: HttpGate, now: () => number, log?: Log): Web {
-  let limited = 0,
+export function withHttpLimit(next: Web, gate: HttpGate, now: () => number, log?: Log, limited: Limited = tooManyRequests): Web {
+  let count = 0,
     loggedAt = -Infinity;
   return (req, res) => {
     const wait = fromThisHost(req) ? 0 : gate.admit(clientIp(req), now());
@@ -38,14 +38,17 @@ export function withHttpLimit(next: Web, gate: HttpGate, now: () => number, log?
       next(req, res);
       return;
     }
-    tooManyRequests(res, wait);
-    limited++;
+    limited(res, wait, req);
+    count++;
     if (now() - loggedAt < HTTP_LIMITED_LOG_SECS) return;
-    log?.('warn', 'http.limited', { msg: 'HTTP 请求超出频率限制', count: limited });
+    log?.('warn', 'http.limited', { msg: 'HTTP 请求超出频率限制', count });
     loggedAt = now();
-    limited = 0;
+    count = 0;
   };
 }
+
+/** 超出频率限制时的回应；账号接口改用自己的错误格式（accountApi.ts 的 apiLimited） */
+export type Limited = (res: import('node:http').ServerResponse, retryAfterSecs: number, req: import('node:http').IncomingMessage) => void;
 
 /** HTTP 请求超出频率限制；官网和联机端口共用相同的状态码与等待提示。 */
 export function tooManyRequests(res: import('node:http').ServerResponse, retryAfterSecs: number) {

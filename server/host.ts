@@ -9,7 +9,7 @@ import type { AddressInfo } from 'node:net';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { CLOSE_CODE } from '../src/shared/protocol';
 import { clientIp } from './clientIp';
-import { hardenHttp, withHttpLimit } from './http';
+import { hardenHttp, withHttpLimit, type Limited } from './http';
 export { HTTP_LIMITS, hardenHttp } from './http';
 import { withHealth, type Build, type Web } from './health';
 import type { Gauges } from './metrics';
@@ -177,6 +177,8 @@ function closeAll(listening: Listening[]) {
  */
 export type HostOptions = RoomServerOptions & {
   host?: string;
+  /** 账号功能打开时的接口与其限流回应（accountService.ts）；不设时 /api 一律 404 */
+  accounts?: { api: (next: Web) => Web; limited: Limited };
   build?: Build;
   eventLoopLag?: () => number;
   dbFileBytes?: () => number;
@@ -200,8 +202,9 @@ export async function startHost(ports: number | number[], opt: HostOptions = {})
   });
   const { metrics } = opt;
   const httpGate = new HttpGate();
-  const health = withHealth(build, () => server.health(), notFound, metrics ? () => metrics.render(gauges()) : undefined);
-  const web = withHttpLimit(health, httpGate, now, opt.log);
+  const api = opt.accounts ? opt.accounts.api(notFound) : notFound;
+  const health = withHealth(build, () => server.health(), api, metrics ? () => metrics.render(gauges()) : undefined);
+  const web = withHttpLimit(health, httpGate, now, opt.log, opt.accounts?.limited);
   const listening = await listenAll(Array.isArray(ports) ? ports : [ports], opt.host, web);
   servers = listening.map(item => item.wss);
   const limits = new IpLimits(now);

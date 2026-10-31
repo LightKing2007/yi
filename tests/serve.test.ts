@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { parseConfig } from '../server/config';
 import { Logger } from '../server/log';
+import { KEYS_CREDENTIAL, newAccountKeys, SMTP_CREDENTIAL } from '../server/accountSecrets';
+import { ACCOUNT_PRUNE_MS } from '../server/accountService';
 import { LOG_FLUSH_MS, SNAPSHOT_MS, serve, type ServeDeps } from '../server/serve';
 import { PROTO_VERSION } from '../src/shared/protocol';
 import { newUid } from './serverWorld';
@@ -152,5 +154,56 @@ describe('服务端运行时出错', () => {
     expect(run.lines.at(-1)).toMatchObject({ event: 'server.listen-failed', ports: [port] });
     expect(run.timers.get(LOG_FLUSH_MS)?.stopped).toBe(true);
     expect(fs.existsSync(path.join(dir, 'yi.db-wal'))).toBe(false); // 数据库已关闭
+  });
+});
+
+describe('账号功能', () => {
+  /** 打开账号功能的环境变量；凭据目录在临时目录下 */
+  const accountsOn = () => ({ YI_ACCOUNTS: '1', YI_PRIVACY_VERSION: 'p1', YI_TERMS_VERSION: 't1', CREDENTIALS_DIRECTORY: path.join(dir, 'creds') });
+  const smtp = { host: 'smtpdm.example.com', port: 465, username: 'a@b.cn', password: 'fixture', fromAddress: 'a@b.cn', fromName: '弈' };
+
+  it('关闭时账号接口一律 404，不注册定时清理', async () => {
+    const run = harness();
+    await serve(run.deps);
+    const [port] = run.lines.at(-1)?.ports as number[];
+    expect((await fetch(`http://127.0.0.1:${port}/api/v1/consents/required`)).status).toBe(404);
+    expect(run.timers.has(ACCOUNT_PRUNE_MS)).toBe(false);
+    run.signals.get('SIGTERM')?.();
+    await exited(run.exits);
+  });
+
+  it('凭据合格时提供账号接口，按 IP 限流时回应统一错误格式；关闭时停止定时清理', async () => {
+    fs.mkdirSync(path.join(dir, 'creds'));
+    fs.writeFileSync(path.join(dir, 'creds', KEYS_CREDENTIAL), newAccountKeys());
+    fs.writeFileSync(path.join(dir, 'creds', SMTP_CREDENTIAL), JSON.stringify(smtp));
+    const run = harness(0, accountsOn());
+    await serve(run.deps);
+    expect(run.events()).toEqual(['db.migrating', 'db.migrated', 'db.opened', 'account.enabled', 'server.start']);
+    const [port] = run.lines.at(-1)?.ports as number[];
+    const url = `http://127.0.0.1:${port}/api/v1/consents/required`;
+    expect(await (await fetch(url)).json()).toMatchObject({ privacy: 'p1', terms: 't1' });
+    const external = { headers: { 'X-Forwarded-For': '203.0.113.7', Origin: 'app://yi' } };
+    let answer = await fetch(url, external);
+    for (let i = 0; i < 40 && answer.status !== 429; i++) answer = await fetch(url, external);
+    expect([answer.status, answer.headers.get('content-type'), answer.headers.get('access-control-allow-origin')]).toEqual([
+      429,
+      'application/problem+json; charset=utf-8',
+      'app://yi',
+    ]);
+    run.signals.get('SIGTERM')?.();
+    expect(await exited(run.exits)).toEqual([0]);
+    expect(run.timers.get(ACCOUNT_PRUNE_MS)?.stopped).toBe(true);
+  });
+
+  it('凭据缺失时逐项写 account.secrets-invalid、不监听端口，以 78 退出；日志不含密钥', async () => {
+    fs.mkdirSync(path.join(dir, 'creds'));
+    fs.writeFileSync(path.join(dir, 'creds', SMTP_CREDENTIAL), JSON.stringify({ ...smtp, password: 'leak-me', port: 0 }));
+    const run = harness(0, accountsOn());
+    await serve(run.deps);
+    expect(run.exits).toEqual([78]);
+    expect(run.events()).toEqual(['db.migrating', 'db.migrated', 'db.opened', 'account.secrets-invalid', 'account.secrets-invalid']);
+    expect(run.lines.slice(-2).map(line => line.credential)).toEqual([KEYS_CREDENTIAL, SMTP_CREDENTIAL]);
+    expect(JSON.stringify(run.lines)).not.toContain('leak-me');
+    expect(run.timers.size).toBe(0);
   });
 });
