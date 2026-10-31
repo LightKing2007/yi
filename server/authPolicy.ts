@@ -22,7 +22,7 @@ export const LOGIN_FAILURE_WINDOW_MS = FAILURE_WINDOW_MINUTES * MINUTE_MS;
 export const LOGIN_LOCK_MS = LOGIN_LOCK_MINUTES * MINUTE_MS;
 /** 达到此失败次数即锁定账号（SEC-023）。 */
 export const LOGIN_FAILURES = 5;
-/** 同一来源每分钟登录请求上限（SEC-023）。 */
+/** 登录及其他密码派生入口共享同来源每分钟上限（SEC-023）。 */
 export const LOGIN_IP_ATTEMPTS = 10;
 /** 登录来源统计窗口。 */
 export const LOGIN_IP_WINDOW_MS = MINUTE_MS;

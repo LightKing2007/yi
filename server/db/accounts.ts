@@ -3,6 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { parsePublicId } from '../../src/shared/publicId';
 import type { ProtectedEmail } from '../emailProtection';
 import { newPublicId } from '../publicId';
+import { transaction } from './transaction';
 
 const PUBLIC_ID_ATTEMPTS = 5;
 
@@ -59,7 +60,7 @@ function statements(db: DatabaseSync) {
   };
 }
 
-/** 同一数据库连接不允许在外层异步事务中调用；加密回调必须同步，不访问网络。 */
+/** 支持同步外层认证事务；加密回调必须同步，不访问网络。 */
 export class AccountRepo {
   private readonly sql;
 
@@ -89,8 +90,7 @@ export class AccountRepo {
   /** 创建用户、账号与协议同意同一事务提交；失败时不遗留用户或泄露邮箱。 */
   create(input: NewAccount, seal: (userId: number) => ProtectedEmail): StoredAccount {
     if (!input.consents.some(item => item.kind === 'privacy')) throw new Error('account-privacy-required');
-    this.db.exec('BEGIN IMMEDIATE');
-    try {
+    return transaction(this.db, () => {
       if (this.byEmailLookup(input.emailLookup)) throw new Error('account-email-taken');
       const publicId = this.availablePublicId();
       const userId = Number(this.sql.insertUser.run(input.name, input.now, input.now).lastInsertRowid);
@@ -111,12 +111,8 @@ export class AccountRepo {
       for (const item of input.consents) this.sql.consent.run(userId, item.kind, item.version, input.now);
       const stored = this.byUserId(userId);
       if (!stored) throw new Error('account-create-failed');
-      this.db.exec('COMMIT');
       return stored;
-    } catch (error) {
-      this.db.exec('ROLLBACK');
-      throw error;
-    }
+    });
   }
 
   /** 检查也覆盖已注销账号，已发放的公开编号不能重新分配。 */
