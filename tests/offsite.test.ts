@@ -294,7 +294,9 @@ describe('本机写出的文件须在项目目录以外', () => {
       fs.rmSync(path.join(project, name), { force: true }); // 检查失效时也不在仓库中留下文件
       expect([result.status, result.stderr, left]).toEqual([1, expect.stringContaining('在项目目录内'), false]);
     }
-  });
+    // 两次启动 Node.js 子进程：参考机全量 test:coverage 下实测 0.80 至 0.88 秒，按 CI 加覆盖率 10 倍估算约 9 秒，
+    // 超过默认的 5 秒；取 20 秒留出余量，与上线脚本测试一致（TST-024）
+  }, 20_000);
 
   it('相对路径按当前目录解析：在项目根目录执行时，写相对路径即被拒绝', () => {
     const cwd = process.cwd();
