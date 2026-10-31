@@ -1,8 +1,9 @@
 /**
- * 网站页面（主页 homePage.ts、下载页面 downloadPage.ts）共用的部分：安装程序与平台的描述、推荐的安装程序、文档外壳、顶栏与页脚。
+ * 网站页面共用部分：安装程序与平台描述、推荐程序、文档外壳、顶栏与页脚；协议页也复用同一外壳。
  * 页面不含任何脚本（API-063）：交互与动画全部以 CSS 实现，访客的操作系统由服务端按请求头推断（platform.ts）。
  */
 import { siteStyle } from './pageStyle';
+import { AGREEMENT_INFO } from './agreementText';
 import type { Detected } from './platform';
 
 /** 页面上的一个安装程序；sha256 为 null 表示校验值尚在计算 */
@@ -90,7 +91,8 @@ export function shell(spec: ShellSpec) {
 <main id="main">${spec.body}</main>
 <footer class="foot"><div class="foot-in">
 <div class="foot-brand"><span class="glyph"></span><span class="foot-motto">以木为枰，以石为子</span></div>
-<div class="foot-links"><a href="/">主页</a><a href="/download/">下载</a><a href="/SHA256SUMS">SHA256SUMS</a>
+<div class="foot-links"><a href="/">主页</a><a href="/download/">下载</a>
+<a href="/agreement">${esc(AGREEMENT_INFO.title)}</a>
 <a href="https://github.com/LightKing2007/yi" target="_blank" rel="noopener noreferrer">GitHub</a></div>
 <div class="foot-legal"><span>Copyright © 2026 LightKing。保留所有权利。</span>
 <span>游戏附带思源黑体、思源宋体的子集，依 SIL Open Font License 1.1 授权使用。</span>
