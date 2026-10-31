@@ -3,8 +3,8 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.14 |
-| 修订日期 | 2026-10-31 |
+| 文件版本 | 1.1.15 |
+| 修订日期 | 2026-11-01 |
 | 规则前缀 | `API` |
 
 参考：RFC 6455（WebSocket）；RFC 8259（JSON）；RFC 9110（HTTP 语义）；RFC 9457（问题详情）；OWASP ASVS 5.0 第 1 章、第 4 章；OWASP API Security Top 10:2023；Unicode UTS #39。
@@ -49,14 +49,14 @@
 | 编号 | 等级 | 规定 | 现状 |
 |---|---|---|---|
 | API-020 | A | 服务端下发的错误统一为 `{ t: 'error', code, level, params?, retryAfterMs? }`；严禁下发自然语言文本，文本由客户端按 `code` 查译文表得到（协议 v4 起执行，v3 保持兼容） | 未满足（F-17） |
-| API-021 | A | 全部错误码在 `src/shared/errors.ts` 中以常量表唯一定义，每项包括错误码、级别、中文原文；本文件第 8 节为初始码表，新增错误码必须同时更新两处 | 未满足 |
+| API-021 | A | 全部错误码在 `src/shared/errors.ts` 中以常量表唯一定义，每项包括错误码、级别、中文原文；本文件第 8 节为初始码表，新增错误码必须同时更新两处 | 满足（`src/shared/errors.ts`；`tests/errors.test.ts` 核对两处的错误码与级别一致） |
 | API-022 | A | 每个错误码必须有对应的测试用例，验证在何种条件下下发 | 部分满足 |
 | API-023 | A | E5 错误严禁向客户端暴露异常消息、调用栈、文件路径；服务端日志中必须记录完整调用栈和一个错误编号 `errorId`（UUID v4），并把 `errorId` 下发给客户端，以便对照 | 满足（P2-15：协议 v3 以文本下发提示，附带 `errorId`） |
 | API-024 | A | 客户端收到未知错误码时，统一按其级别处理；级别也未知时按 E5 处理，严禁抛出异常 | 不适用 |
 
 ## 4 状态码与关闭码映射
 
-4.1 HTTP 接口（下载页面、健康检查，以及 3.0 的 `/api/*`）的状态码统一如下，错误响应体统一为 RFC 9457 `application/problem+json`，其中 `type` 统一为 `https://yi.lightking.com.cn/errors/错误码`：
+4.1 HTTP 接口（下载页面、健康检查，以及账号接口 `/api/v1/*`）的状态码统一如下，错误响应体统一为 RFC 9457 `application/problem+json`，其中 `type` 统一为 `https://yi.lightking.com.cn/errors/错误码`：
 
 | 状态码 | 使用场景 | 对应级别 |
 |---|---|---|
@@ -69,6 +69,7 @@
 | 409 | 状态冲突（如昵称已被占用） | E2 |
 | 413 | 请求体超过上限 | E4 |
 | 416 | 断点续传的范围无效，必须带 `Content-Range: bytes */总长` | E4 |
+| 422 | 请求格式正确，但业务校验未通过且玩家可自行纠正（如验证码错误、协议版本已更新） | E2 |
 | 429 | 超出频率限制，必须带 `Retry-After` 秒数 | E3 |
 | 500 | 未预期的服务端异常 | E5 |
 | 503 | 维护中或下载并发已满，必须带 `Retry-After` 秒数 | E3 / E5 |
@@ -149,6 +150,21 @@
 | `game.draw-exhausted` | E2 | 本局求和次数已用完 | 同左 |
 | `game.rematch-ranked` | E2 | 排位赛不能再来一局 | 同左 |
 | `game.rematch-opponent-left` | E2 | 对方已离开，无法再来一局 | 同左 |
-| `auth.required` | E2 | 排位需要登录（3.0 起） | — |
-| `auth.invalid` | E4 | 登录已失效，请重新登录（3.0 起） | — |
-| `account.restricted` | E2 | 账号暂时不能进行排位（3.0 起，`params.until`） | — |
+| `auth.required` | E2 | 请先登录（4.0 起；账号接口已使用） | — |
+| `auth.invalid` | E4 | 登录已失效，请重新登录（4.0 起） | — |
+| `account.restricted` | E2 | 账号暂时不能进行排位（4.0 起，`params.until`） | — |
+
+8.2 下表为账号 HTTP 接口使用的错误码，状态码与触发条件见 [账号接口契约](../plan/account-api.md) 第 5.2 节；`rate.limited`、`server.internal` 沿用上表。
+
+| 错误码 | 级别 | 中文原文 |
+|---|---|---|
+| `auth.credentials-invalid` | E2 | 邮箱或密码不正确 |
+| `auth.busy` | E3 | 登录人数较多，请稍后再试 |
+| `account.email-taken` | E2 | 该邮箱已注册 |
+| `code.invalid` | E2 | 验证码不正确或已失效 |
+| `code.not-found` | E2 | 验证码已失效，请重新获取 |
+| `consent.outdated` | E2 | 相关协议已更新，请重新阅读并同意 |
+| `request.invalid` | E4 | 请求格式错误 |
+| `request.too-large` | E4 | 请求内容过大 |
+| `request.method-not-allowed` | E4 | 不支持此请求方式 |
+| `request.origin-denied` | E2 | 请求来源不受支持 |

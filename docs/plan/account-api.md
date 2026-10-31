@@ -2,9 +2,9 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文件版本 | 0.2 |
+| 文件版本 | 0.3 |
 | 修订日期 | 2026-11-01（Asia/Shanghai） |
-| 状态 | 2026-11-01 经项目所有者确认（#228）；第 7 章的业务补充已完成，路由尚未装配，`/api/*` 目前一律返回 404 |
+| 状态 | 2026-11-01 经项目所有者确认（#228）；业务补充与路由处理已实现（`server/accountApi.ts`、`server/accountRoutes.ts`），尚未装配到联机程序，线上 `/api/*` 仍一律返回 404 |
 | 相关文档 | [阶段 6、7 设计](phase6-7.md)、[下一步计划](next-development.md)、[接口规范](../standards/04-api.md)、[安全规范](../standards/05-security.md)、[数据规范](../standards/03-data.md) |
 
 本契约是 [下一步计划](next-development.md) 第 13.4 节第 1 项的前置条件，定义批次 D（账号 HTTP 与邮件边界）与批次 E（桌面安全存储与账号界面）共同遵守的路径、请求、响应与错误。实现以本契约为准；[阶段 6、7 设计](phase6-7.md) 第 5 章的接口表为早期草拟，路径与名称以本文为准。本契约不涉及联机协议第 4 版的 `hello` 字段，该部分随批次 F 另行定稿。
@@ -86,7 +86,7 @@
 | `PUT /api/v1/me/name` | 是 | 修改雅号 | 200 |
 | `PUT /api/v1/me/password` | 是 | 以旧密码修改密码 | 204 |
 | `POST /api/v1/me/consents` | 是 | 同意新的必需协议版本 | 200 |
-| `DELETE /api/v1/me` | 是 | 注销账号 | 保留，见第 3.12 条 |
+| `DELETE /api/v1/me` | 是 | 注销账号 | 保留，实现前为 405，见第 3.12 条 |
 
 ### 3.2 必需协议版本
 
@@ -222,7 +222,7 @@
 
 ### 3.12 注销（保留）
 
-`DELETE /api/v1/me` 需要重新输入密码，进入 [决策 0011](../adr/0011-public-id-and-account-retention.md) 所述的限期匿名化流程。业务层尚未实现，本路径在实现前按 API-060 返回 404；请求与响应在实现注销的 PR 中补入本契约。
+`DELETE /api/v1/me` 需要重新输入密码，进入 [决策 0011](../adr/0011-public-id-and-account-retention.md) 所述的限期匿名化流程。业务层尚未实现；`/api/v1/me` 已有 `GET`，因此实现前 `DELETE` 返回 405 `request.method-not-allowed` 并带 `Allow: GET`。请求与响应在实现注销的 PR 中补入本契约。
 
 ## 4 资料对象
 
@@ -258,7 +258,7 @@
 
 ### 5.2 错误码
 
-下表中“已有”指 04-api 第 8 节已列出的错误码；“新增”须在实现 PR 中同时加入第 8 节与 `src/shared/errors.ts`，并各有测试（API-021、API-022）。
+下表中“已有”指 04-api 第 8 节已列出的错误码；“新增”已加入第 8.2 条与 `src/shared/errors.ts`，`tests/errors.test.ts` 核对两处一致，`tests/accountApi.test.ts` 逐个验证下发条件（API-021、API-022）。
 
 | 错误码 | 级别 | 状态码 | 中文原文 | 来源 |
 |---|---|---|---|---|
@@ -277,7 +277,7 @@
 | `server.maintenance` | E2 | 503 | 服务器即将维护，暂不开始新的对局 | 已有；账号接口在维护模式下照常提供，不使用此码 |
 | `server.internal` | E5 | 500 | 服务器出现问题，请稍后再试 | 已有 |
 
-5.2.1 04-api 第 4.1 条的状态码表没有 422。本契约用 422（RFC 9110 第 15.5.21 节）表示请求格式正确、但业务校验未通过且玩家可自行纠正的情形，对应级别 E2；实现 PR 须同时在第 4.1 条增加此行。
+5.2.1 04-api 第 4.1 条的状态码表没有 422。本契约用 422（RFC 9110 第 15.5.21 节）表示请求格式正确、但业务校验未通过且玩家可自行纠正的情形，对应级别 E2；04-api 1.1.15 已在第 4.1 条增加此行。
 
 5.2.2 客户端收到未知错误码时，按 `level` 处理；`level` 也未知时按 E5 处理（API-024）。网络中断、超时或响应不是合法 JSON 时，统一按 `server.internal` 的处理方式提示，不清除已保存的登录状态。
 
@@ -299,7 +299,7 @@
 | 按挑战编号读取发送状态 | `server/emailCodes.ts` 的 `delivery`、`server/db/emailChallenges.ts` | 已完成：只读；当前且未用尽的挑战按第 3.4 条映射，其他情况为空 |
 | 受理时返回到期与冷却时长 | `server/emailCodes.ts` | 已完成：受理结果带 `expiresAt`（毫秒时刻，路由层转为 RFC 3339）与 `resendAfterMs` |
 | 补签协议更新活动时间 | `server/authentication.ts` | 已完成：与第 2.2.3 条一致，只读的 `me` 仍不更新 |
-| 密码任务忙时的映射 | 路由层 | 待路由实现：执行器忙时已抛出 `PasswordBusyError`（`server/passwords.ts`），路由层将其映射为第 2.5.3 条的 503 `auth.busy` |
+| 密码任务忙时的映射 | 路由层 | 已完成：`server/accountRoutes.ts` 将 `PasswordBusyError` 映射为第 2.5.3 条的 503 `auth.busy`，建议等待 1 秒 |
 
 ## 8 极端情况
 

@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 文件编号 | YI-STD-001 |
-| 文件版本 | 1.1.65 |
+| 文件版本 | 1.1.66 |
 | 发布日期 | 2026-10-02 |
 | 状态 | 现行；整改项按 [plan/remediation.md](../plan/remediation.md) 的期限实施 |
 | 编制 | LightKing、Claude |
@@ -327,3 +327,4 @@ GB/T 11457—2006 界定的以及下列术语和定义适用于本规范。
 | 1.1.63 | 2026-10-31 | 修订 [04-api.md](04-api.md) 的 API-060：网站增加 `/agreement` 文书目录及 `/privacy-policy`、`/terms-of-service`、`/minors-privacy-rules` 三个独立草案页，忽略查询参数，尾斜杠以 301 规范化；资源由网站各页共用，仍不允许脚本（API-063）；规则编号不变 |
 | 1.1.64 | 2026-10-31 | 按项目所有者的决定修订 [07-operations.md](07-operations.md) 的 OPS-043、OPS-044：`/opt/yi` 只保留当前与上一版联机程序及 `env`，回滚不再处理安装程序；安装包只在官网目录保留当前版本，旧版由 GitHub Release 保存；规则编号不变 |
 | 1.1.65 | 2026-10-31 | 同步各规范中未随整改项更新的“现状”，规定本身不变：2026-10-31 逐条对照代码、CI 与整改项的完成记录核对，[01-coding.md](01-coding.md) 中尚写“待 P1-01 测量”或沿用 2026-10-02 计数的各项改为 `npm run ratchet` 与 ESLint 的实测数，COD-001、COD-006、COD-053、COD-068、COD-071 改为满足；[02-architecture.md](02-architecture.md) 的 ARC-011、ARC-012（P1-16），[03-data.md](03-data.md) 的 DAT-080、DAT-081（P1-14），[04-api.md](04-api.md) 的 API-010 至 API-016、API-042、API-043、API-045、API-047、API-050、API-051、API-063（P1-04 至 P1-06），[05-security.md](05-security.md) 的 SEC-020、SEC-022、SEC-050、SEC-060 至 SEC-062（P0-04、P1-03、P1-07），[07-operations.md](07-operations.md) 的 OPS-005、OPS-006、OPS-010 至 OPS-012、OPS-015、OPS-072，[08-versioning.md](08-versioning.md) 的 VER-011、VER-012、VER-030，[09-text-and-i18n.md](09-text-and-i18n.md) 的 I18N-030、I18N-060、I18N-061；[06-testing.md](06-testing.md) 的 TST-010、TST-011、TST-042，以及 TST-041：#141 起单元测试不再断言单步耗时，由性能基准测量、发布前对照上限，不自动阻断；规则编号不变 |
+| 1.1.66 | 2026-11-01 | 随账号 HTTP 接口的实现修订 [04-api.md](04-api.md)（1.1.15）：第 4.1 条增加 422，表示请求格式正确、但业务校验未通过且玩家可自行纠正，对应 E2；第 8 节 `auth.required` 的原文改为“请先登录”（该码尚未发布），`auth.*`、`account.restricted` 的启用版本由 3.0 更正为 4.0，新增第 8.2 条账号接口的 10 个错误码；API-021 随 `src/shared/errors.ts` 改为满足。依据 [账号接口契约](../plan/account-api.md)（项目所有者 2026-11-01 确认，#228）；规则编号不变 |
