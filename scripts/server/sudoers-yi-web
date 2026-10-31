@@ -1,0 +1,2 @@
+# 官网代码只能以 yi-web 的独立身份运行；不得经此入口修改 systemd 或 Caddy。
+deploy ALL=(root) NOPASSWD: /usr/local/sbin/yi-web-deploy install *, /usr/local/sbin/yi-web-deploy downloads *, /usr/local/sbin/yi-web-deploy rollback

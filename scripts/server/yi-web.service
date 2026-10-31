@@ -1,0 +1,45 @@
+# 独立官网。网站和安装包均在 /opt/www/yi.lightking.com.cn，不读取联机数据或密钥。
+[Unit]
+Description=Yi independent website
+After=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+WorkingDirectory=/opt/www/yi.lightking.com.cn/current
+ExecStart=/opt/node/bin/node /opt/www/yi.lightking.com.cn/current/web.cjs
+Environment=YI_WEB_PORT=8444
+Environment=YI_WEB_FILES=/opt/www/yi.lightking.com.cn/downloads/current
+Restart=on-failure
+RestartPreventExitStatus=78
+RestartSec=3
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+InaccessiblePaths=-/var/lib/yi -/etc/yi -/opt/yi
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallErrorNumber=EPERM
+SystemCallArchitectures=native
+UMask=0077
+TasksMax=32
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target
