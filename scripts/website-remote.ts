@@ -54,24 +54,21 @@ if (command === 'install' && tag && /^web-[a-f0-9]{12}$/.test(tag) && source && 
     version: tag,
     sums: fs.readFileSync(sums, 'utf8'),
     fetch: (file, target) => {
-      const cached = path.join('/opt/yi/releases', tag, 'download', file);
-      if (fs.existsSync(cached)) fs.copyFileSync(cached, target);
-      else
-        execFileSync(
-          'curl',
-          [
-            '--fail',
-            '--location',
-            '--connect-timeout',
-            '10',
-            '--max-time',
-            '600',
-            '-o',
-            target,
-            `https://github.com/LightKing2007/yi/releases/download/v${tag}/${file}`,
-          ],
-          { stdio: 'inherit' },
-        );
+      execFileSync(
+        'curl',
+        [
+          '--fail',
+          '--location',
+          '--connect-timeout',
+          '10',
+          '--max-time',
+          '600',
+          '-o',
+          target,
+          `https://github.com/LightKing2007/yi/releases/download/v${tag}/${file}`,
+        ],
+        { stdio: 'inherit' },
+      );
     },
   });
 } else if (command === 'rollback' && !tag) {

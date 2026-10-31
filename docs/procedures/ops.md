@@ -3,8 +3,8 @@
 | 项目 | 内容 |
 |---|---|
 | 性质 | 规程，强制执行；依据 [07-operations.md](../standards/07-operations.md)、[03-data.md](../standards/03-data.md)、[05-security.md](../standards/05-security.md) |
-| 文件版本 | 1.2.3 |
-| 修订日期 | 2026-10-30 |
+| 文件版本 | 1.2.4 |
+| 修订日期 | 2026-10-31 |
 | 适用范围 | 线上服务器 yi.lightking.com.cn 的日常检查、备份与恢复、回滚、应急处置 |
 | 相关文档 | [release.md](release.md)（发版与上线）、[README.md](../../README.md) 第 5.3、5.4 节（部署结构） |
 
@@ -93,7 +93,7 @@ ssh deploy@yi.lightking.com.cn "journalctl -u yi-backup --since -2days --no-page
 
 ## 4 回滚
 
-4.1 新版本出现 OPS-047 所列情况之一时，立即回滚，服务端、安装程序与 `YI_LATEST` 一并恢复为上一版本（OPS-044），步骤见 [release.md](release.md) 第 6.5 条：
+4.1 新版本出现 OPS-047 所列情况之一时，立即回滚，服务端与 `YI_LATEST` 一并恢复为上一版本（OPS-044），安装程序不随联机回滚变化，步骤见 [release.md](release.md) 第 6.5 条：
 
 ```bash
 npm run deploy -- rollback
@@ -132,13 +132,13 @@ npm run deploy -- restart
 
 5.4 磁盘使用率 ≥ 80%：以 `ssh root@yi.lightking.com.cn 'du -xh --max-depth=2 / | sort -h | tail -20'` 找出占用；journald 的日志总量已限制为 1 GB（OPS-065）；`/opt/yi/releases/` 只保留两个版本。须删除文件时，先确认文件的用途，不得删除数据库及其备份。
 
-5.5 安装程序疑似被篡改（SEV1）：以 Release 的 `SHA256SUMS` 核对线上的安装程序：
+5.5 安装程序疑似被篡改（SEV1）：以 Release 的 `SHA256SUMS` 核对官网当前的安装程序：
 
 ```bash
-gh release download v版本号 -p SHA256SUMS -O - | ssh root@yi.lightking.com.cn 'cd /opt/yi/current/download && sha256sum --check --ignore-missing'
+gh release download v版本号 -p SHA256SUMS -O - | ssh root@yi.lightking.com.cn 'cd /opt/www/yi.lightking.com.cn/downloads/current && sha256sum --check --ignore-missing'
 ```
 
-不一致时立即重新上线该版本（版本相同时先执行 `npm run deploy -- rollback`，再执行 `npm run deploy -- 版本号`），在下载页面与游戏内通知玩家，并按第 5.1 条复盘。
+不一致时保留证据并隔离损坏的版本目录，再执行 `npm run deploy:website -- downloads 版本号` 从 GitHub Release 重新安装，在下载页面与游戏内通知玩家，并按第 5.1 条复盘。不得为修复安装程序而回滚联机程序。
 
 5.6 服务器疑似被入侵（SEV1）：在阿里云控制台的安全组中只保留维护者当前 IP 的 22 端口，保留现场后再排查；更换 SSH 密钥（SEC-040）；从备份恢复数据库前，先核对备份的校验和与内容；按第 5.1 条复盘。
 

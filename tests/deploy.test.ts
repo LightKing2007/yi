@@ -10,7 +10,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 const SCRIPT = path.resolve(__dirname, '../scripts/deploy.sh');
-const FILES = { 'Yi-2.0.5-win-x64-setup.exe': 'windows', 'Yi-2.0.5-mac-arm64.dmg': 'mac', 'yi-server-2.0.5.cjs': 'server' };
+const FILES = { 'yi-server-2.0.5.cjs': 'server' };
 
 let dir = '';
 
@@ -46,16 +46,21 @@ afterEach(() => {
 });
 
 describe('上线脚本核对 SHA256SUMS', () => {
-  it('安装程序与服务端都与 SHA256SUMS 一致时通过；SHA256SUMS 中另有本次未下载的文件（软件物料清单）不影响', () => {
-    prepare(FILES, { ...FILES, 'yi-sbom-2.0.5.cdx.json': 'sbom' });
+  it('服务端与 SHA256SUMS 一致时通过；清单中的其他附件不影响', () => {
+    prepare(FILES, { ...FILES, 'Yi-2.0.5-mac-arm64.dmg': 'mac', 'yi-sbom-2.0.5.cdx.json': 'sbom' });
     expect(verify()).toEqual({ code: 0, stderr: '' });
   });
 
-  it('某个文件的内容与 SHA256SUMS 不符时失败，并指出是哪个文件', () => {
-    prepare({ ...FILES, 'Yi-2.0.5-mac-arm64.dmg': 'tampered' }, FILES);
+  it('服务端的内容与 SHA256SUMS 不符时失败，并指出文件名', () => {
+    prepare({ 'yi-server-2.0.5.cjs': 'tampered' }, FILES);
     const result = verify();
     expect(result.code).not.toBe(0);
-    expect(result.stderr).toContain(`Yi-2.0.5-mac-arm64.dmg 的 SHA-256 不符：应为 ${sha256('mac')}，实为 ${sha256('tampered')}`);
+    expect(result.stderr).toContain(`yi-server-2.0.5.cjs 的 SHA-256 不符：应为 ${sha256('server')}，实为 ${sha256('tampered')}`);
+  });
+
+  it('联机上线校验不读取安装程序', () => {
+    prepare({ ...FILES, 'Yi-2.0.5-mac-arm64.dmg': 'tampered' }, { ...FILES, 'Yi-2.0.5-mac-arm64.dmg': 'mac' });
+    expect(verify()).toEqual({ code: 0, stderr: '' });
   });
 
   it('下载的文件不在 SHA256SUMS 中时失败', () => {

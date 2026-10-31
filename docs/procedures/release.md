@@ -3,8 +3,8 @@
 | 项目 | 内容 |
 |---|---|
 | 性质 | 规程，强制执行；依据 [07-operations.md](../standards/07-operations.md)、[08-versioning.md](../standards/08-versioning.md)、[09-text-and-i18n.md](../standards/09-text-and-i18n.md) |
-| 文件版本 | 1.1.12 |
-| 修订日期 | 2026-10-13 |
+| 文件版本 | 1.1.13 |
+| 修订日期 | 2026-10-31 |
 | 适用范围 | 从修改代码到玩家获得新版本的全部步骤：分支、提交、PR、更新日志、发版、上线、回滚、紧急修复 |
 
 本规程只规定操作步骤。各步骤须满足的要求以规则编号引用，规则内容以 `docs/standards/` 为准。
@@ -122,11 +122,11 @@ npm run deploy -- 2.0.5
 
 上线、`restart`、`rollback`、`status` 以部署用户 `deploy` 登录，经 sudo 执行服务器上 root 所有的 `/usr/local/sbin/yi-deploy`（SEC-044）。它是 `scripts/server/deploy-remote.sh` 的副本，二者不一致时上线脚本在上传前中止；该脚本有改动时，须先以 root 执行 `npm run deploy -- install-deploy-user` 更新，这一步安装以 root 身份运行的配置，须经项目所有者同意。其余 `install-*` 同样以 root 执行。
 
-6.2 服务器上的文件按版本存放（OPS-043）：`/opt/yi/releases/版本号/` 下为服务端 `server.cjs`、安装程序目录 `download/` 与记录 `YI_LATEST` 的 `env`；`/opt/yi/current`、`/opt/yi/previous` 为指向当前与上一版本目录的符号链接，`yi.service` 经 `current` 读取三者。服务器上只保留这两个版本。
+6.2 服务器上的文件按版本存放（OPS-043）：`/opt/yi/releases/版本号/` 下只有服务端 `server.cjs` 与记录 `YI_LATEST` 的 `env`；`/opt/yi/current`、`/opt/yi/previous` 为指向当前与上一版本目录的符号链接，`yi.service` 经 `current` 读取两者。服务器上只保留这两个版本。安装程序由[独立官网规程](website.md)维护，不上传或保存到此目录。
 
 6.3 上线脚本依次完成：
 
-1. 从该 Release 下载安装程序、服务端与 `SHA256SUMS`，按 `SHA256SUMS` 核对；
+1. 从该 Release 下载服务端与 `SHA256SUMS`，按 `SHA256SUMS` 核对；
 2. 上传前检查：服务器已改为版本目录；版本号不低于线上版本，低于时必须加 `--allow-downgrade`，与线上相同时中止（OPS-042）；磁盘可用空间不少于上传量的两倍。随后显示线上的版本号、活跃对局数与连接数；
 3. 询问上线后是否立即重启。加 `--restart` 参数时不询问，直接重启；
 4. 传到服务器后，在服务器上以 `flock /run/yi-deploy.lock` 加锁执行其余步骤（OPS-041），另一个上线过程持有锁时中止。再核对一次 `SHA256SUMS`，任一不符即中止，线上的文件保持不动（OPS-031）；
@@ -152,7 +152,7 @@ npm run deploy -- restart
 npm run deploy -- rollback
 ```
 
-回滚把 `current` 指回上一版本，服务端、安装程序与 `YI_LATEST` 一并恢复（OPS-044）；立即重启，不等待对局结束。再执行一次即换回。回滚后的检查与事件处置按 [ops.md](ops.md) 第 4 章、第 5 章执行。
+回滚把 `current` 指回上一版本，服务端与 `YI_LATEST` 一并恢复（OPS-044）；立即重启，不等待对局结束。再执行一次即换回。官网安装程序不随联机回滚变化。回滚后的检查与事件处置按 [ops.md](ops.md) 第 4 章、第 5 章执行。
 
 6.6 上线后按 [checklists.md](../standards/checklists.md) 第 4 节逐项核对。
 

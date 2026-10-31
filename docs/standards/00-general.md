@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 文件编号 | YI-STD-001 |
-| 文件版本 | 1.1.63 |
+| 文件版本 | 1.1.64 |
 | 发布日期 | 2026-10-02 |
 | 状态 | 现行；整改项按 [plan/remediation.md](../plan/remediation.md) 的期限实施 |
 | 编制 | LightKing、Claude |
@@ -325,3 +325,4 @@ GB/T 11457—2006 界定的以及下列术语和定义适用于本规范。
 | 1.1.61 | 2026-10-25 | 修订 [04-api.md](04-api.md) 的 API-060：网站改版，`/` 改为主页，下载页面移至 `/download/`（查询参数只认 `start`，`/download` 重定向到 `/download/`），`/assets/` 的资源供两个页面共用；[09-text-and-i18n.md](09-text-and-i18n.md) 第 2.2 节术语表增加“主页”，“下载页面”的地址相应更新。页面仍不允许任何脚本（API-063）；规则编号不变 |
 | 1.1.62 | 2026-10-29 | 同步 [03-data.md](03-data.md) 中 DAT-065 的“现状”：注明 2026-10-29 以数据库的异地备份再次演练通过，记录见 [audits/2026-10-29-restore-drill.md](../audits/2026-10-29-restore-drill.md)；规定本身不变，规则编号不变 |
 | 1.1.63 | 2026-10-31 | 修订 [04-api.md](04-api.md) 的 API-060：网站增加 `/agreement` 文书目录及 `/privacy-policy`、`/terms-of-service`、`/minors-privacy-rules` 三个独立草案页，忽略查询参数，尾斜杠以 301 规范化；资源由网站各页共用，仍不允许脚本（API-063）；规则编号不变 |
+| 1.1.64 | 2026-10-31 | 按项目所有者的决定修订 [07-operations.md](07-operations.md) 的 OPS-043、OPS-044：`/opt/yi` 只保留当前与上一版联机程序及 `env`，回滚不再处理安装程序；安装包只在官网目录保留当前版本，旧版由 GitHub Release 保存；规则编号不变 |

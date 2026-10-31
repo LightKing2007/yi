@@ -38,7 +38,8 @@ describe('上线（install）', () => {
     expect([link('current'), link('previous')]).toEqual(['releases/2.0.5', 'releases/2.0.4']);
     expect(fs.readdirSync(at('opt/releases')).sort()).toEqual(['2.0.4', '2.0.5']);
     expect(read(at('opt/releases/2.0.5/server.cjs'))).toBe('2.0.5 c205');
-    expect(fs.readdirSync(at('opt/releases/2.0.5/download')).sort()).toEqual(['Yi-2.0.5-mac-arm64.dmg', 'Yi-2.0.5-win-x64-setup.exe']);
+    expect(fs.readdirSync(at('opt/releases/2.0.5')).sort()).toEqual(['env', 'server.cjs']);
+    expect(fs.existsSync(at('opt/releases/2.0.5/download'))).toBe(false);
     expect(read(at('opt/releases/2.0.5/env'))).toBe('YI_LATEST=2.0.5\n');
     expect(read(at('sim/running'))).toBe('2.0.5 c205');
     expect(calls()).toContain('flock -n -E 75 ' + at('lock'));

@@ -13,8 +13,8 @@
 # 部署用户 deploy 经 sudo 执行 /usr/local/sbin/yi-deploy（本脚本的 root 所有的副本）时，只允许 preflight、install、restart、rollback、
 # status；install 以 --from=目录 指定 deploy 上传文件的目录，文件以 deploy 的身份读出、复制到 root 所有的临时目录后才使用。
 # 其余命令安装以 root 身份运行的配置，仍须以 root 执行（SEC-044）
-# 目录（OPS-043）：/opt/yi/releases/版本号/ 下为 server.cjs、download/（安装程序）、env（YI_LATEST）；
-# /opt/yi/current、/opt/yi/previous 为指向版本目录的符号链接，yi.service 经 current 读取三者。
+# 目录（OPS-043）：/opt/yi/releases/版本号/ 下为 server.cjs、env（YI_LATEST）；
+# /opt/yi/current、/opt/yi/previous 为指向版本目录的符号链接，yi.service 经 current 读取两者。安装程序由独立的官网部署流程维护。
 # 规则：加锁 OPS-041；降级确认 OPS-042；整体回滚 OPS-044；维护模式 OPS-045；健康检查与自动回滚 OPS-046；部署日志 OPS-048
 set -eu
 trap '' HUP PIPE # ssh 断开后照常做完：维护模式与重启后的检查不能停在半路
@@ -264,12 +264,11 @@ cmd_install() {
   say '✓ 服务器上的文件与 SHA256SUMS 一致'
   dest=$ROOT/releases/$v
   rm -rf "$dest.new"
-  mkdir -p "$dest.new/download"
-  mv "$HERE"/Yi-* "$dest.new/download/"
+  mkdir -p "$dest.new"
   mv "$HERE/yi-server-$v.cjs" "$dest.new/server.cjs"
   echo "YI_LATEST=$v" >"$dest.new/env"
-  chmod 755 "$dest.new" "$dest.new/download"
-  chmod 644 "$dest.new/server.cjs" "$dest.new/env" "$dest.new"/download/*
+  chmod 755 "$dest.new"
+  chmod 644 "$dest.new/server.cjs" "$dest.new/env"
   built=$("$NODE" "$dest.new/server.cjs" --version) || fail '新服务端无法运行，已中止，线上的文件保持不动'
   say "新服务端：$built"
   rm -rf "$dest"
@@ -280,7 +279,7 @@ cmd_install() {
     n=$(basename "$d")
     [ "$n" = "$v" ] || [ "$n" = "$cur" ] || { rm -rf "$d"; say "删除更早的版本目录 $n"; }
   done
-  say "✓ 已换到 ${v}（安装程序、服务端、最新版本号），上一版本 $cur 留作 previous"
+  say "✓ 已换到 ${v}（服务端、最新版本号），上一版本 $cur 留作 previous"
   if [ "$restart" = 1 ]; then finish deploy; else
     record deploy "$v" installed
     say "没有重启。挑没人下棋的时候执行：npm run deploy -- restart"
@@ -379,7 +378,7 @@ as_uploader() { runuser -u "$UPLOADER" -- "$@"; }
 # 部署用户上传文件的目录：其主目录下的 incoming/
 upload_root() { printf '%s/incoming' "${YI_UPLOAD_ROOT_HOME:-$(getent passwd "$UPLOADER" | cut -d: -f6)}"; }
 
-# 收取部署用户上传到 $1（须为 upload_root 下的 run.XXXXXX）的安装程序、服务端与 SHA256SUMS：以其身份逐个读出，
+# 收取部署用户上传到 $1（须为 upload_root 下的 run.XXXXXX）的服务端与 SHA256SUMS：以其身份逐个读出，
 # 写入 root 所有的临时目录，此后只用这份副本（HERE 改指向它，做完即删）；随后删除上传目录
 receive() {
   [ -n "$UPLOADER" ] || fail '--from= 只用于部署用户经 sudo 上线'
@@ -391,7 +390,7 @@ receive() {
   HERE=$(mktemp -d "$ROOT/.incoming/recv.XXXXXX")
   trap 'rm -rf "$HERE"' EXIT
   for f in $(as_uploader ls -A -- "$1"); do
-    case "$f" in Yi-* | yi-server-*.cjs | SHA256SUMS) ;; *) continue ;; esac
+    case "$f" in yi-server-*.cjs | SHA256SUMS) ;; *) continue ;; esac
     case "$f" in *[!A-Za-z0-9._-]*) fail "文件名不合规：$f" ;; esac
     as_uploader cat -- "$1/$f" >"$HERE/$f" || fail "读不出上传的 $f"
   done

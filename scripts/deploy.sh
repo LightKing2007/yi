@@ -19,7 +19,7 @@
 #                                              scripts/server/deploy-remote.sh 改动后须重新执行，否则日常上线会因版本不一致而中止
 # 身份（SEC-044）：上线、restart、rollback、status 以部署用户 deploy 登录，经 sudo 执行服务器上 root 所有的 yi-deploy；
 # 各 install-* 安装以 root 身份运行的配置，以 root 登录执行，每次须经项目所有者同意
-# 安装程序和服务端都取自同一个 Release 的附件，与标签上的代码一一对应；下载后与传到服务器后各按 Release 的 SHA256SUMS 核对一次（OPS-031）。
+# 联机服务端取自对应 Release 的附件，与标签上的代码一一对应；下载后与传到服务器后各按 Release 的 SHA256SUMS 核对一次（OPS-031）。安装程序由独立的官网部署流程维护。
 # 服务器上的步骤在 scripts/server/deploy-remote.sh：加锁、版本目录、维护模式、健康检查与自动回滚、部署日志（OPS-041 至 OPS-048）。
 set -eu
 # SSH 用 IP 而不用域名：维护者本机的代理软件可能把域名解析为虚拟地址，SSH 会连到代理上而登录失败
@@ -34,11 +34,11 @@ fail() { echo "✗ $1" >&2; exit 1; }
 # 文件的 SHA-256（十六进制）
 sha256() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1; }
 
-# 核对目录 $1 中每个安装程序与服务端的 SHA-256 与同一目录下的 SHA256SUMS 一致（OPS-031）；
-# 任一文件不在 SHA256SUMS 中或不一致即返回非零，并打出是哪个文件
+# 核对目录 $1 中联机服务端的 SHA-256 与同一目录下的 SHA256SUMS 一致（OPS-031）；
+# 文件不在 SHA256SUMS 中或不一致即返回非零，并打出文件名；安装程序不在这里处理
 verify_sums() {
   [ -f "$1/SHA256SUMS" ] || { echo "✗ 没有 SHA256SUMS" >&2; return 1; }
-  for f in "$1"/Yi-* "$1"/yi-server-*.cjs; do
+  for f in "$1"/yi-server-*.cjs; do
     [ -f "$f" ] || continue
     name=$(basename "$f")
     want=$(awk -v name="$name" '$2 == name { print $1 }' "$1/SHA256SUMS")
@@ -198,7 +198,7 @@ draft=$(gh release view "v$V" --json isDraft -q .isDraft 2>/dev/null) || fail "G
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
-gh release download "v$V" -D "$TMP" -p 'Yi-*' -p 'yi-server-*.cjs' -p SHA256SUMS
+gh release download "v$V" -D "$TMP" -p 'yi-server-*.cjs' -p SHA256SUMS
 [ -f "$TMP/yi-server-$V.cjs" ] || fail "Release 里没有 yi-server-$V.cjs"
 [ -f "$TMP/SHA256SUMS" ] || fail "v$V 的 Release 里没有 SHA256SUMS（2.0.5 起附带），无法核对下载的文件（OPS-031）"
 ls -l "$TMP"
@@ -212,4 +212,4 @@ if [ -z "$RESTART" ]; then
   read -r answer || answer=n
   case "$answer" in y | Y) RESTART=y ;; esac
 fi
-daily "install $V $ALLOW $([ "$RESTART" = y ] || echo --no-restart)" "$TMP"/Yi-* "$TMP/SHA256SUMS" "$TMP/yi-server-$V.cjs"
+daily "install $V $ALLOW $([ "$RESTART" = y ] || echo --no-restart)" "$TMP/SHA256SUMS" "$TMP/yi-server-$V.cjs"

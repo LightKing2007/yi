@@ -45,6 +45,11 @@ export function installWebsiteDownloads(opt: DownloadInstallation): void {
     fs.chmodSync(root, DIRECTORY_MODE);
     fs.chmodSync(path.join(root, 'releases'), DIRECTORY_MODE);
     switchWebsiteLink(root, 'current', relative);
+    // 服务器只保留当前安装包；历史版本由 GitHub Release 保存。只清理由本流程建立的版本目录。
+    for (const entry of fs.readdirSync(path.join(root, 'releases'), { withFileTypes: true })) {
+      if (entry.name !== opt.version && /^\d+\.\d+\.\d+$/.test(entry.name) && entry.isDirectory())
+        fs.rmSync(path.join(root, 'releases', entry.name), { recursive: true, force: true });
+    }
   } finally {
     fs.rmSync(stage, { recursive: true, force: true });
   }
