@@ -34,3 +34,27 @@ it('只安装并公布指定已发布版本的四个程序，校验失败时保�
     fs.rmSync(root, { recursive: true });
   }
 });
+
+it('切换成功后只保留当前安装包，暂存目录清空，不删除非版本目录', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-web-downloads-'));
+  const options = (version: string) => {
+    const files = websitePackages(version);
+    return {
+      root,
+      version,
+      sums: files.map(file => `${createHash('sha256').update(file).digest('hex')}  ${file}`).join('\n'),
+      fetch: (file: string, target: string) => fs.writeFileSync(target, file),
+    };
+  };
+  try {
+    installWebsiteDownloads(options('3.1.0'));
+    fs.mkdirSync(path.join(root, 'downloads/releases/keep'));
+    installWebsiteDownloads(options('3.2.0'));
+    const downloads = path.join(root, 'downloads');
+    expect(fs.readlinkSync(path.join(downloads, 'current'))).toBe('releases/3.2.0');
+    expect(fs.readdirSync(path.join(downloads, 'releases')).sort()).toEqual(['3.2.0', 'keep']);
+    expect(fs.readdirSync(downloads).filter(name => name.startsWith('.incoming-'))).toEqual([]);
+  } finally {
+    fs.rmSync(root, { recursive: true });
+  }
+});

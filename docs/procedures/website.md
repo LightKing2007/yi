@@ -22,7 +22,7 @@
 以下配置安装和公网路由切换以 root 执行，须有项目所有者的生产操作授权（SEC-044）；脚本保留原配置，不修改 Caddy 主配置或其他站点。
 
 1. `npm run deploy:website -- bootstrap`：安装网站专用单元、root 所有的受限部署工具和 sudo 白名单，尚不切换路由。
-2. `npm run deploy:website -- downloads 3.1.0`：从已发布游戏 Release 获取校验清单。优先复制服务器上的对应已发布安装程序，没有副本时从该 Release 下载；核对四个程序后独立保存。
+2. `npm run deploy:website -- downloads 3.1.0`：从已发布游戏 Release 获取校验清单与四个安装程序，核对后独立保存到官网目录；不读取 `/opt/yi`。
 3. `npm run deploy:website -- install web-提交号`：只接受已发布的网站 Release；核对内容后切换目录，重启 `yi-web` 并验证完整提交号。首次启动失败则停止网站，已有网站更新失败则恢复旧版。
 4. `npm run deploy:website -- activate`：确认网站健康且当前没有联机对局，再安装本仓库的 `yi.caddy`、校验并平滑重载 Caddy；六个公开页面检查失败时恢复旧配置。不重启 `yi`。首次重载可能使旧代理连接重新建立，应选择无玩家时操作。
 5. 核对 HTTPS 页面、四个平台下载和校验值、公开健康检查为 404，以及 `wss://yi.lightking.com.cn/ws` 和根路径的 WebSocket 仍可建立。核对游戏健康检查的版本与提交未变。
@@ -32,8 +32,8 @@ SSH 使用域名并严格验证已保存的主机密钥，不自动接受新密�
 ## 4 后续更新和回滚
 
 - 更新网站代码或文书：发布新的网站 Release，执行 `npm run deploy:website -- install web-提交号`。无需再次 bootstrap 或 activate，也无需升级游戏数据库。
-- 更新可下载的游戏：在游戏 Release 发布后执行 `npm run deploy:website -- downloads 游戏版本`。不切换网站代码，不重启联机程序。
-- 回滚网站：`npm run deploy:website -- rollback`，只切换网站程序，下载版本保持独立；需要回退下载版本时另执行上一游戏版本的 downloads 命令。
+- 更新可下载的游戏：在游戏 Release 发布后执行 `npm run deploy:website -- downloads 游戏版本`，从该 Release 下载并校验四个安装程序。不切换网站代码，不重启联机程序，也不读取 `/opt/yi`。
+- 回滚网站：`npm run deploy:website -- rollback`，只切换网站程序，下载版本保持独立；需要回退下载版本时另执行上一游戏版本的 downloads 命令，从 GitHub 取得旧安装包。
 - 状态：`npm run deploy:website -- status`。日志：`ssh deploy@yi.lightking.com.cn journalctl -u yi-web --since yesterday --no-pager`。
 
-站点目录中 `releases/完整提交号` 为不可变网站产物，`current` 与 `previous` 为网站链接；`downloads/releases/游戏版本` 为安装程序，`downloads/current` 单独切换。`config-backup/` 保存配置迁移前的副本，`deploy.log` 只记录网站操作。每次操作仍按运维规程检查磁盘；未成功的 `.incoming-*` 暂存目录须核对所属操作后清理，不能删除 current 或 previous 指向的目录。
+站点目录中 `releases/完整提交号` 为不可变网站产物，`current` 与 `previous` 为网站链接；`downloads/releases/游戏版本` 为安装程序，`downloads/current` 单独切换。安装包切换成功后删除服务器上的旧游戏版本，只保留当前一份；历史安装包由 GitHub Release 保存。`config-backup/` 保存配置迁移前的副本，`deploy.log` 只记录网站操作。每次操作仍按运维规程检查磁盘；未成功的 `.incoming-*` 暂存目录须核对所属操作后清理，不能删除 current 或 previous 指向的目录。

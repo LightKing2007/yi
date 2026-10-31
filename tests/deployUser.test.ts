@@ -98,21 +98,20 @@ describe('部署用户经 sudo 执行 yi-deploy', () => {
     expect(link('current')).toBe('releases/2.0.4');
   });
 
-  it('以部署用户的身份读出上传的文件，只取安装程序、服务端与 SHA256SUMS，上线后删除上传目录', () => {
+  it('以部署用户的身份读出上传的文件，只取服务端与 SHA256SUMS，上线后删除上传目录', () => {
     const dir = upload('2.0.5', { 'notes.txt': 'x' });
     expect(run(['install', '2.0.5', `--from=${dir}`], SCRIPT, '', AS_DEPLOY)).toMatchObject({ code: 0 });
     expect([link('current'), read(at('sim/running'))]).toEqual(['releases/2.0.5', '2.0.5 c205']);
     expect(calls().filter(line => line.startsWith('runuser'))).toEqual([
       'runuser deploy ls run.abc123',
       'runuser deploy cat SHA256SUMS',
-      'runuser deploy cat Yi-2.0.5-mac-arm64.dmg',
-      'runuser deploy cat Yi-2.0.5-win-x64-setup.exe',
       'runuser deploy cat yi-server-2.0.5.cjs',
       'runuser deploy rm run.abc123',
     ]);
     expect(fs.existsSync(dir)).toBe(false);
     expect(fs.readdirSync(at('opt/.incoming'))).toEqual([]);
-    expect(fs.readdirSync(at('opt/releases/2.0.5/download')).sort()).toEqual(['Yi-2.0.5-mac-arm64.dmg', 'Yi-2.0.5-win-x64-setup.exe']);
+    expect(fs.readdirSync(at('opt/releases/2.0.5')).sort()).toEqual(['env', 'server.cjs']);
+    expect(fs.existsSync(at('opt/releases/2.0.5/download'))).toBe(false);
   });
 
   it('上传目录不在部署用户的 incoming/ 下、或名称含路径时拒绝', () => {

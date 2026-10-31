@@ -218,12 +218,12 @@ node dist-server/server.cjs --version
 
 ### 5.3 线上部署
 
-线上服务器为 47.108.181.240（域名 `yi.lightking.com.cn`，Ubuntu 24.04），部署结构如下。服务端与安装程序按版本存放（整改项 P1-09，OPS-043）：
+线上服务器为 47.108.181.240（域名 `yi.lightking.com.cn`，Ubuntu 24.04），部署结构如下。联机服务端按版本存放（整改项 P1-09，OPS-043），安装程序由独立官网目录维护：
 
 | 位置 | 内容 |
 |---|---|
 | `/opt/node/` | Node.js 24 官方二进制包（自 npmmirror 下载并校验后解压，不改动系统软件包） |
-| `/opt/yi/releases/版本号/` | 一个版本的服务端 `server.cjs`、下载页面上的安装程序 `download/` 与最新版本号 `env`（`YI_LATEST=版本号`），属主为 root，服务端只读；只保留当前与上一版本（OPS-043） |
+| `/opt/yi/releases/版本号/` | 一个版本的服务端 `server.cjs` 与最新版本号 `env`（`YI_LATEST=版本号`），属主为 root，服务端只读；只保留当前与上一版本（OPS-043） |
 | `/opt/yi/current`、`/opt/yi/previous` | 指向当前与上一版本目录的符号链接，由 `npm run deploy` 切换；回滚即互换两者（OPS-044） |
 | `/var/lib/yi/` | 数据库 `yi.db` 及其备份，属主为系统用户 `yi`（`useradd --system --no-create-home --shell /usr/sbin/nologin yi`） |
 | `/etc/systemd/system/yi.service` | 常驻服务，开机自启，异常退出后 3 秒自动重启；因数据库损坏或无法打开退出（退出码 65、74）时不重启；源文件为仓库中的 `scripts/server/yi.service` |
@@ -238,11 +238,11 @@ node dist-server/server.cjs --version
 | `/etc/caddy/sites/yi.caddy` | Caddy 中弈的站点配置：`yi.lightking.com.cn` 以 HTTPS 转发到本机 8443，屏蔽 `/healthz` 与 `/metrics`（API-061），不开访问日志（DAT-073）；源文件为仓库中的 `scripts/server/yi.caddy`，由 `npm run deploy -- install-caddy` 安装。Caddy 本身与主配置 `/etc/caddy/Caddyfile` 由 LightsWeb 仓库管理 |
 | 部署用户 `deploy`、`/usr/local/sbin/yi-deploy`、`/etc/sudoers.d/yi-deploy` | 日常运维的身份（SEC-044）：`npm run deploy` 的上线、`restart`、`rollback`、`status` 以 `deploy` 登录，只能经 sudo 执行 root 所有的 `yi-deploy`（`scripts/server/deploy-remote.sh` 的副本，只接受这几个命令），上传的文件由它以 `deploy` 的身份读出后使用；`deploy` 属 `systemd-journal` 组，可直接查看日志。白名单的源文件为 `scripts/server/sudoers-yi-deploy`，三者由 `npm run deploy -- install-deploy-user` 以 root 安装；其余 `install-*` 以 root 执行 |
 
-`yi.service` 的内容见仓库中的 [scripts/server/yi.service](scripts/server/yi.service)，由 `npm run deploy -- install-service` 安装：服务端、安装程序与 `YI_LATEST` 均经 `/opt/yi/current` 读取；加固选项按 SEC-045，安装前检查 `systemd-analyze security` 的评分不高于 4.0，装好后重启并做健康检查，不通过即恢复原文件。
+`yi.service` 的内容见仓库中的 [scripts/server/yi.service](scripts/server/yi.service)，由 `npm run deploy -- install-service` 安装：服务端与 `YI_LATEST` 均经 `/opt/yi/current` 读取；加固选项按 SEC-045，安装前检查 `systemd-analyze security` 的评分不高于 4.0，装好后重启并做健康检查，不通过即恢复原文件。
 
 ### 5.4 更新与运维
 
-- **更新**：服务端随发版一同更新，由 `npm run deploy -- 版本号` 部署对应 Release 中的安装程序与 `yi-server-版本.cjs`：有对局时先进入维护模式，等对局结束后重启，重启后以健康检查核对版本，不通过即自动回滚；`npm run deploy -- rollback` 立即回退至上一版本。详见 [开发与发布规程](docs/procedures/release.md) 第 6 章。
+- **更新**：服务端随发版一同更新，由 `npm run deploy -- 版本号` 部署对应 Release 中的 `yi-server-版本.cjs`：有对局时先进入维护模式，等对局结束后重启，重启后以健康检查核对版本，不通过即自动回滚；`npm run deploy -- rollback` 立即回退至上一版本。安装程序由独立官网流程更新，不随联机上线或回滚。详见 [开发与发布规程](docs/procedures/release.md) 第 6 章。
 - **健康检查**：`npm run deploy -- status` 经服务器本机读取 `/healthz`，打出版本号、提交号、活跃对局数、是否处于维护模式与连接数；`/healthz` 只回应来自本机的请求（API-061）。
 - **监控指标**：同一端口上的 `/metrics`（只回应来自本机的请求，API-061）以 Prometheus 文本格式输出 [07-operations.md](docs/standards/07-operations.md) 第 9 节的指标（连接数、在线玩家、房间、排队、消息与错误码计数、处理耗时、事件循环延迟、内存，以及数据库的事务耗时、文件大小与写入失败次数等）；服务端另每 60 秒在日志中写一条 `metrics.snapshot`（OPS-071）。查看：`ssh deploy@47.108.181.240 /opt/node/bin/node -e "fetch('http://127.0.0.1:8443/metrics').then(r=>r.text()).then(console.log)"`。
 - **查看日志**：`ssh deploy@47.108.181.240 journalctl -u yi -f`。日志为 JSON Lines，每行一个事件，`ver` 字段为服务端的版本号及提交号（格式与事件码见 [07-operations.md](docs/standards/07-operations.md) 第 5 节、第 8 节）；只看警告及以上：`journalctl -u yi -p warning`；临时输出 debug 级别：以 root 执行 `systemctl edit yi` 在附加配置中设 `Environment=YI_LOG_LEVEL=debug`（OPS-062），不改动 `yi.service` 本身，用完以 `systemctl revert yi` 删除。
