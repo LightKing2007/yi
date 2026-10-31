@@ -24,6 +24,8 @@ const SKIPPED_FILES: Record<string, string> = {
   'src/app/storage.ts': '本地存储损坏时的诊断信息，只写入日志',
   'src/shared/parse.ts': '消息校验失败的原因，只写入日志',
   'server/log.ts': '日志模块本身，文字只写入服务端日志',
+  'server/codeMailText.ts': '验证码邮件的文案：按玩家的界面语言整封只用一种语言，三种语言各写一份，不经译文表；中文与文言的标点由 text.test.ts 检查',
+  'server/codeMailHtml.ts': '验证码邮件的版式，只有图片替代文字“弈”；文字来自 codeMailText.ts',
   'server/metrics.ts': '监控指标的说明文字只出现在 /metrics（仅本机）中；错误文本只作为对应错误码的键，不下发',
   'server/main.ts': '服务端入口，文字只写入服务端日志',
   'server/websiteConfig.ts': '官网配置错误仅向运维输出，不进入网页或游戏界面',

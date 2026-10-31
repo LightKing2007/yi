@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文件版本 | 0.3 |
+| 文件版本 | 0.4 |
 | 修订日期 | 2026-11-01（Asia/Shanghai） |
 | 状态 | 2026-11-01 经项目所有者确认（#228）；业务补充与路由处理已实现（`server/accountApi.ts`、`server/accountRoutes.ts`），尚未装配到联机程序，线上 `/api/*` 仍一律返回 404 |
 | 相关文档 | [阶段 6、7 设计](phase6-7.md)、[下一步计划](next-development.md)、[接口规范](../standards/04-api.md)、[安全规范](../standards/05-security.md)、[数据规范](../standards/03-data.md) |
@@ -104,13 +104,14 @@
 请求 `POST /api/v1/email-codes`：
 
 ```json
-{ "purpose": "register", "email": "player@example.com" }
+{ "purpose": "register", "email": "player@example.com", "language": "zh-Hans" }
 ```
 
 | 字段 | 规则 |
 |---|---|
 | `purpose` | `register` 或 `reset`；`change`（更换邮箱）保留，本契约暂不开放 |
 | `email` | 字符串，UTF-8 不超过 254 字节，按 `server/emailAddress.ts` 规范化后必须有效 |
+| `language` | 可选，邮件的语言，取玩家当前的界面语言：`zh-Hans`（中文）、`lzh`（文言）、`en-GB`（英文），按 I18N-001；不带此字段时为中文，其他取值（含 `null`）返回 400 |
 
 受理时返回 202：
 
@@ -123,6 +124,8 @@
 3.3.2 `challengeId` 只用于随后的核验与查询，不是通过验证的证明。超出冷却、邮箱、来源或全局额度时返回 429 `rate.limited`。
 
 3.3.3 发信在请求结束后异步执行，202 不表示邮件已送达。
+
+3.3.4 邮件整封只用 `language` 指明的一种语言，只发 HTML：纸色底与官网同款细网格、居中的墨色“弈”字、线条胶囊框起的验证码，页脚为链接与版权（项目所有者 2026-11-01 定稿）。文案见 `server/codeMailText.ts`，版式见 `server/codeMailHtml.ts`；“弈”字图随邮件内嵌，不引用外部图片。
 
 ### 3.4 查询发送状态
 

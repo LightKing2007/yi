@@ -228,3 +228,17 @@ it('响应与日志中没有密码、验证码、邮箱及其查找标识', asyn
     expect(JSON.stringify(ctx.logs)).not.toContain(secret);
   }
 });
+
+it('申请验证码可指明邮件语言：缺省为中文，三种语言之外的取值为 400 并指出字段', async () => {
+  const ctx = await world();
+  await ctx.ask('POST', '/api/v1/email-codes', { body: { purpose: 'register', email: 'a@example.com' } });
+  await ctx.ask('POST', '/api/v1/email-codes', { body: { purpose: 'register', email: 'b@example.com', language: 'lzh' } });
+  await ctx.ask('POST', '/api/v1/email-codes', { body: { purpose: 'register', email: 'c@example.com', language: 'en-GB' } });
+  expect(ctx.languages).toEqual(['zh-Hans', 'lzh', 'en-GB']);
+  for (const language of ['en', 'zh', 1, null]) {
+    const answer = await ctx.ask('POST', '/api/v1/email-codes', { body: { purpose: 'register', email: 'd@example.com', language } });
+    problem(answer, 400, 'request.invalid');
+    expect(answer.json.params).toEqual({ field: 'language' });
+  }
+  expect(ctx.queued).toHaveLength(3);
+});
