@@ -117,3 +117,23 @@ it('已注销账号不参与认证查询且 UID 不得再次发放', () => {
   expect(repo.byEmailLookup(one.emailLookup)).toBeUndefined();
   expect(() => repo.create(input(), seal)).toThrow('account-public-id-exhausted');
 });
+
+it('修改雅号只写活动账号，已注销账号与游客不改', () => {
+  const repo = new AccountRepo(db, () => '7KM4P9D2');
+  const stored = repo.create(input(), seal);
+  expect(repo.rename(stored.userId, '新雅号')).toBe(true);
+  expect(db.prepare('SELECT name FROM users WHERE id = ?').get(stored.userId)?.name).toBe('新雅号');
+  db.prepare(
+    "UPDATE accounts SET status = 'closed', email_version = NULL, email_key_id = NULL, email_nonce = NULL, email_tag = NULL, email_cipher = NULL, " +
+      'email_lookup = NULL, email_verified_at = NULL, pass_hash = NULL, closed_at = ? WHERE user_id = ?',
+  ).run(NOW, stored.userId);
+  expect(repo.rename(stored.userId, '注销后')).toBe(false);
+  const guest = Number(db.prepare("INSERT INTO users (kind, name, created_at, last_seen_at) VALUES ('guest', '游客', ?, ?)").run(NOW, NOW).lastInsertRowid);
+  expect(repo.rename(guest, '冒名')).toBe(false);
+  expect(
+    db
+      .prepare('SELECT name FROM users WHERE id IN (?, ?) ORDER BY id')
+      .all(stored.userId, guest)
+      .map(row => row.name),
+  ).toEqual(['新雅号', '游客']);
+});

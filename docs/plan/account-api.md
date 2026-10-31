@@ -2,9 +2,9 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文件版本 | 0.1 |
+| 文件版本 | 0.2 |
 | 修订日期 | 2026-11-01（Asia/Shanghai） |
-| 状态 | 草案，待项目所有者审阅；尚无任何接口装配，`/api/*` 目前一律返回 404 |
+| 状态 | 2026-11-01 经项目所有者确认（#228）；第 7 章的业务补充已完成，路由尚未装配，`/api/*` 目前一律返回 404 |
 | 相关文档 | [阶段 6、7 设计](phase6-7.md)、[下一步计划](next-development.md)、[接口规范](../standards/04-api.md)、[安全规范](../standards/05-security.md)、[数据规范](../standards/03-data.md) |
 
 本契约是 [下一步计划](next-development.md) 第 13.4 节第 1 项的前置条件，定义批次 D（账号 HTTP 与邮件边界）与批次 E（桌面安全存储与账号界面）共同遵守的路径、请求、响应与错误。实现以本契约为准；[阶段 6、7 设计](phase6-7.md) 第 5 章的接口表为早期草拟，路径与名称以本文为准。本契约不涉及联机协议第 4 版的 `hello` 字段，该部分随批次 F 另行定稿。
@@ -291,14 +291,15 @@
 
 ## 7 业务层须补充的内容
 
-| 补充 | 位置 | 原因 |
+| 补充 | 位置 | 实现 |
 |---|---|---|
-| 注册时区分“验证码无效”与“邮箱已注册” | `server/authentication.ts` | 目前两者都抛出 `denied`；第 3.5 条要求分别返回 422 与 409 |
-| 登录失败与会话失效分别给出原因 | `server/authentication.ts` | 修改密码时旧密码错误与令牌失效目前都为 `denied`；第 3.11 条要求 401 的两个不同错误码 |
-| 修改雅号 | `server/authentication.ts`、`server/db/accounts.ts` | 第 3.10 条；目前没有对应方法 |
-| 按挑战编号读取发送状态 | `server/emailCodes.ts`、`server/db/emailChallenges.ts` | 第 3.4 条；只读，不改变状态与次数 |
-| 受理时返回到期与冷却时长 | `server/emailCodes.ts` | 第 3.3 条的 `expiresAt`、`resendAfterMs` |
-| 密码任务忙时的映射 | 路由层 | 执行器忙时已抛出 `PasswordBusyError`（`server/passwords.ts`），路由层将其映射为第 2.5.3 条的 503 `auth.busy` |
+| 注册时区分“验证码无效”与“邮箱已注册” | `server/authentication.ts` | 已完成：验证码通过后先查邮箱，已注册时抛出 `taken`，不派生密码、不消费验证码；派生期间被他人注册时，在最终事务中同样回滚为 `taken`。验证码无效仍为 `denied` |
+| 改密时区分旧密码错误与会话失效 | `server/authentication.ts` | 已完成：令牌失效或派生期间会话被撤销为 `session`，旧密码错误仍为 `denied` |
+| 修改雅号 | `server/authentication.ts` 的 `rename`、`server/db/accounts.ts` | 已完成：输入层规范化，只写活动账号，公开 UID 不变，更新会话活动时间 |
+| 按挑战编号读取发送状态 | `server/emailCodes.ts` 的 `delivery`、`server/db/emailChallenges.ts` | 已完成：只读；当前且未用尽的挑战按第 3.4 条映射，其他情况为空 |
+| 受理时返回到期与冷却时长 | `server/emailCodes.ts` | 已完成：受理结果带 `expiresAt`（毫秒时刻，路由层转为 RFC 3339）与 `resendAfterMs` |
+| 补签协议更新活动时间 | `server/authentication.ts` | 已完成：与第 2.2.3 条一致，只读的 `me` 仍不更新 |
+| 密码任务忙时的映射 | 路由层 | 待路由实现：执行器忙时已抛出 `PasswordBusyError`（`server/passwords.ts`），路由层将其映射为第 2.5.3 条的 503 `auth.busy` |
 
 ## 8 极端情况
 

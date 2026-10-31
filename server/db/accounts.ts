@@ -56,6 +56,7 @@ function statements(db: DatabaseSync) {
       'INSERT INTO accounts (user_id, public_id, email_version, email_key_id, email_nonce, email_tag, email_cipher, ' +
         'email_lookup, email_verified_at, pass_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     ),
+    rename: db.prepare("UPDATE users SET name = ? WHERE id = (SELECT user_id FROM accounts WHERE user_id = ? AND status = 'active')"),
     consent: db.prepare('INSERT INTO consents (user_id, kind, document_version, consented_at) VALUES (?, ?, ?, ?)'),
   };
 }
@@ -113,6 +114,11 @@ export class AccountRepo {
       if (!stored) throw new Error('account-create-failed');
       return stored;
     });
+  }
+
+  /** 雅号已由输入层规范化；只改活动账号，返回是否写入。 */
+  rename(userId: number, name: string): boolean {
+    return this.sql.rename.run(name, userId).changes === 1;
   }
 
   /** 检查也覆盖已注销账号，已发放的公开编号不能重新分配。 */
