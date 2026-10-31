@@ -8,11 +8,12 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { CLOSE_CODE } from '../src/shared/protocol';
-import { clientIp, fromThisHost } from './clientIp';
-import { fileServer, tooManyRequests } from './files';
+import { clientIp } from './clientIp';
+import { hardenHttp, withHttpLimit } from './http';
+export { HTTP_LIMITS, hardenHttp } from './http';
+import { fileServer } from './files';
 import { withHealth, type Build, type Web } from './health';
 import type { Gauges } from './metrics';
-import type { Log } from './log';
 import { HttpGate, IpGate, NEW_CONN_BLOCK_SECS, NEW_CONN_MAX, NEW_CONN_WINDOW_SECS } from './ratelimit';
 import { RoomServer, type Conn, type RoomServerOptions } from './rooms';
 
@@ -24,25 +25,8 @@ const MS_PER_SEC = 1000;
 const TICK_MS = 250;
 /** WebSocket 层心跳的间隔；同时清理按 IP 的连接记录 */
 const BEAT_MS = 10_000;
-/** HTTP 请求被限流时，至多每隔这么久写一行 http.limited 日志（秒） */
-const HTTP_LIMITED_LOG_SECS = 60;
 
-/** HTTP 服务器的超时与请求头上限（API-047），防止慢速请求占住连接 */
-export const HTTP_LIMITS = {
-  headersTimeout: 10_000,
-  requestTimeout: 30_000,
-  keepAliveTimeout: 5_000,
-  maxHeadersCount: 50,
-} as const;
-
-/** 给 HTTP 服务器设上 HTTP_LIMITS（Node.js 的默认值过于宽松） */
-export function hardenHttp(server: http.Server) {
-  server.headersTimeout = HTTP_LIMITS.headersTimeout;
-  server.requestTimeout = HTTP_LIMITS.requestTimeout;
-  server.keepAliveTimeout = HTTP_LIMITS.keepAliveTimeout;
-  server.maxHeadersCount = HTTP_LIMITS.maxHeadersCount;
-}
-
+/** 运行中的联机监听与统计接口。 */
 export interface Host {
   server: RoomServer;
   port: number;
@@ -55,29 +39,6 @@ export interface Host {
 const notFound: Web = (_req, res) => {
   res.writeHead(404).end();
 };
-
-/**
- * 在 next 之前按 IP 限制 HTTP 请求的频率（API-041）：超出时返回 429 与 Retry-After（04-api.md 第 4.1 条）。
- * 本机直接发出的请求（上线脚本读健康检查）不计。被限流时至多每 HTTP_LIMITED_LOG_SECS 秒写一行 warn 日志，
- * 只记次数，不记 IP（DAT-073）
- */
-function withHttpLimit(next: Web, gate: HttpGate, now: () => number, log?: Log): Web {
-  let limited = 0,
-    loggedAt = -Infinity;
-  return (req, res) => {
-    const wait = fromThisHost(req) ? 0 : gate.admit(clientIp(req), now());
-    if (!wait) {
-      next(req, res);
-      return;
-    }
-    tooManyRequests(res, wait);
-    limited++;
-    if (now() - loggedAt < HTTP_LIMITED_LOG_SECS) return;
-    log?.('warn', 'http.limited', { msg: 'HTTP 请求超出频率限制', count: limited });
-    loggedAt = now();
-    limited = 0;
-  };
-}
 
 /** 一个监听中的端口 */
 interface Listening {
