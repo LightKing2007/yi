@@ -147,7 +147,7 @@ async function deliver(session: Session, mail: CodeMail, opt: SmtpOptions) {
     image: opt.image,
     from: opt.from,
     date: (opt.now ?? (() => new Date()))(),
-    messageId: (opt.messageId ?? (() => `<${randomUUID()}@${opt.heloName}>`))(),
+    messageId: (opt.messageId ?? (() => `<${randomUUID()}@${opt.from.address.split('@')[1]}>`))(),
   });
   await session.expect('greeting', [REPLY.ready]);
   const ehlo = await session.expect('ehlo', [REPLY.ok], `EHLO ${opt.heloName}`);

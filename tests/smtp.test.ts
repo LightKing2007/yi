@@ -6,7 +6,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { composeCodeMail } from '../server/codeMail';
-import { codeHtml } from '../server/codeMailHtml';
+import { codeHtml, codePlain } from '../server/codeMailHtml';
 import { mailText } from '../server/codeMailText';
 import type { CodeMail } from '../server/emailCodes';
 import { SmtpError, smtpSender, type SmtpOptions } from '../server/smtp';
@@ -16,16 +16,23 @@ type Step = [match: string, reply: string | null];
 /** 墨色“弈”字图 */
 const IMAGE = readFileSync(path.resolve(__dirname, '../server/assets/mail-yi.png'));
 
-/** multipart/related 的各部分：头部与解码后的内容 */
-function parts(message: string): { head: string; body: Buffer }[] {
-  const boundary = /boundary="([^"]+)"/.exec(message)?.[1] ?? '';
+/** 按边界切出的各部分：头部、原文与 base64 解码后的内容 */
+function split(message: string, boundary: string): { head: string; raw: string; body: Buffer }[] {
   return message
     .split(`--${boundary}`)
     .slice(1, -1)
     .map(part => {
-      const [head = '', body = ''] = part.replace(/^\r\n/, '').split('\r\n\r\n');
-      return { head, body: Buffer.from(body, 'base64') };
+      const raw = part.replace(/^\r\n/, '');
+      const [head = '', ...rest] = raw.split('\r\n\r\n');
+      return { head, raw, body: Buffer.from(rest.join('\r\n\r\n'), 'base64') };
     });
+}
+
+/** 邮件的三部分：外层二选一中的纯文本，以及内层的 HTML 与内嵌图片 */
+function parts(message: string) {
+  const [plain, related] = split(message, 'yi-mail-alt-boundary');
+  const [html, image] = split(related?.raw ?? '', 'yi-mail-part-boundary');
+  return { plain, related, html, image };
 }
 
 const servers: net.Server[] = [];
@@ -125,7 +132,8 @@ it('PLAIN 认证后投递一封邮件：命令顺序、口令编码与邮件内�
       messageId: '<fixed@yi.example.com>',
     }),
   );
-  const [html, image] = parts(message);
+  const { plain: alt, html, image } = parts(message);
+  expect(alt?.body.toString('utf8')).toBe(codePlain(mailText('en-GB', 'register'), '012345').replaceAll('\n', '\r\n'));
   expect(html?.body.toString('utf8')).toBe(codeHtml(mailText('en-GB', 'register'), '012345', 'cid:yi-glyph@yi.lightking.com.cn'));
   expect(image?.body.equals(IMAGE)).toBe(true);
 });
@@ -210,7 +218,7 @@ it('默认连接为隐式 TLS 1.2 以上并校验证书与主机名', async () =
   });
 });
 
-it('邮件为 HTML 与内嵌图片组成的 multipart/related：头部固定、各行不超过 76 字符，地址与编号经校验', () => {
+it('邮件为纯文本与 HTML 二选一，HTML 与内嵌图片同组：头部固定、各行不超过 76 字符，地址与编号经校验', () => {
   const letter = {
     to: 'player@example.com',
     code: '012345',
@@ -229,10 +237,13 @@ it('邮件为 HTML 与内嵌图片组成的 multipart/related：头部固定、�
     'Date: Thu, 01 Jan 1970 00:00:00 +0000',
     'Message-ID: <x@y>',
     'MIME-Version: 1.0',
-    'Content-Type: multipart/related; type="text/html"; boundary="yi-mail-part-boundary"',
+    'Content-Type: multipart/alternative; boundary="yi-mail-alt-boundary"',
   ]);
+  expect(message.endsWith('--yi-mail-part-boundary--\r\n--yi-mail-alt-boundary--')).toBe(true);
   expect(message.split('\r\n').every(line => line.length <= 120)).toBe(true);
-  const [html, image] = parts(message);
+  const { plain: alt, related, html, image } = parts(message);
+  expect(alt?.head).toBe('Content-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64');
+  expect(related?.head).toBe('Content-Type: multipart/related; type="text/html"; boundary="yi-mail-part-boundary"');
   expect(html?.head).toBe('Content-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64');
   expect(image?.head).toBe(
     'Content-Type: image/png\r\nContent-Transfer-Encoding: base64\r\n' +
@@ -242,6 +253,9 @@ it('邮件为 HTML 与内嵌图片组成的 multipart/related：头部固定、�
   expect(encoded.length).toBeGreaterThan(10);
   expect(encoded.every(line => line.length <= 76)).toBe(true);
   expect(html?.body.toString()).toContain('请立即更改账号密码');
+  expect(alt?.body.toString()).toContain('登录你的账号，如果频繁收到类似邮件，请前往支持页面（https://yi.lightking.com.cn/support）获取帮助。');
+  expect(alt?.body.toString()).toMatch(/\r\n012345\r\n/);
+  expect(alt?.body.toString()).not.toMatch(/<|(?<!\r)\n/);
   expect(html?.body.toString()).toContain('src="cid:yi-glyph@yi.lightking.com.cn"');
   for (const to of ['a@b.cn\r\nBcc: x@y.cn', 'a b@c.cn', 'no-at']) expect(() => composeCodeMail({ ...letter, to })).toThrow('mail-address-invalid');
   expect(() => composeCodeMail({ ...letter, from: { address: 'a@b.cn>\r\nX: 1', name: '弈' } })).toThrow('mail-address-invalid');
@@ -275,4 +289,11 @@ it('版式：顶部与正文只用固定文案，验证码在线条胶囊中居�
   expect(html).toContain('Copyright © 2026 LightKing。保留所有权利。你收到此邮件');
   expect(html.match(/src="cid:x"/g)).toHaveLength(1);
   expect(html).not.toMatch(/src="https?:/);
+});
+
+it('Message-ID 与发件地址同一域名，与 DKIM 签名的域名一致', async () => {
+  const server = await fake('220 ready\r\n', [...plain]);
+  await smtpSender(options(server.port, { messageId: undefined }))(mail, signal());
+  await server.received(7);
+  expect(String(server.commands[5])).toMatch(/\r\nMessage-ID: <[0-9a-f-]{36}@mail\.example\.com>\r\n/);
 });
