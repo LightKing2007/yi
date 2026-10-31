@@ -1,5 +1,5 @@
 # 弈 联机服务端。安装与更新：npm run deploy -- install-service（scripts/server/deploy-remote.sh）。
-# 服务端、安装程序与 YI_LATEST 经 /opt/yi/current 读取（OPS-043）；上线与回滚用 npm run deploy，严禁直接替换文件或 systemctl restart yi。
+# 游戏服务端、发布附件与 YI_LATEST 经 /opt/yi/current 读取（OPS-043）；上线与回滚用 npm run deploy，严禁直接替换文件或 systemctl restart yi。
 # 加固选项见 SEC-045：systemd-analyze security yi 的评分必须 ≤ 4.0，install-service 安装前检查
 [Unit]
 Description=Yi online server (Gomoku & Go)
@@ -16,7 +16,6 @@ EnvironmentFile=/opt/yi/current/env
 Environment=NODE_ENV=production
 # 只接受本机 Caddy 转来的连接，8443 不对外开放（SEC-011）；客户端经 wss://yi.lightking.com.cn/ws 连接
 Environment=HOST=127.0.0.1
-Environment=YI_FILES=/opt/yi/current/download
 Environment=YI_DOWNLOAD=https://yi.lightking.com.cn/download/
 Restart=always
 RestartSec=3

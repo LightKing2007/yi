@@ -8,7 +8,7 @@
  *   YI_BACKUP_DIR 备份目录（默认数据库所在目录下的 backup/）
  *   YI_LATEST     最新的客户端版本号（例如 2.0.1），客户端版本较旧时提示更新
  *   YI_DOWNLOAD   新版本的下载地址
- *   YI_FILES      安装包所在的目录：设了就在同一个端口上提供下载页（http://地址:端口/）
+ *   YI_FILES      旧配置兼容字段，联机入口已不使用；官网由独立进程提供
  *   YI_LOG_LEVEL  日志级别：error、warn、info（默认）、debug（OPS-062）
  *
  * 日志按 07-operations.md 第 5 节输出 JSON Lines 到标准输出（server/log.ts）。

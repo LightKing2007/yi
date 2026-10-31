@@ -142,6 +142,5 @@ export function loadConfig(): ConfigResult {
 export function startEntry(config: ServerConfig, ports: number[]) {
   const where = config.host ? `，地址 ${config.host}` : '';
   const latest = config.latest ? `，最新客户端 ${config.latest}` : '';
-  const files = config.files ? `，安装包目录 ${config.files}` : '';
-  return { msg: `弈 联机服务端已启动${where}${latest}${files}`, ports, protoRange: [PROTO_VERSION, PROTO_VERSION], dbFile: config.dbFile };
+  return { msg: `弈 联机服务端已启动${where}${latest}`, ports, protoRange: [PROTO_VERSION, PROTO_VERSION], dbFile: config.dbFile };
 }

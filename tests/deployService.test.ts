@@ -73,7 +73,7 @@ describe('安装 yi.service（SEC-045）', () => {
 });
 
 describe('仓库中的 yi.service', () => {
-  it('含 SEC-045 要求的全部选项，且仍经 /opt/yi/current 读取服务端、安装程序与 YI_LATEST', () => {
+  it('含 SEC-045 要求的全部选项，经 /opt/yi/current 读取游戏与版本配置，且不再装配官网', () => {
     const lines = read(REPO_UNIT).split('\n');
     const required = [
       'PrivateDevices=yes',
@@ -98,12 +98,12 @@ describe('仓库中的 yi.service', () => {
       'LimitNOFILE=65536',
       'ExecStart=/opt/node/bin/node /opt/yi/current/server.cjs 8443',
       'EnvironmentFile=/opt/yi/current/env',
-      'Environment=YI_FILES=/opt/yi/current/download',
       'Environment=YI_DOWNLOAD=https://yi.lightking.com.cn/download/', // 面向玩家的地址用域名与 HTTPS
       'ReadWritePaths=/var/lib/yi',
     ];
     expect(required.filter(line => !lines.includes(line))).toEqual([]);
     expect(lines.filter(line => line.startsWith('Environment=YI_LATEST'))).toEqual([]);
+    expect(lines.some(line => line.startsWith('Environment=YI_FILES='))).toBe(false);
   });
 });
 

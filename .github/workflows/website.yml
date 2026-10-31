@@ -1,0 +1,45 @@
+# 官网按提交号独立打包，不更改游戏版本，不生成桌面安装程序或执行数据库迁移。
+name: 官网发布
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: website-release
+  cancel-in-progress: false
+
+jobs:
+  package:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: 只打包主分支 CI 已通过的提交
+        run: |
+          result=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --branch main --commit "$GITHUB_SHA" --limit 1 --json conclusion --jq '.[0].conclusion')
+          [ "$result" = success ] || { echo '当前提交的主分支 CI 尚未通过'; exit 1; }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npx vitest run tests/website.test.ts tests/websiteDeploy.test.ts tests/websiteDownloads.test.ts tests/agreement.test.ts tests/site.test.ts tests/http.test.ts
+      - run: npm run build:website
+      - name: 独立校验值和草稿 Release
+        run: |
+          cd dist-website
+          sha256sum web.cjs manifest.json > SHA256SUMS
+          tag="web-${GITHUB_SHA:0:12}"
+          printf '官网独立发布。\n\n构建提交：%s\n\n包含主页、下载页与三份文书草案；不更换联机服务端，不迁移游戏数据库。\n' "$GITHUB_SHA" > notes.md
+          gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --latest=false --title "官网 ${GITHUB_SHA:0:12}" --notes-file notes.md web.cjs manifest.json SHA256SUMS

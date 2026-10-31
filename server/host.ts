@@ -1,6 +1,6 @@
 /**
  * 把 RoomServer 接到 WebSocket 上：可以同时监听几个端口（换端口的过渡期新旧端口都开），共用同一个 RoomServer。
- * 同一个端口上的普通网页请求：本机来的 /healthz 回应健康检查（API-061），其余交给安装包下载（设了 files 目录时），没设就一律 404。
+ * 同一个端口上的普通网页请求：本机来的 /healthz 回应健康检查（API-061），其余一律 404；官网由独立进程运行。
  * 连接层的限制：单条消息大小（API-002）、同一 IP 的连接数与新建频率（API-040、API-041）、同一 IP 的 HTTP 请求频率（API-041）、HTTP 超时（API-047）。
  */
 import { randomUUID } from 'node:crypto';
@@ -11,7 +11,6 @@ import { CLOSE_CODE } from '../src/shared/protocol';
 import { clientIp } from './clientIp';
 import { hardenHttp, withHttpLimit } from './http';
 export { HTTP_LIMITS, hardenHttp } from './http';
-import { fileServer } from './files';
 import { withHealth, type Build, type Web } from './health';
 import type { Gauges } from './metrics';
 import { HttpGate, IpGate, NEW_CONN_BLOCK_SECS, NEW_CONN_MAX, NEW_CONN_WINDOW_SECS } from './ratelimit';
@@ -173,12 +172,11 @@ function closeAll(listening: Listening[]) {
 }
 
 /**
- * startHost 的选项：files 为安装包所在的目录；build 为健康检查中的版本号与提交号，不设时提交号为空串；
+ * startHost 的选项：build 为健康检查中的版本号与提交号，不设时提交号为空串；
  * metrics 为监控指标（设了才提供 /metrics），eventLoopLag 返回事件循环延迟 p99（秒），dbFileBytes 返回数据库文件的字节数
  */
 export type HostOptions = RoomServerOptions & {
   host?: string;
-  files?: string;
   build?: Build;
   eventLoopLag?: () => number;
   dbFileBytes?: () => number;
@@ -188,14 +186,13 @@ export type HostOptions = RoomServerOptions & {
 export async function startHost(ports: number | number[], opt: HostOptions = {}): Promise<Host> {
   const server = new RoomServer(opt);
   const build = opt.build ?? { version: __APP_VERSION__, commit: '' };
-  const files = opt.files ? fileServer(opt.files) : undefined;
   const now = opt.now ?? (() => performance.now() / MS_PER_SEC);
   let servers: WebSocketServer[] = [];
   const gauges = (): Gauges => ({
     connections: servers.reduce((n, wss) => n + wss.clients.size, 0),
     playersOnline: server.online(),
     ...server.stats(),
-    downloadsActive: files?.active() ?? 0,
+    downloadsActive: 0,
     eventLoopLagSeconds: opt.eventLoopLag?.() ?? 0,
     residentMemoryBytes: process.memoryUsage.rss(),
     dbFileBytes: opt.dbFileBytes?.() ?? 0,
@@ -203,7 +200,7 @@ export async function startHost(ports: number | number[], opt: HostOptions = {})
   });
   const { metrics } = opt;
   const httpGate = new HttpGate();
-  const health = withHealth(build, () => server.health(), files ?? notFound, metrics ? () => metrics.render(gauges()) : undefined);
+  const health = withHealth(build, () => server.health(), notFound, metrics ? () => metrics.render(gauges()) : undefined);
   const web = withHttpLimit(health, httpGate, now, opt.log);
   const listening = await listenAll(Array.isArray(ports) ? ports : [ports], opt.host, web);
   servers = listening.map(item => item.wss);

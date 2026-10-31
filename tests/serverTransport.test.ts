@@ -7,6 +7,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { startHost } from '../server/host';
+import { startWebsite } from '../server/websiteHost';
 import { PROTO_VERSION, type S2C } from '../src/shared/protocol';
 import { newUid, type Msg } from './serverWorld';
 
@@ -79,13 +80,13 @@ describe('端口', () => {
 });
 
 describe('安装包下载', () => {
-  it('同一个端口上：下载页只列出每个平台最新的安装包，可以断点续传，其他文件拿不到', async () => {
+  it('官网独立提供各平台最新安装程序与断点续传，其他文件拿不到；联机另用自己的端口', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-files-'));
     fs.writeFileSync(path.join(dir, 'Yi-2.0.0-win-x64-setup.exe'), 'old');
     fs.writeFileSync(path.join(dir, 'Yi-2.0.1-win-x64-setup.exe'), '0123456789');
     fs.writeFileSync(path.join(dir, 'Yi-2.0.1-mac-arm64.dmg'), 'mac');
     fs.writeFileSync(path.join(dir, 'secret.txt'), 'no');
-    const host = await startHost(0, { host: '127.0.0.1', files: dir });
+    const host = await startWebsite({ port: 0, commit: 'test', files: dir, now: () => 1 });
     const base = `http://127.0.0.1:${host.port}`;
     try {
       const page = await (await fetch(base + '/download/')).text();
@@ -103,12 +104,14 @@ describe('安装包下载', () => {
       for (const bad of ['/secret.txt', '/Yi-2.0.0-win-x64-setup.exe', '/..%2Fetc%2Fpasswd', '/Yi-2.0.1-win-x64-setup.exe/x'])
         expect((await fetch(base + bad)).status).toBe(404);
       expect((await fetch(base + '/', { method: 'POST' })).status).toBe(405);
-      const ws = new WebSocket(`ws://127.0.0.1:${host.port}`); // 联机照常
+      const game = await startHost(0, { host: '127.0.0.1' });
+      const ws = new WebSocket(`ws://127.0.0.1:${game.port}`); // 联机端口独立于官网
       await new Promise((res, rej) => {
         ws.on('open', res);
         ws.on('error', rej);
       });
       ws.close();
+      await game.close();
     } finally {
       await host.close();
       fs.rmSync(dir, { recursive: true });
@@ -121,7 +124,7 @@ describe('网站页面', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-files-'));
     fs.writeFileSync(path.join(dir, 'Yi-2.0.3-win-x64-setup.exe'), 'windows');
     fs.writeFileSync(path.join(dir, 'Yi-2.0.3-linux-x86_64.AppImage'), 'linux');
-    const host = await startHost(0, { host: '127.0.0.1', files: dir });
+    const host = await startWebsite({ port: 0, commit: 'test', files: dir, now: () => 1 });
     const base = `http://127.0.0.1:${host.port}`;
     const sha = (text: string) => createHash('sha256').update(text).digest('hex');
     try {
@@ -172,7 +175,7 @@ describe('下载名额与未设安装包目录', () => {
   it('经本机反向代理的下载按真实地址计数：同一地址同时至多 2 个，其他地址照常下载', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-files-'));
     fs.writeFileSync(path.join(dir, 'Yi-2.0.9-linux-x86_64.AppImage'), Buffer.alloc(16 * 1024 * 1024)); // 足够大，暂停读取时下载一直进行
-    const host = await startHost(0, { host: '127.0.0.1', files: dir });
+    const host = await startWebsite({ port: 0, commit: 'test', files: dir, now: () => 1 });
     const pending: http.ClientRequest[] = [];
     /** 以代理转来的方式开始下载，收到响应头后暂停读取，返回状态码 */
     const download = (ip: string) =>
@@ -198,10 +201,10 @@ describe('下载名额与未设安装包目录', () => {
     }
   });
 
-  it('没设安装包目录时网页请求一律 404', async () => {
+  it('联机端口不提供官网页面或安装程序', async () => {
     const host = await startHost(0, { host: '127.0.0.1' });
     try {
-      expect((await fetch(`http://127.0.0.1:${host.port}/`)).status).toBe(404);
+      for (const route of ['/', '/download/', '/agreement', '/privacy-policy']) expect((await fetch(`http://127.0.0.1:${host.port}${route}`)).status).toBe(404);
     } finally {
       await host.close();
     }

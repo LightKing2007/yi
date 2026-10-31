@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { startHost } from '../server/host';
+import { startWebsite } from '../server/websiteHost';
 import type { Log } from '../server/log';
 import { HTTP_BURST } from '../server/ratelimit';
 
@@ -12,8 +12,8 @@ describe('HTTP 请求的频率限制（API-041）', () => {
     let clock = 1000;
     const logs: string[] = [];
     const log: Log = (level, event, entry = {}) => logs.push(`${level} ${event} ${String(entry.count)}`);
-    const host = await startHost(0, { host: '127.0.0.1', now: () => clock, log });
-    const get = (ip?: string) => fetch(`http://127.0.0.1:${host.port}/`, { headers: ip ? { 'X-Forwarded-For': ip } : {} });
+    const host = await startWebsite({ port: 0, commit: 'test', now: () => clock, log, files: '/nonexistent/website' });
+    const get = (ip?: string) => fetch(`http://127.0.0.1:${host.port}/not-found`, { headers: ip ? { 'X-Forwarded-For': ip } : {} });
     /** 以 ip 连续请求 n 次，返回各次的状态码 */
     const burst = async (ip: string, n: number) => {
       const codes: number[] = [];
@@ -41,7 +41,7 @@ describe('下载目录列表的缓存（P2-17）', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-files-'));
     const exe = path.join(dir, 'Yi-2.0.1-win-x64-setup.exe');
     fs.writeFileSync(exe, '0123456789');
-    const host = await startHost(0, { host: '127.0.0.1', files: dir });
+    const host = await startWebsite({ port: 0, commit: 'test', files: dir, now: () => 1 });
     const base = `http://127.0.0.1:${host.port}`;
     const readdir = vi.spyOn(fs, 'readdirSync');
     const reads = () => readdir.mock.calls.filter(([at]) => at === dir).length;
@@ -67,7 +67,7 @@ describe('下载目录列表的缓存（P2-17）', () => {
   it('安装包目录在列出之后消失（例如切换版本的瞬间）时，页面照常显示，只是不再列出原来的安装程序', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-files-'));
     fs.writeFileSync(path.join(dir, 'Yi-2.0.1-win-x64-setup.exe'), 'win');
-    const host = await startHost(0, { host: '127.0.0.1', files: dir });
+    const host = await startWebsite({ port: 0, commit: 'test', files: dir, now: () => 1 });
     const base = `http://127.0.0.1:${host.port}`;
     try {
       expect(await (await fetch(base + '/download/')).text()).toContain('Yi-2.0.1-win-x64-setup.exe');
