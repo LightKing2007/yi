@@ -15,7 +15,7 @@ if (!commit)
     commit = 'unknown';
   }
 
-/** 以 `?raw` 结尾的导入按文本内联（与 Vite 的写法一致），用于把数据库迁移的 SQL 文件打包进 server.cjs */
+/** 以 `?raw` 结尾的导入按文本内联（与 Vite 的写法一致），将迁移 SQL 和官网文书打包进 server.cjs */
 const rawText = {
   name: 'raw-text',
   setup(build) {

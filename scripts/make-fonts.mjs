@@ -23,7 +23,7 @@ function usedChars() {
     for (const e of fs.readdirSync(d, { withFileTypes: true })) {
       const p = path.join(d, e.name);
       if (e.isDirectory()) walk(p);
-      else if (/\.(ts|tsx|css|html)$/.test(e.name)) for (const ch of fs.readFileSync(p, 'utf8')) set.add(ch);
+      else if (/\.(ts|tsx|css|html|md)$/.test(e.name)) for (const ch of fs.readFileSync(p, 'utf8')) set.add(ch);
     }
   };
   walk(path.join(root, 'src'));
