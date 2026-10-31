@@ -21,7 +21,7 @@ it('入队只保存密文，发送时生成 HMAC，消费后立即清除凭据�
   expect(JSON.stringify(ctx.row(id))).not.toContain('a@example.com');
   expect(ctx.check(id)).toBeUndefined();
   await ctx.codes.deliver(id);
-  expect(ctx.mails).toEqual([{ challengeId: id, code: '001234', email: 'a@example.com', purpose: 'register' }]);
+  expect(ctx.mails).toEqual([{ challengeId: id, code: '001234', email: 'a@example.com', purpose: 'register', language: 'zh-Hans' }]);
   expect(ctx.row(id)).toMatchObject({ state: 'sent', email_payload: null, code_key_id: 'test' });
   expect(String(ctx.row(id)?.code_mac)).toMatch(/^[0-9a-f]{64}$/);
   expect(JSON.stringify(ctx.row(id))).not.toContain('001234');
@@ -350,4 +350,11 @@ it('发送失败与超时结果不明都提示重新申请', async () => {
   complete.resolve();
   expect(hanging.row(unknown)?.state).toBe('unknown');
   expect(hanging.codes.delivery(unknown)?.state).toBe('retry');
+});
+
+it('发送时带上申请时的界面语言，未指明时为中文', async () => {
+  const ctx = world();
+  const id = ctx.request();
+  await ctx.codes.deliver(id, 'lzh');
+  expect(ctx.mails.map(mail => mail.language)).toEqual(['lzh']);
 });

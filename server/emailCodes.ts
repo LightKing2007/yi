@@ -16,6 +16,7 @@ import { AuthLimitRepo } from './db/authLimits';
 import { EmailChallengeRepo, type CodeProof } from './db/emailChallenges';
 import { transaction } from './db/transaction';
 import { normalizeEmail } from './emailAddress';
+import { DEFAULT_MAIL_LANGUAGE, type MailLanguage } from './codeMailText';
 import { EmailProtection } from './emailProtection';
 
 const HASH_LENGTH = 64;
@@ -31,6 +32,8 @@ export interface CodeMail {
   code: string;
   purpose: CodePurpose;
   challengeId: string;
+  /** 申请时玩家的界面语言，决定邮件使用的语言 */
+  language: MailLanguage;
 }
 /** 全局发送预算必须由装配层明确提供；时钟、定时器和随机入口可替换以作确定性测试。 */
 export interface EmailCodeOptions {
@@ -130,8 +133,8 @@ export class EmailCodes {
     });
   }
 
-  /** 工作者在接受响应后调用；同一挑战只能从 queued 开始一次，不持有跨网络事务。 */
-  async deliver(challengeId: string): Promise<void> {
+  /** 工作者在接受响应后调用；同一挑战只能从 queued 开始一次，不持有跨网络事务。语言只随本次调用传递，不入库。 */
+  async deliver(challengeId: string, language: MailLanguage = DEFAULT_MAIL_LANGUAGE): Promise<void> {
     if (this.db.isTransaction) throw new Error('code-not-committed');
     const mail = transaction(this.db, () => {
       const queued = this.repo.queued(challengeId, this.now());
@@ -140,7 +143,7 @@ export class EmailCodes {
       const mac = this.credentials.mac(queued, code);
       const email = this.vault.open(queued.payload, { purpose: 'challenge-email', recordId: challengeId });
       if (!this.repo.start(challengeId, { mac, keyId: this.credentials.currentKeyId }, this.now())) return undefined;
-      return { email, code, challengeId, purpose: queued.purpose };
+      return { email, code, challengeId, purpose: queued.purpose, language };
     });
     if (!mail) return;
     const outcome = await send(mail, this.opt);

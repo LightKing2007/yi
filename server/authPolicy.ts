@@ -15,7 +15,8 @@ export const SESSION_TOKEN_ATTEMPTS = 5;
 
 const FAILURE_WINDOW_MINUTES = 15;
 const LOGIN_LOCK_MINUTES = 15;
-const MINUTE_MS = SECONDS_PER_MINUTE * MS_PER_SECOND;
+/** 一分钟的毫秒数 */
+export const MINUTE_MS = SECONDS_PER_MINUTE * MS_PER_SECOND;
 /** 同账号失败统计采用滚动十五分钟窗口（SEC-023）。 */
 export const LOGIN_FAILURE_WINDOW_MS = FAILURE_WINDOW_MINUTES * MINUTE_MS;
 /** 第五次失败起锁定十五分钟，锁定期间重试不延长期限。 */

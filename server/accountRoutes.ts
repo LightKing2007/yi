@@ -7,6 +7,7 @@ import { isRecord } from '../src/shared/check';
 import { accountName, accountPassword } from './accountInput';
 import { ApiProblem, bearer, invalidField, SITE_ORIGIN, type Problem } from './apiHttp';
 import { AuthenticationError, type AccountProfile, type Authentication } from './authentication';
+import { DEFAULT_MAIL_LANGUAGE, MAIL_LANGUAGES, type MailLanguage } from './codeMailText';
 import type { RequiredConsents } from './db/consents';
 import { normalizeEmail } from './emailAddress';
 import type { EmailCodes } from './emailCodes';
@@ -24,7 +25,7 @@ export interface RouteDeps {
   codes: EmailCodes;
   required: RequiredConsents;
   /** 验证码受理后调用，由装配层安排异步发送 */
-  queued?: (challengeId: string) => void;
+  queued?: (challengeId: string, language: MailLanguage) => void;
 }
 
 /** 一次已通过来源与方法检查的调用 */
@@ -110,15 +111,17 @@ const signedIn = (result: { token: string; expiresAt: number; user: AccountProfi
 
 const CODE_INVALID: Problem = { status: 422, code: 'code.invalid' };
 
-/** POST /api/v1/email-codes：统一受理，不透露账号是否存在（契约第 3.3 条） */
+/** POST /api/v1/email-codes：统一受理，不透露账号是否存在（契约第 3.3 条）；language 缺省时为中文 */
 const requestCode: Handler = {
-  fields: ['purpose', 'email'],
+  fields: ['purpose', 'email', 'language'],
   run: ({ body, source }, deps) => {
     const purpose = body.purpose;
     if (purpose !== 'register' && purpose !== 'reset') throw invalidField('purpose');
+    const language = MAIL_LANGUAGES.find(item => item === (body.language === undefined ? DEFAULT_MAIL_LANGUAGE : body.language));
+    if (!language) throw invalidField('language');
     const admission = deps.codes.request({ email: email(body), purpose, sourceHash: source });
     if ('retryAfterMs' in admission) throw fail({ status: 429, code: 'rate.limited', retryAfterMs: admission.retryAfterMs });
-    deps.queued?.(admission.challengeId);
+    deps.queued?.(admission.challengeId, language);
     return { status: 202, body: { challengeId: admission.challengeId, expiresAt: iso(admission.expiresAt), resendAfterMs: admission.resendAfterMs } };
   },
 };

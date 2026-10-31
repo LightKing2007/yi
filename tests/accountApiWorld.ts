@@ -23,6 +23,7 @@ export interface Ask {
 /** 在认证夹具上接一个只含账号接口的 HTTP 服务器 */
 export class AccountApiWorld extends AuthenticationWorld {
   readonly queued: string[] = [];
+  readonly languages: string[] = [];
   readonly logs: { level: string; event: string; entry?: LogEntry }[] = [];
   readonly sourceKey = Buffer.alloc(32, 7);
   private server?: http.Server;
@@ -36,7 +37,10 @@ export class AccountApiWorld extends AuthenticationWorld {
       required: { privacy: 'v1', terms: 'v1' },
       origins: ['app://yi'],
       sourceKey: this.sourceKey,
-      queued: id => this.queued.push(id),
+      queued: (id, language) => {
+        this.queued.push(id);
+        this.languages.push(language);
+      },
       log: (level, event, entry) => this.logs.push({ level, event, entry }),
       ...options,
     });

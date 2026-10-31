@@ -7,6 +7,7 @@
 import fs from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { agreementPage } from '../server/agreementPage';
+import { mailText } from '../server/codeMailText';
 import { AGREEMENT_DOCUMENTS } from '../server/agreementText';
 import { downloadPage } from '../server/downloadPage';
 import { homePage } from '../server/homePage';
@@ -97,6 +98,15 @@ describe('标点的检查范围（I18N-011）', () => {
       expect(paragraphs.length).toBeGreaterThan(0);
       expect([...paragraphs.flatMap(paragraphIssues), ...others.flatMap(punctuationIssues)]).toEqual([]);
     }
+  });
+
+  it('验证码邮件的中文与文言：句子标点合乎 GB/T 15834 且以句号结尾，标题、链接与版权不混用半角标点', () => {
+    for (const language of ['zh-Hans', 'lzh'] as const)
+      for (const purpose of ['register', 'reset', 'change'] as const) {
+        const text = mailText(language, purpose);
+        expect([text.lead, text.ttl, text.warn, text.support.join(''), text.notice].flatMap(paragraphIssues)).toEqual([]);
+        expect([text.subject, text.title, text.copyright, ...text.links.map(link => link[0])].flatMap(punctuationIssues)).toEqual([]);
+      }
   });
 
   it('译文表中的全部中文原文与文言译文：界面文字、禁着提示与服务端下发的提示', () => {
