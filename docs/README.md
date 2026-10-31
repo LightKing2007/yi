@@ -50,6 +50,7 @@
 | [phase5.md](plan/phase5.md) | 阶段 5 开发与验收记录：2026-10-29 全部验收完成，保留决策、实施经过与风险说明 |
 | [next-development.md](plan/next-development.md) | 下一步开发计划：阶段 5 完成后的工作顺序、账号与协议升级的前置决策、实施批次及进度 |
 | [phase6-7.md](plan/phase6-7.md) | 阶段 6、7 设计草案：已确认账号规则、存储与身份边界、接口、协议约束及待定事项 |
+| [agreement-publication.md](plan/agreement-publication.md) | 官网三份文书草案：正式使用前的联系信息、服务边界与机制补齐事项 |
 
 ### 2.4 架构决策记录（`adr/`）
 
