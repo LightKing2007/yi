@@ -51,3 +51,35 @@ describe('独立官网', () => {
     }
   });
 });
+
+describe('官网访问记录清理', () => {
+  it('按注入时间定期清理失效的访问记录，关闭官网时释放调度器', async () => {
+    let clock = 1;
+    let prune = () => {};
+    let stopped = false;
+    const site = await startWebsite({
+      port: 0,
+      files: '/nonexistent/website',
+      commit: 'test',
+      now: () => clock,
+      every: (task, ms) => {
+        prune = task;
+        expect(ms).toBe(10_000);
+        return () => {
+          stopped = true;
+        };
+      },
+    });
+    try {
+      const response = await fetch(`http://127.0.0.1:${site.port}/agreement`, { headers: { 'X-Forwarded-For': '198.51.100.2' } });
+      await response.text();
+      expect(site.trackedIps()).toBe(1);
+      clock = 3600;
+      prune();
+      expect(site.trackedIps()).toBe(0);
+    } finally {
+      await site.close();
+    }
+    expect(stopped).toBe(true);
+  });
+});

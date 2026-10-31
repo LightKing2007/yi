@@ -7,6 +7,14 @@ import { hardenHttp, withHttpLimit } from './http';
 import { HttpGate } from './ratelimit';
 
 const HTTP_OK = 200;
+const PRUNE_MS = 10_000;
+
+/** 生产定时器不阻止进程退出，关闭监听时取消；测试可注入手动调度器。 */
+function repeat(task: () => void, ms: number) {
+  const timer = setInterval(task, ms);
+  timer.unref();
+  return () => clearInterval(timer);
+}
 
 /** 官网运行依赖；时间单位为秒，仅供请求限流，测试可替换。 */
 export interface WebsiteOptions {
@@ -14,6 +22,7 @@ export interface WebsiteOptions {
   files: string;
   commit: string;
   now: () => number;
+  every?: (task: () => void, ms: number) => () => void;
 }
 
 /** 只在本机监听；本机直连的健康检查用于独立部署与回滚。 */
@@ -32,8 +41,13 @@ export async function startWebsite(opt: WebsiteOptions) {
     server.once('error', reject);
     server.listen(opt.port, '127.0.0.1', resolve);
   });
+  const stop = (opt.every ?? repeat)(() => gate.prune(opt.now()), PRUNE_MS);
   return {
     port: (server.address() as AddressInfo).port,
-    close: () => new Promise<void>((resolve, reject) => server.close(err => (err ? reject(err) : resolve()))),
+    trackedIps: () => gate.size,
+    close: () => {
+      stop();
+      return new Promise<void>((resolve, reject) => server.close(err => (err ? reject(err) : resolve())));
+    },
   };
 }
