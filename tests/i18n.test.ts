@@ -26,6 +26,7 @@ const SKIPPED_FILES: Record<string, string> = {
   'server/log.ts': '日志模块本身，文字只写入服务端日志',
   'server/metrics.ts': '监控指标的说明文字只出现在 /metrics（仅本机）中；错误文本只作为对应错误码的键，不下发',
   'server/main.ts': '服务端入口，文字只写入服务端日志',
+  'server/websiteConfig.ts': '官网配置错误仅向运维输出，不进入网页或游戏界面',
   'server/serve.ts': '服务端运行时的日志文字，只写入服务端日志',
   'server/backupCommand.ts': '备份命令的结果，只写入备份任务的日志',
   'server/config.ts': '配置校验失败时的期望格式与服务启动的说明，只写入服务端日志',

@@ -43,6 +43,7 @@ jobs:
       - run: node scripts/diff-coverage.mjs HEAD^1 # 改动行覆盖率 ≥ 80%（TST-011）
       - run: npm run build:web
       - run: npm run build:node
+      - run: npm run build:website # 官网独立构建，不包含账号或数据库
       - run: node scripts/audit.mjs # 随游戏与服务端分发的依赖没有高危漏洞（SEC-061）
       - run: node scripts/licenses.mjs # 依赖没有 GPL 一类的许可证（COD-071）
 

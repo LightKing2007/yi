@@ -21,3 +21,6 @@ yi-ratings.json.*
 HANDOFF.md
 .cache/
 smoke*/
+
+# 官网的独立构建产物
+dist-website/

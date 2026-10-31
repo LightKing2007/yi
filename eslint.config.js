@@ -39,7 +39,7 @@ const CONSOLE_ALLOWED = ['scripts/**', 'src/app/scenarios.ts', 'server/log.ts'];
 
 // 例外 COD-055：ESLint 只读取配置文件的默认导出
 export default tseslint.config(
-  { ignores: ['dist/', 'dist-electron/', 'dist-server/', 'release/', 'node_modules/', '.shots/', 'smoke*/', 'trailer/', '.cache/'] },
+  { ignores: ['dist/', 'dist-electron/', 'dist-server/', 'dist-website/', 'release/', 'node_modules/', '.shots/', 'smoke*/', 'trailer/', '.cache/'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
@@ -110,7 +110,7 @@ export default tseslint.config(
   {
     // 服务端的环境变量与命令行参数统一由 server/config.ts 解析并校验（ARC-042）
     files: ['server/**'],
-    ignores: ['server/config.ts'],
+    ignores: ['server/config.ts', 'server/websiteConfig.ts'],
     rules: {
       'no-restricted-syntax': [
         'error',

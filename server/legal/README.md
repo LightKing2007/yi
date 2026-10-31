@@ -46,3 +46,7 @@ npm run build:node
 章节目录由正文标题自动生成。正文保持普通章节样式；文书目录的编号直接复用 [官网共用样式](../pageStyle.ts) 的 `.idx`，不在文书样式中另设渐变或交替配色。
 
 正式生效前需要补齐的内容，见 [文书发布事项](../../docs/plan/agreement-publication.md)。
+
+## 官网独立运行
+
+官网可用 `npm run build:website` 单独构建；产物为 `dist-website/web.cjs` 与构建清单。以 `YI_WEB_FILES=/安装包目录 node dist-website/web.cjs` 运行，仅监听本机 8444，不启动联机或打开数据库。正式目录为 `/opt/www/yi.lightking.com.cn`，部署与回滚随独立官网流程交付（[决策 0013](../../docs/adr/0013-independent-website.md)）。
