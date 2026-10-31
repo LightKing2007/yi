@@ -64,3 +64,13 @@ for (const input of inputs) {
 fs.mkdirSync('dist-website', { recursive: true });
 fs.writeFileSync('dist-website/web.cjs', result.outputFiles[0].contents);
 fs.writeFileSync('dist-website/manifest.json', JSON.stringify({ service: 'yi-web', commit, inputs }, null, 2) + '\n');
+
+// 部署工具独立打包，永远不作为官网进程的依赖或运行代码。
+await build({
+  entryPoints: ['scripts/website-remote.ts'],
+  outfile: 'dist-website/deploy.cjs',
+  bundle: true,
+  platform: 'node',
+  target: 'node24',
+  format: 'cjs',
+});
