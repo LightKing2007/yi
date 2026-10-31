@@ -3,6 +3,7 @@ import init from './migrations/0001_init.sql?raw';
 import accounts from './migrations/0002_accounts.sql?raw';
 import sessions from './migrations/0003_sessions.sql?raw';
 import authLimits from './migrations/0004_auth_limits.sql?raw';
+import emailChallenges from './migrations/0005_email_challenges.sql?raw';
 
 /** 一个迁移：结构版本号即文件名的序号 */
 export interface Migration {
@@ -20,4 +21,5 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 2, name: '0002_accounts', sql: accounts },
   { version: 3, name: '0003_sessions', sql: sessions },
   { version: 4, name: '0004_auth_limits', sql: authLimits },
+  { version: 5, name: '0005_email_challenges', sql: emailChallenges },
 ];
