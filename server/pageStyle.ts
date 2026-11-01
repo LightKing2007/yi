@@ -1,7 +1,7 @@
 /**
  * 网站页面共用的样式（数据文件）：色彩与字体、黑白两种区块、顶栏、按钮、页脚、入场与随滚动出现的动画、圆形升起的转场。
  * 设计以黑白交替为主线：区块分为墨色（.ink）与贝色（.shell）两种，顶栏为平铺于顶端的深烟色玻璃条，在两种底色上都清楚；
- * 榧木色只用于棋盘与少量强调。动画与交互全部以 CSS 实现，不使用脚本（API-063）。系统设置了“减弱动态效果”时关闭全部动画。
+ * 榧木色只用于棋盘与少量强调。动画以 CSS 实现；仅帮助目录的检索使用同源外部脚本（API-063）。系统设置了“减弱动态效果”时关闭全部动画。
  * 随滚动推进的动画（animation-timeline）只在支持的浏览器中启用，其他浏览器直接显示最终状态。
  */
 
@@ -74,9 +74,6 @@ p { margin: 0; }
   transform: translateX(-50%) scale(0); transition: transform 0.4s var(--ease); }
 .bar nav a:hover { opacity: 1; }
 .bar nav a:hover::after { transform: translateX(-50%) scale(1); }
-.pill { display: inline-flex; align-items: center; height: 36px; padding: 0 19px; border: 1px solid rgb(236 231 221 / 0.35); border-radius: 999px;
-  font-size: 14px; letter-spacing: 0.2em; transition: background 0.35s var(--ease), color 0.35s var(--ease); }
-.pill:hover { background: #ece7dd; color: #141210; border-color: #ece7dd; }
 
 /* 区块的通用排版 */
 .sec-head { display: grid; grid-template-columns: auto 1fr; column-gap: 18px; row-gap: 22px; align-items: center; max-width: 52em; }
@@ -120,9 +117,10 @@ h3 { font: 900 clamp(22px, 2vw, 28px)/1.3 var(--serif); }
 .icp { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
 .icp:hover { color: #ece7dd; }
 @media (max-width: 720px) {
-  .bar { height: 56px; }
-  .bar nav { display: none; }
-  .bar .pill { margin-left: auto; }
+  .bar { height: 56px; gap: 20px; }
+  .bar nav { display: flex; gap: 20px; font-size: 12px; letter-spacing: 0.08em; overflow-x: auto; white-space: nowrap; scrollbar-width: none; }
+  .bar nav::-webkit-scrollbar { display: none; }
+  .bar nav a { flex: none; }
   .foot-in { grid-template-columns: 1fr; }
   .foot-links { justify-content: flex-start; gap: 12px 24px; }
   .btn { height: 54px; }

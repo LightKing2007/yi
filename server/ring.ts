@@ -84,7 +84,7 @@ export const ringStyle = `
 @media (prefers-reduced-motion: no-preference) {
   .ringsec { height: 320vh; view-timeline-name: --ring; }
   .ring-pin { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; justify-content: center;
-    padding-top: 80px; padding-bottom: 40px; }
+    padding-top: 80px; padding-bottom: clamp(112px, 13vh, 152px); }
   .ring { animation: ring-turn linear both; animation-timeline: --ring; animation-range: contain 0% contain 100%; }
   .ring:hover { animation-play-state: running; }
   @keyframes ring-turn { from { transform: rotateX(-12deg) rotateY(40deg); } to { transform: rotateX(-12deg) rotateY(-340deg); } }

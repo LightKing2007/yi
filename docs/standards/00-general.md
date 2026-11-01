@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 文件编号 | YI-STD-001 |
-| 文件版本 | 1.1.68 |
+| 文件版本 | 1.1.72 |
 | 发布日期 | 2026-10-02 |
 | 状态 | 现行；整改项按 [plan/remediation.md](../plan/remediation.md) 的期限实施 |
 | 编制 | LightKing、Claude |
@@ -330,3 +330,7 @@ GB/T 11457—2006 界定的以及下列术语和定义适用于本规范。
 | 1.1.66 | 2026-11-01 | 随账号 HTTP 接口的实现修订 [04-api.md](04-api.md)（1.1.15）：第 4.1 条增加 422，表示请求格式正确、但业务校验未通过且玩家可自行纠正，对应 E2；第 8 节 `auth.required` 的原文改为“请先登录”（该码尚未发布），`auth.*`、`account.restricted` 的启用版本由 3.0 更正为 4.0，新增第 8.2 条账号接口的 10 个错误码；API-021 随 `src/shared/errors.ts` 改为满足。同时修订 [09-text-and-i18n.md](09-text-and-i18n.md)（1.1.8）：术语表增加账号、登录、邮箱、验证码、雅号，I18N-076 增加其文言译名，错误码原文的译文补入译文表。依据 [账号接口契约](../plan/account-api.md)（项目所有者 2026-11-01 确认，#228）；规则编号不变 |
 | 1.1.67 | 2026-11-01 | 随账号功能的装配修订 [07-operations.md](07-operations.md)（1.1.22）：第 8 节增加日志事件 `account.enabled`、`account.secrets-invalid`、`auth.revoked`；同步 [05-security.md](05-security.md)（1.1.17）中 SEC-051 的“现状”为部分满足（账号凭据经 `LoadCredential=` 传入，尚未在服务器上启用）；规则编号不变 |
 | 1.1.68 | 2026-11-01 | 同步 [05-security.md](05-security.md)（1.1.18）中 SEC-013 的“现状”：`connect-src` 增加账号接口的确切源 `https://yi.lightking.com.cn`（账号接口契约第 2.4.4 条），开发模式相应另加本机的 http 地址，仍不使用通配；规定本身不变 |
+| 1.1.69 | 2026-11-01 | 修订 [04-api.md](04-api.md) 的 API-060：网站增加 `/support` 帮助与支持页，复用文书布局，忽略查询参数，尾斜杠以 301 规范化；页面仍不允许脚本（API-063）；规则编号不变 |
+| 1.1.70 | 2026-11-01 | 修订 [04-api.md](04-api.md) 的 API-060：三份文书移至 `/agreement/privacy-policy`、`/agreement/terms-of-service`、`/agreement/minors-privacy-rules`，旧根路径不再提供页面或跳转；规则编号不变 |
+| 1.1.71 | 2026-11-01 | 修订 [04-api.md](04-api.md) 的 API-060：未知页面路径返回复用官网外壳与首页终章样式的 HTML 404 页面，保持安全头与 HEAD 语义；未知资源仍返回纯文本 404；规则编号不变 |
+| 1.1.72 | 2026-11-01 | 修订 [04-api.md](04-api.md) 的 API-060 与 API-063：帮助与支持改为分类目录和三十四个独立问题页，每个问题一份 Markdown；文书、帮助和 404 构建为静态 HTML，帮助目录以原生 GET 表单作为检索回退，并仅加载同源外部检索脚本；规则编号不变 |

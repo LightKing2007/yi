@@ -9,13 +9,16 @@ const FILE_MODE = 0o644;
 const HASH = /^[a-f0-9]{64}$/;
 const COMMIT = /^[a-f0-9]{40}$/;
 const CACHE_ID_LENGTH = 12;
-const FILES = ['web.cjs', 'manifest.json'];
+const LEGACY_FILES = ['web.cjs', 'manifest.json'];
+const FILES = [...LEGACY_FILES, 'site.tar'];
 const HEALTH_POLLS = 30;
 
 /** 部署的系统边界；等待、时间和服务操作均可在测试中替换。 */
 export interface WebsiteDeployment {
   root: string;
   copy: (source: string, target: string) => void;
+  /** 把已校验的静态页面包展开到暂存版本目录 */
+  extract: (archive: string, target: string) => void;
   service: (action: 'restart' | 'stop') => void;
   healthy: (commit: string) => Promise<boolean>;
   wait: () => Promise<void>;
@@ -113,6 +116,12 @@ export async function installWebsite(ctx: WebsiteDeployment, source: string, tag
     fs.chmodSync(path.join(ctx.root, 'releases'), DIRECTORY_MODE);
     for (const name of [...FILES, 'SHA256SUMS']) ctx.copy(path.join(source, name), path.join(stage, name));
     verifyWebsiteFiles(stage);
+    const site = path.join(stage, 'site');
+    fs.mkdirSync(site, { mode: DIRECTORY_MODE });
+    ctx.extract(path.join(stage, 'site.tar'), site);
+    for (const name of ['agreement.html', 'support.html', '404.html', 'assets/support-search.js']) {
+      if (!fs.statSync(path.join(site, name)).isFile()) throw new Error(`静态官网缺项：${name}`);
+    }
     const commit = websiteCommit(path.join(stage, 'manifest.json'));
     if (tag !== `web-${commit.slice(0, CACHE_ID_LENGTH)}`) throw new Error('官网标签与提交号不符');
     const target = path.join('releases', commit);
@@ -137,6 +146,8 @@ export async function installWebsite(ctx: WebsiteDeployment, source: string, tag
 export async function rollbackWebsite(ctx: WebsiteDeployment): Promise<void> {
   const target = websiteLink(ctx.root, 'previous');
   if (!target) throw new Error('没有可回滚的官网版本');
-  verifyWebsiteFiles(path.join(ctx.root, target));
-  await activateWebsite(ctx, target, websiteCommit(path.join(ctx.root, target, 'manifest.json')));
+  const previous = path.join(ctx.root, target);
+  // 静态化之前的版本仍可回滚；其请求处理继续使用当时的内置页面。
+  verifyWebsiteFiles(previous, fs.existsSync(path.join(previous, 'site.tar')) ? FILES : LEGACY_FILES);
+  await activateWebsite(ctx, target, websiteCommit(path.join(previous, 'manifest.json')));
 }

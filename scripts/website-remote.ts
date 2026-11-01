@@ -24,6 +24,9 @@ const ctx: WebsiteDeployment = {
     if (uploader) fs.writeFileSync(to, execFileSync('runuser', ['-u', uploader, '--', 'cat', from], { maxBuffer: UPLOAD_MAX_BYTES }));
     else fs.copyFileSync(from, to);
   },
+  extract: (archive, target) => {
+    execFileSync('tar', ['--no-same-owner', '--no-same-permissions', '-xf', archive, '-C', target]);
+  },
   service: action => {
     execFileSync('systemctl', [action, 'yi-web']);
   },

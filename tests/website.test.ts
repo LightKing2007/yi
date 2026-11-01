@@ -9,9 +9,11 @@ import { startWebsite } from '../server/websiteHost';
 describe('独立官网', () => {
   it('网站配置只读取自身端口和目录，错误参数拒绝启动，版本查询不受部署配置影响', () => {
     const config = parseWebsiteConfig([], { PORT: 'bad', YI_DB: '/private/game.db', YI_WEB_PORT: '8445', YI_WEB_FILES: 'packages' }, '/srv/site');
-    expect(config).toEqual({ version: false, port: 8445, files: '/srv/site/packages', errors: [] });
+    expect(config).toEqual({ version: false, port: 8445, files: '/srv/site/packages', pages: '/srv/site/site', errors: [] });
     expect(parseWebsiteConfig([], {}, '/srv/site').port).toBe(8444);
     expect(parseWebsiteConfig([], {}, '/srv/site').files).toBe('/srv/site/downloads/current');
+    expect(parseWebsiteConfig([], {}, '/srv/site').pages).toBe('/srv/site/site');
+    expect(parseWebsiteConfig([], { YI_WEB_PAGES: '' }, '/srv/site').errors).toEqual(['YI_WEB_PAGES 不能是空字符串']);
     for (const port of ['0', '65536', 'bad', '1.5', '']) expect(parseWebsiteConfig([], { YI_WEB_PORT: port }, '/').errors).not.toEqual([]);
     expect(parseWebsiteConfig(['backup'], { YI_WEB_FILES: '' }, '/').errors).toHaveLength(2);
     expect(parseWebsiteConfig(['--version'], { YI_WEB_PORT: 'bad' }, '/').errors).toEqual([]);
@@ -23,7 +25,15 @@ describe('独立官网', () => {
     const site = await startWebsite({ port: 0, files: dir, commit: 'web-commit', now: () => 1 });
     const base = `http://127.0.0.1:${site.port}`;
     try {
-      for (const route of ['/', '/download/', '/agreement', '/privacy-policy', '/terms-of-service', '/minors-privacy-rules']) {
+      for (const route of [
+        '/',
+        '/download/',
+        '/support',
+        '/agreement',
+        '/agreement/privacy-policy',
+        '/agreement/terms-of-service',
+        '/agreement/minors-privacy-rules',
+      ]) {
         const response = await fetch(base + route);
         expect(response.status).toBe(200);
         expect(response.headers.get('content-security-policy')).toContain("default-src 'none'");

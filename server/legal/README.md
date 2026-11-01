@@ -6,9 +6,9 @@
 
 | 文件 | 编辑入口 | 网站地址 |
 |---|---|---|
-| 隐私政策 | [修改正文](privacy-policy.md) | `/privacy-policy` |
-| 用户服务条款 | [修改正文](terms-of-service.md) | `/terms-of-service` |
-| 未成年人个人信息保护规则 | [修改正文](minors-privacy-rules.md) | `/minors-privacy-rules` |
+| 隐私政策 | [修改正文](privacy-policy.md) | `/agreement/privacy-policy` |
+| 用户服务条款 | [修改正文](terms-of-service.md) | `/agreement/terms-of-service` |
+| 未成年人个人信息保护规则 | [修改正文](minors-privacy-rules.md) | `/agreement/minors-privacy-rules` |
 
 ## 修改目录与公共信息
 
@@ -41,7 +41,7 @@ npm run build:node
 
 支持 `##` 章节、`###` 子章节、普通段落、`-` 项目列表、`1.` 编号列表、`**加粗**`。
 
-站内文书链接可以写为 `[《隐私政策》](/privacy-policy)`，另外支持其余两份文书、文书目录和项目现有 GitHub 反馈地址。其他链接按普通文字显示；原始 HTML、图片和脚本不会执行。
+站内文书链接可以写为 `[《隐私政策》](/agreement/privacy-policy)`，另外支持其余两份文书、文书目录和项目现有 GitHub 反馈地址。其他链接按普通文字显示；原始 HTML、图片和脚本不会执行。
 
 章节目录由正文标题自动生成。正文保持普通章节样式；文书目录的编号直接复用 [官网共用样式](../pageStyle.ts) 的 `.idx`，不在文书样式中另设渐变或交替配色。
 

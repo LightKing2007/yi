@@ -9,7 +9,7 @@ it('文书标题生成唯一目录锚点，保留段落、加粗、两类列表�
     '- 第一项。\n- 第二项。',
     '1. 第一项。\n2. 第二项。',
     '## 同名标题',
-    '参见[隐私政策](/privacy-policy)。',
+    '参见[隐私政策](/agreement/privacy-policy)。',
   ].join('\n\n');
   const result = legalMarkdown(source);
   expect(result.headings).toEqual([
@@ -21,14 +21,14 @@ it('文书标题生成唯一目录锚点，保留段落、加粗、两类列表�
   expect(result.html).toContain('<p>首段<strong>重要约定</strong>。</p>');
   expect(result.html).toContain('<ul><li>第一项。</li><li>第二项。</li></ul>');
   expect(result.html).toContain('<ol><li>第一项。</li><li>第二项。</li></ol>');
-  expect(result.html).toContain('<a href="/privacy-policy">隐私政策</a>');
+  expect(result.html).toContain('<a href="/agreement/privacy-policy">隐私政策</a>');
   expect(legalMarkdown('\r\n\n')).toEqual({ html: '', headings: [] });
 });
 
 it('不执行文书中的原始 HTML、危险链接与未闭合标记，只开放固定文书和反馈地址', () => {
   const source = [
     '<img src=x onerror="alert(1)"> **<script>alert(1)</script>**',
-    '[危险](javascript:alert(1)) [外站](https://example.com) [伪装](/privacy-policy?next=x)',
+    '[危险](javascript:alert(1)) [外站](https://example.com) [伪装](/agreement/privacy-policy?next=x)',
     '[反馈](https://github.com/LightKing2007/yi/issues)',
     '**未闭合',
   ].join('\n\n');
@@ -38,7 +38,7 @@ it('不执行文书中的原始 HTML、危险链接与未闭合标记，只开�
   expect(result.html).toContain('&#60;img');
   expect(result.html).not.toContain('href="javascript:');
   expect(result.html).not.toContain('href="https://example.com');
-  expect(result.html).not.toContain('href="/privacy-policy?next=x');
+  expect(result.html).not.toContain('href="/agreement/privacy-policy?next=x');
   expect(result.html).toContain('<a href="https://github.com/LightKing2007/yi/issues">反馈</a>');
   expect(result.html).toContain('<p>**未闭合</p>');
 });

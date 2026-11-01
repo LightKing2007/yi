@@ -1,14 +1,4 @@
-/**
- * 独立官网的网页与安装程序请求处理。路径白名单（API-060）：
- *   GET /             主页（homePage.ts）
- *   GET /download/    下载页面（downloadPage.ts）；带 ?start 时推断确定的访客进入页面即开始下载。/download 重定向到 /download/
- *   GET /agreement   文书目录；三份文件各用 /文件名 访问（agreementText.ts）；尾斜杠重定向至规范路径
- *   GET /<文件名>     下载这个文件，支持断点续传；目录里只认 Yi-版本-平台 这样命名的文件，其他文件与子目录一概不给
- *   GET /SHA256SUMS   各安装程序的 SHA-256（SEC-070）
- *   GET /assets/<名>  页面的标题图、图标、备案图标与字体：名单见 ASSET_TYPES，内容在构建时嵌入，运行时不读取磁盘
- * 主页与下载页面按请求头推断访客的操作系统（platform.ts），推荐对应的安装程序；页面不含脚本（API-063）。
- * 每个 IP（经反向代理时按真实地址，clientIp.ts）同时最多 2 个下载、全服最多 8 个，免得下载把带宽占满影响对局；下载速率持续过低的连接被断开（API-047）。
- */
+/** 独立官网页面、静态文书、帮助与安装程序；路由与安全见 API-060、API-063，下载限制见 API-047。 */
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,6 +7,10 @@ import { clientIp } from './clientIp';
 import { agreementPages } from './agreementPage';
 import { downloadPage } from './downloadPage';
 import { homePage } from './homePage';
+import { notFoundPage } from './notFoundPage';
+import { readStaticSite } from './staticSite';
+import { normalizeSupportQuery } from './supportContent';
+import { supportPage, supportPages } from './supportPage';
 import { PLATFORMS, type PagePkg } from './page';
 import { sendDocument, sendPage } from './pageResponse';
 import { detectPlatform } from './platform';
@@ -38,13 +32,14 @@ export interface StallLimit {
 /** 写入速率低于 1 KB/s 持续 60 秒即断开 */
 const STALL: StallLimit = { stallMs: 60_000, minBytesPerSec: 1024 };
 
-/** /assets/ 下允许的资源与内容类型（API-060 的名单）；内容见 scripts/page-assets.mjs */
+/** /assets/ 下允许的资源与内容类型（API-060 的名单）；图片和字体见 scripts/page-assets.mjs */
 const ASSET_TYPES: Record<string, string> = {
   'title-yi.png': 'image/png',
   'icon.png': 'image/png',
   'yi-serif-900.woff2': 'font/woff2',
   'yi-serif-400.woff2': 'font/woff2',
   'icp.png': 'image/png',
+  'support-search.js': 'text/javascript; charset=utf-8',
 };
 
 /** 所有响应都带的头（API-063） */
@@ -210,20 +205,25 @@ function unavailable(res: ServerResponse, text: string) {
   res.writeHead(UNAVAILABLE, { ...BASE_HEADERS, 'Content-Type': TEXT, 'Retry-After': String(RETRY_AFTER_SECS) }).end(text);
 }
 
-/** 从请求地址取出路径（不含开头的斜杠）与是否带 start；地址无法解析时返回 null */
-function parseUrl(req: IncomingMessage): { name: string; starting: boolean } | null {
+/** 从请求地址取出路径、下载开关与帮助搜索词；地址无法解析时返回 null。 */
+function parseUrl(req: IncomingMessage): { name: string; starting: boolean; query: string } | null {
   try {
     const url = new URL(req.url ?? '/', 'http://x');
-    return { name: decodeURIComponent(url.pathname.slice(1)), starting: url.searchParams.has('start') };
+    return {
+      name: decodeURIComponent(url.pathname.slice(1)),
+      starting: url.searchParams.has('start'),
+      query: url.searchParams.get('q') ?? '',
+    };
   } catch {
     return null; // 路径中的百分号编码不合法
   }
 }
 
-/** /assets/ 下的资源：只给 ASSET_TYPES 名单中、构建时已嵌入的 */
-function sendAsset(res: ServerResponse, asset: string, head: boolean) {
+/** 静态检索脚本来自 HTML 构建目录；其余资源沿用构建时嵌入的白名单。 */
+function sendAsset(res: ServerResponse, asset: string, head: boolean, staticAsset?: Buffer) {
   const type = Object.hasOwn(ASSET_TYPES, asset) ? ASSET_TYPES[asset] : undefined;
-  const data = type && __PAGE_ASSETS__[asset] ? Buffer.from(__PAGE_ASSETS__[asset], 'base64') : undefined;
+  const embedded = type && __PAGE_ASSETS__[asset] ? Buffer.from(__PAGE_ASSETS__[asset], 'base64') : undefined;
+  const data = staticAsset ?? embedded;
   if (!type || !data) {
     notFound(res);
     return;
@@ -346,12 +346,28 @@ function installers(dir: string, stall: StallLimit) {
   return { send, active: pool.active };
 }
 
-/** 主页、下载页面与安装包的请求处理；dir 为安装包所在的目录，stall 为下载速率的下限（测试时可调小） */
-export function fileServer(dir: string, stall: StallLimit = STALL) {
+/** 静态目录存在时直接发送其 HTML；主页、下载页及安装包仍按请求动态处理。 */
+export function fileServer(dir: string, stall: StallLimit = STALL, staticRoot = path.resolve('site')) {
   const sums = checksums(dir);
   const pkgs = listing(dir);
   const render = pages(pkgs, sums);
-  const agreements = agreementPages(__APP_VERSION__);
+  const fixed = readStaticSite(staticRoot);
+  const documents = fixed?.pages ?? new Map([...agreementPages(__APP_VERSION__), ...supportPages(__APP_VERSION__)]);
+  const reading = (res: ServerResponse, name: string, query: string, head: boolean) => {
+    const search = normalizeSupportQuery(query);
+    if (name === 'support') {
+      // 无脚本提交搜索时由同源服务筛选；空查询直接使用包含渐进增强脚本的静态目录
+      const body = search ? undefined : fixed?.pages.get('support');
+      sendPage(res, body ?? Buffer.from(supportPage(__APP_VERSION__, search)), { head, platform: false, script: Boolean(body) });
+      return true;
+    }
+    if (name === 'support/') {
+      res.writeHead(MOVED, { ...BASE_HEADERS, Location: `/support${search ? `?q=${encodeURIComponent(search)}` : ''}` }).end();
+      return true;
+    }
+    return sendDocument(res, documents, name, head);
+  };
+  const missing = fixed?.missing ?? Buffer.from(notFoundPage(__APP_VERSION__));
   const downloads = installers(dir, stall);
   const handle = (req: IncomingMessage, res: ServerResponse) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') {
@@ -365,16 +381,18 @@ export function fileServer(dir: string, stall: StallLimit = STALL) {
     }
     const { name, starting } = url;
     const head = req.method === 'HEAD';
-    if (sendDocument(res, agreements, name, head)) return;
-    if (name === HOME || name === DOWNLOAD) sendPage(res, render(name, req, name === DOWNLOAD && starting), head);
+    if (reading(res, name, url.query, head)) return;
+    if (name === HOME || name === DOWNLOAD) sendPage(res, render(name, req, name === DOWNLOAD && starting), { head });
     // 只保留页面认得的 start：主页的下载按钮若被写成 /download?start，重定向之后仍自动开始下载
     else if (`${name}/` === DOWNLOAD) res.writeHead(MOVED, { ...BASE_HEADERS, Location: `/${DOWNLOAD}${starting ? '?start' : ''}` }).end();
-    else if (name.startsWith('assets/')) sendAsset(res, name.slice('assets/'.length), head);
-    else if (name === 'SHA256SUMS') sendSums(res, pkgs.load(), sums, head);
+    else if (name.startsWith('assets/')) {
+      const asset = name.slice('assets/'.length);
+      sendAsset(res, asset, head, fixed?.assets.get(asset));
+    } else if (name === 'SHA256SUMS') sendSums(res, pkgs.load(), sums, head);
     else {
       const pkg = NAME.test(name) ? pkgs.fresh(name) : undefined;
       if (pkg) downloads.send(req, res, pkg);
-      else notFound(res);
+      else sendPage(res, missing, { head, platform: false, status: NOT_FOUND });
     }
   };
   /** 进行中的下载数（指标 yi_downloads_active） */

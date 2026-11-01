@@ -141,7 +141,7 @@ npm run dist:win     # release/Yi-<版本>-win-x64-setup.exe（宜在 Windows �
 npm run dist:linux   # release/Yi-<版本>-linux-x86_64.AppImage（宜在 Linux 上打包）
 ```
 
-正式发行不在本机打包，而是按 [开发与发布规程](docs/procedures/release.md) 由 GitHub Actions 自动完成。面向玩家的下载地址统一为下载页面 <https://yi.lightking.com.cn/download/>，网站主页为 <https://yi.lightking.com.cn/>，文书目录为 <https://yi.lightking.com.cn/agreement>（隐私政策与服务条款）；本仓库公开，GitHub Release 中的附件与下载页面上的安装程序相同。
+正式发行不在本机打包，而是按 [开发与发布规程](docs/procedures/release.md) 由 GitHub Actions 自动完成。面向玩家的下载地址统一为下载页面 <https://yi.lightking.com.cn/download/>，网站主页为 <https://yi.lightking.com.cn/>，帮助与支持位于 <https://yi.lightking.com.cn/support>，文书目录为 <https://yi.lightking.com.cn/agreement>（隐私政策与服务条款）；本仓库公开，GitHub Release 中的附件与下载页面上的安装程序相同。
 
 官网文书的后续编辑统一从 [文书维护入口](server/legal/README.md) 开始，可集中打开三份正文、目录与公共信息配置，以及修改说明。
 
@@ -210,7 +210,7 @@ node dist-server/server.cjs --version
 | `YI_LATEST` | 最新客户端版本号，例如 `2.0.2`；客户端版本较旧时，开始菜单及联机对战页面提示有新版本 |
 | `YI_DOWNLOAD` | 新版本的下载地址（`http://` 或 `https://`），提示可点击打开 |
 | `YI_LOG_LEVEL` | 日志级别：`error`、`warn`、`info`（默认）、`debug`（OPS-062） |
-| `YI_FILES` | 安装程序所在目录。设置后，服务端在同一端口提供网站：主页 `http://地址:端口/`、下载页面 `/download/` 与文书目录 `/agreement`。三份文件分别通过 `/privacy-policy`、`/terms-of-service`、`/minors-privacy-rules` 访问，正文为尚未生效的草案；文书路径的尾斜杠重定向至无尾斜杠地址，忽略查询参数，不依赖安装包目录；主页和下载页面按请求头推断访客的操作系统并推荐对应的安装程序（`server/platform.ts`），下载页面带 `?start` 时进入即开始下载；下载页面列出各平台最新的 `Yi-版本-平台` 安装程序及其 SHA-256 校验值（另有 `/SHA256SUMS`），支持断点续传；每个 IP 同时最多 2 个下载，全服最多 8 个。页面所用的标题图、图标与字体在构建时嵌入服务端（`scripts/page-assets.mjs`），页面不含脚本 |
+| `YI_FILES` | 安装程序所在目录。设置后，服务端在同一端口提供网站：主页 `http://地址:端口/`、下载页面 `/download/` 与文书目录 `/agreement`。三份文件分别通过 `/agreement/privacy-policy`、`/agreement/terms-of-service`、`/agreement/minors-privacy-rules` 访问，正文为尚未生效的草案；文书路径的尾斜杠重定向至无尾斜杠地址，忽略查询参数，不依赖安装包目录；主页和下载页面按请求头推断访客的操作系统并推荐对应的安装程序（`server/platform.ts`），下载页面带 `?start` 时进入即开始下载；下载页面列出各平台最新的 `Yi-版本-平台` 安装程序及其 SHA-256 校验值（另有 `/SHA256SUMS`），支持断点续传；每个 IP 同时最多 2 个下载，全服最多 8 个。页面所用的标题图、图标与字体在构建时嵌入服务端（`scripts/page-assets.mjs`），页面不含脚本；未知页面路径返回与官网同风格的 HTML 404 页面，未知资源仍返回纯文本 404 |
 
 以上变量与命令行参数由 `server/config.ts` 集中解析并校验（ARC-042）：端口须为 1 至 65535 的整数，`HOST` 须为 IP 地址或主机名，`YI_LATEST` 须为“主版本.次版本.修订号”，`YI_DOWNLOAD` 须为 `http://` 或 `https://` 网址；任一项不合法时，服务端为每一项写一行 `server.config-invalid` 日志（变量名与期望的格式）并以退出码 78 退出。空值与未设置相同。
 
@@ -303,7 +303,7 @@ src/
   ui/                 Preact 界面：panels（菜单、对局、设置、更多）、online（联机对战）、widgets、styles.css、info（“更多”页面的文字）
   i18n/               多语言
 server/               rooms.ts 队列、配对、房间、对局与段位（与传输无关）；ratelimit.ts 限流与违规累计；db/ 数据库（打开与迁移、仓储、段位与对局记录、备份）；backupCommand.ts 备份命令（node server.cjs backup）；record.ts 对局记录与每手用时；serve.ts 服务端的运行（启动、关闭、信号）；main.ts 入口（读取配置后调用 serve.ts）；host.ts 接入 WebSocket（可同时监听多个端口）；
-                      files.ts 同一端口上的网站与下载服务（homePage.ts 主页、downloadPage.ts 下载页面、agreementPage.ts 文书目录与独立草案页（正文位于 server/legal/，legalMarkdown.ts 安全渲染），共用 page.ts 外壳、pageStyle.ts 样式与 pageResponse.ts 响应头；board.ts 主页上的棋盘；geometry.ts 主页的背景几何；ring.ts 主页随滚动转动的功能环；platform.ts 推断访客的操作系统）；main.ts 入口
+                      files.ts 同一端口上的网站与下载服务（homePage.ts 主页、downloadPage.ts 下载页面、supportPage.ts 帮助与支持（正文位于 server/support.md）、notFoundPage.ts 默认 404 页面、agreementPage.ts 文书目录与独立草案页（正文位于 server/legal/，legalMarkdown.ts 安全渲染），共用 page.ts 外壳、pageStyle.ts 样式与 pageResponse.ts 响应头；board.ts 主页上的棋盘；geometry.ts 主页的背景几何；ring.ts 主页随滚动转动的功能环；platform.ts 推断访客的操作系统）；main.ts 入口
 electron/             桌面版主进程（窗口、单实例、匹配成功时的任务栏提醒、错误日志）及预加载脚本
 tests/                vitest：rules（规则与人机）、record（规则层与棋谱）、session（会话与座位）、protocol（消息校验与昵称清洗）、server（联机服务端）、ratelimit（限流）、
                       db、dbRepo、dbStartup 与 dbBackup（数据库：打开与迁移、仓储与段位、启动、备份）、client（联机客户端：断线、重连、服务器重启、非法消息）、lobby（联机大厅：匹配、排位、好友房间）、

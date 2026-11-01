@@ -3,18 +3,21 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { expect, it } from 'vitest';
 import { installWebsite, rollbackWebsite, verifyWebsiteFiles, websiteCommit, websiteLink, type WebsiteDeployment } from '../scripts/website-deploy';
 
-/** 构造虚构网站产物；真实校验文件由独立的标准加密库生成。 */
+/** 构造虚构网站产物；静态页面也按真实发布形式打包和展开。 */
 function release(dir: string, digit: string) {
   const commit = digit.repeat(40);
-  fs.mkdirSync(dir, { recursive: true });
+  fs.mkdirSync(path.join(dir, 'site/assets'), { recursive: true });
   fs.writeFileSync(path.join(dir, 'web.cjs'), `website ${digit}`);
   fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({ service: 'yi-web', commit }));
+  for (const name of ['agreement.html', 'support.html', '404.html', 'assets/support-search.js']) fs.writeFileSync(path.join(dir, 'site', name), name);
+  execFileSync('tar', ['-cf', path.join(dir, 'site.tar'), '-C', path.join(dir, 'site'), '.']);
   fs.writeFileSync(
     path.join(dir, 'SHA256SUMS'),
-    ['web.cjs', 'manifest.json']
+    ['web.cjs', 'manifest.json', 'site.tar']
       .map(
         name =>
           `${createHash('sha256')
@@ -32,6 +35,7 @@ function world(root: string) {
   const ctx: WebsiteDeployment = {
     root,
     copy: fs.copyFileSync,
+    extract: (archive, target) => execFileSync('tar', ['-xf', archive, '-C', target]),
     service: action => {
       actions.push(action);
     },

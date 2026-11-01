@@ -164,8 +164,8 @@ export function homePage(pkgs: PagePkg[], detected: Detected, assetVersion: stri
       ['#modes', '对局'],
       ['#features', '功能'],
       ['#details', '细节'],
+      [DOWNLOAD, '下载'],
     ],
-    action: [DOWNLOAD, '下载'],
     style: homeStyle(),
     body: hero(pkgs, detected) + games() + modes() + featureRing() + details() + finale(pkgs, detected),
   });

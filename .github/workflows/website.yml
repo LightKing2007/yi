@@ -39,7 +39,7 @@ jobs:
       - name: 独立校验值和草稿 Release
         run: |
           cd dist-website
-          sha256sum web.cjs manifest.json > SHA256SUMS
+          sha256sum web.cjs manifest.json site.tar > SHA256SUMS
           tag="web-${GITHUB_SHA:0:12}"
-          printf '官网独立发布。\n\n构建提交：%s\n\n包含主页、下载页与三份文书草案；不更换联机服务端，不迁移游戏数据库。\n' "$GITHUB_SHA" > notes.md
-          gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --latest=false --title "官网 ${GITHUB_SHA:0:12}" --notes-file notes.md web.cjs manifest.json SHA256SUMS
+          printf '官网独立发布。\n\n构建提交：%s\n\n包含动态主页与下载服务，以及静态帮助、文书和 404 页面；不更换联机服务端，不迁移游戏数据库。\n' "$GITHUB_SHA" > notes.md
+          gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --latest=false --title "官网 ${GITHUB_SHA:0:12}" --notes-file notes.md web.cjs manifest.json site.tar SHA256SUMS

@@ -39,8 +39,8 @@ it('注册、资料、改名、补签、改密、登录与退出走通，响应�
   expect((await ctx.ask('GET', '/api/v1/consents/required')).json).toEqual({
     privacy: 'v1',
     terms: 'v1',
-    privacyUrl: 'https://yi.lightking.com.cn/privacy-policy',
-    termsUrl: 'https://yi.lightking.com.cn/terms-of-service',
+    privacyUrl: 'https://yi.lightking.com.cn/agreement/privacy-policy',
+    termsUrl: 'https://yi.lightking.com.cn/agreement/terms-of-service',
   });
   const admitted = await ctx.ask('POST', '/api/v1/email-codes', { body: { purpose: 'register', email: 'new@example.com' } });
   expect(admitted.status).toBe(202);

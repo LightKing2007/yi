@@ -158,7 +158,7 @@ function verify() {
 <div class="col"><span class="idx">伍</span><h3>更新与隐私</h3>
 <p>有新版本时，游戏的开始菜单及联机对战页面会给出提示，点击提示即可打开本页面。安装新版本即可完成更新，设置与段位均予以保留。</p>
 <p>单机对局在本机运行，客户端错误日志不会自动上传。联网对战会处理昵称、身份关联标记、段位和对局记录。
-详情见<a href="/privacy-policy">隐私政策（草案）</a>。</p></div>
+详情见<a href="/agreement/privacy-policy">隐私政策（草案）</a>。</p></div>
 </div></section>`;
 }
 
@@ -171,12 +171,11 @@ export function downloadPage(pkgs: PagePkg[], detected: Detected, assetVersion: 
     description: '下载“弈”：五子棋与围棋桌面游戏，提供 Windows、macOS（Apple 芯片、Intel 芯片）及 Linux 版本。',
     assetVersion,
     nav: [
-      ['/', '主页'],
       ['#guide', '安装'],
-      ['#all', '版本'],
+      ['#all', '全部版本'],
       ['#verify', '校验'],
+      ['/support', '帮助与支持'],
     ],
-    action: ['#all', '全部版本'],
     style: downloadStyle(),
     refresh: autostart,
     body: hero(pkg, pkgs, detected, Boolean(autostart)) + guide(detected) + all(pkgs, detected) + verify(),

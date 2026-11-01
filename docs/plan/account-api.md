@@ -94,7 +94,7 @@
 
 ```json
 { "privacy": "2026-10-31", "terms": "2026-10-31",
-  "privacyUrl": "https://yi.lightking.com.cn/privacy-policy", "termsUrl": "https://yi.lightking.com.cn/terms-of-service" }
+  "privacyUrl": "https://yi.lightking.com.cn/agreement/privacy-policy", "termsUrl": "https://yi.lightking.com.cn/agreement/terms-of-service" }
 ```
 
 版本取值以服务端装配的 `RequiredConsents` 为准；示例中的日期仅为格式示意。文书仍为草案时不开放注册入口（第 6.2 条）。

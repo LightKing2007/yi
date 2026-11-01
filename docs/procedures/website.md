@@ -4,9 +4,9 @@
 
 ## 1 修改正文与页面
 
-统一入口为 [文书维护说明](../../server/legal/README.md)。修改三份 Markdown 或 `server/agreementText.ts` 后，按项目流程创建 PR，检查通过后合并。网页渲染代码仍集中在 `server/`，两个程序的构建入口和实际依赖分开；目录名称不代表网站运行于联机进程。
+文书统一入口为 [文书维护说明](../../server/legal/README.md)。修改三份 Markdown 或 `server/agreementText.ts` 后，按项目流程创建 PR，检查通过后合并。帮助与支持采用“目录 + 独立问题页”：每个问题在 `server/support/` 下各有一份 Markdown，文件头部的 `title` 与 `category` 提供标题和分类；新增文件后在 `server/supportSources/` 的对应分类模块登记一次，即自动进入目录与全文检索。目录检索由 `scripts/support-search.ts` 构建为同源外部脚本，无脚本时仍以原生 GET 表单的 `q` 参数回退检索；页面结构和独立阅读页位于 `server/supportPage.ts`，复用文书布局与受限 Markdown 渲染器。网页渲染代码仍集中在 `server/`，两个程序的构建入口和实际依赖分开；目录名称不代表网站运行于联机进程。
 
-本机用 `npm run build:website` 构建，以 `YI_WEB_FILES=/安装程序目录 node dist-website/web.cjs` 预览。安装程序目录可为空，文书仍应可读。构建时禁止网站引入数据库或账号模块；联机包不再嵌入网页和资源。
+本机用 `npm run build:website` 构建，以 `YI_WEB_FILES=/安装程序目录 node dist-website/web.cjs` 预览。安装程序目录可为空，支持与文书仍应可读。构建时禁止网站引入数据库或账号模块；联机包不再嵌入网页和资源。
 
 ## 2 独立发布
 
@@ -24,7 +24,7 @@
 1. `npm run deploy:website -- bootstrap`：安装网站专用单元、root 所有的受限部署工具和 sudo 白名单，尚不切换路由。
 2. `npm run deploy:website -- downloads 3.1.0`：从已发布游戏 Release 获取校验清单与四个安装程序，核对后独立保存到官网目录；不读取 `/opt/yi`。
 3. `npm run deploy:website -- install web-提交号`：只接受已发布的网站 Release；核对内容后切换目录，重启 `yi-web` 并验证完整提交号。首次启动失败则停止网站，已有网站更新失败则恢复旧版。
-4. `npm run deploy:website -- activate`：确认网站健康且当前没有联机对局，再安装本仓库的 `yi.caddy`、校验并平滑重载 Caddy；六个公开页面检查失败时恢复旧配置。不重启 `yi`。首次重载可能使旧代理连接重新建立，应选择无玩家时操作。
+4. `npm run deploy:website -- activate`：确认网站健康且当前没有联机对局，再安装本仓库的 `yi.caddy`、校验并平滑重载 Caddy；七个公开页面检查失败时恢复旧配置。不重启 `yi`。首次重载可能使旧代理连接重新建立，应选择无玩家时操作。
 5. 核对 HTTPS 页面、四个平台下载和校验值、公开健康检查为 404，以及 `wss://yi.lightking.com.cn/ws` 和根路径的 WebSocket 仍可建立。核对游戏健康检查的版本与提交未变。
 
 SSH 使用域名并严格验证已保存的主机密钥，不自动接受新密钥。本机已有服务器密钥以其他名称保存时，可为本次命令设置 `YI_WEB_HOST_KEY_ALIAS` 使用该已验证名称，不修改 SSH 配置或全局信任设置。
