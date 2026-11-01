@@ -2,6 +2,7 @@
  * 匹配与排位的队列、配对与双方确认（整改项 P2-12 自 rooms.ts 拆出）：与同一队列里等得最久的玩家配对，
  * 双方在时限内都接受即开局，有人拒绝、超时或掉线时另一方按原来的排队时刻继续匹配。
  */
+import type { ErrorCode } from '../src/shared/errors';
 import { BLACK, WHITE } from '../src/core/types';
 import { CONFIRM_SECS, queueRules, type GameKind, type Opponent, type QueueMode } from '../src/shared/protocol';
 import { typeKey } from './rating';
@@ -17,7 +18,7 @@ export function tickMatch(ctx: ServerContext, m: Match, now: number) {
       ctx,
       m,
       m.side.filter((_, i) => !m.ok[i]).map(side => side.p),
-      '对方未确认',
+      'match.unconfirmed',
     );
 }
 
@@ -84,12 +85,12 @@ export function oppInfo(p: Player, mode: QueueMode | GameKind, type: number): Op
 }
 
 /** 配对作罢：culprits（拒绝、超时、掉线的）退出匹配，另一方按原来的排队时刻继续匹配 */
-export function dropMatch(ctx: ServerContext, m: Match, culprits: Player[], reason: string) {
+export function dropMatch(ctx: ServerContext, m: Match, culprits: Player[], reason: ErrorCode) {
   if (!ctx.matches.delete(m)) return;
   for (const side of m.side) side.p.match = null;
   for (const side of m.side) {
     if (culprits.includes(side.p)) {
-      ctx.send(side.p, { t: 'unmatched', requeued: false, reason: '' });
+      ctx.send(side.p, { t: 'unmatched', requeued: false });
       continue;
     }
     ctx.send(side.p, { t: 'unmatched', requeued: true, reason });
@@ -104,7 +105,7 @@ export function confirm(ctx: ServerContext, p: Player, ok: boolean) {
   const i = m.side[0].p === p ? 0 : 1;
   const other = m.side[i === 0 ? 1 : 0];
   if (!ok) {
-    dropMatch(ctx, m, [p], '对方未接受');
+    dropMatch(ctx, m, [p], 'match.declined');
     return;
   }
   if (m.ok[i]) return;

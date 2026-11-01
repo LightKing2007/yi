@@ -1,12 +1,15 @@
 /**
- * 联机协议（客户端与服务端共用）。传输：WebSocket，每条消息一个 JSON 对象，t 为类型。
+ * 联机协议（客户端与服务端共用）。传输：WebSocket，每条消息一个 JSON 对象，t 为类型。第 4 版的完整约定见 docs/plan/protocol-v4.md。
  *
  * 三种开局方式：
  *   匹配 / 排位：进入队列，服务端把同一队列里等得最久的弈者与你配对，双方确认后开局；排位的胜负计入段位分
  *   好友：开房间得到四位房号，好友输入房号即开局
  */
+import type { ErrorLevel } from './errors';
 
-export const PROTO_VERSION = 3;
+export const PROTO_VERSION = 4;
+/** 只给更新指引的旧协议版本：收到这一版的 hello 时以它能理解的格式提示更新（protocol-v4.md 第 8 章） */
+export const LEGACY_PROTO_VERSION = 3;
 export const PROTO_PORT = 8443;
 export const NAME_MAX = 16; // 昵称最多几个字素（I18N-030）
 /** 新版本号的格式（welcome.latest）：数字、字母与 `.+-`，最长 32 个字符；服务端按配置原样下发，比较大小由客户端的 newerVersion 负责 */
@@ -121,7 +124,8 @@ export interface Ratings {
 export const newRating = (): Rating => ({ points: START_POINTS, win: 0, loss: 0, draw: 0 });
 
 export type AskKind = 'undo' | 'draw' | 'rematch';
-export type OverReason = 'five' | 'full' | 'score' | 'resign' | 'timeout' | 'disconnect' | 'draw' | 'left';
+/** 终局原因；limit-moves、limit-acts 为达到每局手数或动作记录的上限，按和棋结束，排位不结算（API-046） */
+export type OverReason = 'five' | 'full' | 'score' | 'resign' | 'timeout' | 'disconnect' | 'draw' | 'left' | 'limit-moves' | 'limit-acts';
 
 /** 对局动作（重连时回放）：M 落子 P 停着 U 悔棋 K 标记死子 R 恢复对局 */
 export type Act = { k: 'M'; x: number; y: number } | { k: 'P' } | { k: 'U'; n: number } | { k: 'K'; x: number; y: number } | { k: 'R' };
@@ -164,9 +168,9 @@ export type S2C =
   | { t: 'queued'; mode: QueueMode; type: number; size: number } // 已进入队列
   | { t: 'found'; opp: Opponent; secs: number } // 找到对手，等双方确认
   | { t: 'accepted' } // 对方已接受
-  | { t: 'unmatched'; requeued: boolean; reason: string } // 这次配对作罢；requeued 表示已自动继续匹配
+  | { t: 'unmatched'; requeued: boolean; reason?: string } // 这次配对作罢；requeued 表示已自动继续匹配，reason 为对方的原因（自己拒绝或超时时没有）
   | { t: 'created'; code: string }
-  | { t: 'joinNo'; reason: string }
+  | { t: 'joinNo'; code: string } // 加入房间被拒的原因（错误码）
   | { t: 'start'; kind: GameKind; color: number; type: number; size: number; renju: boolean; moveTime: number; black: Opponent; white: Opponent }
   | { t: 'moved'; x: number; y: number }
   | { t: 'passed' }
@@ -182,8 +186,28 @@ export type S2C =
   | { t: 'peer'; online: boolean; wait?: number } // 对方掉线 / 回来
   | { t: 'left' } // 对方离开房间（终局后）
   | { t: 'sync'; acts: Act[] } // 重连时回放整局
-  | { t: 'info'; text: string }
-  | { t: 'error'; text: string; errorId?: string }; // errorId：服务端内部错误（E5）的错误编号，与服务端日志对照（API-023）
+  | { t: 'notice'; code: string } // 不属于错误的通知（如服务器即将维护），code 为错误码
+  | ErrorMsg;
+
+/** 错误的附加参数：禁着原因、新版本号与下载地址等（取值只能是短字符串或整数） */
+export type ErrorParams = Record<string, string | number>;
+
+/**
+ * 错误（API-020）：只下发错误码与级别，文字由客户端按错误码查译文表；params 为附加参数，retryAfterMs 为建议的等待时长，
+ * errorId 只随 E5 下发，与服务端日志对照（API-023）。线上的错误码以字符串表示：客户端须能处理本端不认识的新错误码（API-024），
+ * 服务端只下发 errors.ts 中定义的错误码（server/errorMsg.ts）
+ */
+export interface ErrorMsg {
+  t: 'error';
+  code: string;
+  level: ErrorLevel;
+  params?: ErrorParams;
+  retryAfterMs?: number;
+  errorId?: string;
+}
+
+/** 只给第 3 版客户端的消息（protocol-v4.md 第 8 章）：它能理解的 welcome 与文本错误，使其显示更新提示 */
+export type LegacyS2C = { t: 'welcome'; id: number; token: string; ratings: Ratings; latest?: string; url?: string } | { t: 'error'; text: string };
 
 /** 昵称中删除的字符：控制符、格式符（含双向控制符、零宽字符）、代理项、私用区、行与段分隔符（API-014） */
 const NAME_STRIP = /[\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Zl}\p{Zp}]/gu;

@@ -16,6 +16,7 @@ import {
   type QueueMode,
   type Rating,
   type Ratings,
+  type LegacyS2C,
   type S2C,
   type queueRules,
 } from '../src/shared/protocol';
@@ -23,13 +24,12 @@ import {
 /** 一条连接：服务端只需要能发消息、能关掉。close 带关闭码（CLOSE_CODE）时按协议关闭，不带时直接切断 */
 export interface Conn {
   send(msg: S2C): void;
+  /** 以第 3 版的格式发送一条消息，只用于提示第 3 版客户端更新（hub.ts 的 outdated）；测试中的连接可以没有 */
+  sendLegacy?(msg: LegacyS2C): void;
   close(code?: number): void;
   /** 连接的真实地址（server/clientIp.ts），用于按 IP 的限制；测试中的连接可以没有 */
   readonly ip?: string;
 }
-
-/** 服务端出现未预期的异常、或数据库写入失败时的提示（v3 以文本下发，附错误编号；协议 v4 起为错误码 server.internal，E5） */
-export const INTERNAL_TEXT = '服务器出现问题，请稍后再试';
 
 /** 对局的一方：设备散列与昵称 */
 export interface GameSide {
@@ -199,7 +199,6 @@ export interface Room {
   deadline: number; // 本手限时截止时刻；0 表示不计时
   paused: number; // 有人掉线时暂停计时，保存本手剩余秒数
   result: { winner: number; reason: OverReason } | null; // 终局结果（掉线期间结束的，重连时补发）
-  limitNote: string | null; // 因达到上限而结束时的说明（重连时随终局结果补发）
   rated: ({ type: number; rating: Rating; delta: number } | null)[]; // 排位结算，按执子颜色
   recordId: number; // 存放处中这一局的对局编号；0 表示没有记录（写入失败）
   turnAt: number; // 这一手开始的时刻（秒），用于每手用时

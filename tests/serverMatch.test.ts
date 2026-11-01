@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { MemoryStore } from '../server/rooms';
-import { type S2C } from '../src/shared/protocol';
+import { CLOSE_CODE, newRating, type LegacyS2C, type S2C } from '../src/shared/protocol';
 import { must } from './must';
 import { expectClientAccepts, newUid, Client, world, startGame, matchUp } from './serverWorld';
 
@@ -46,12 +46,14 @@ describe('匹配', () => {
     bing.send({ t: 'queue', mode: 'match', type: 1, size: 9 });
     expect(bing.expect('found')?.opp.name).toBe('甲');
     bing.send({ t: 'confirm', ok: false });
-    expect(bing.expect('unmatched')).toEqual({ t: 'unmatched', requeued: false, reason: '' });
-    expect(jia.expect('unmatched')).toEqual({ t: 'unmatched', requeued: true, reason: '对方未接受' });
+    expect(bing.expect('unmatched')).toEqual({ t: 'unmatched', requeued: false });
+    expect(jia.expect('unmatched')).toEqual({ t: 'unmatched', requeued: true, reason: 'match.declined' });
     expect(jia.expect('queued')).toBeTruthy();
     const ding = new Client(srv, '丁');
     ding.send({ t: 'queue', mode: 'match', type: 1, size: 9 });
     expect(ding.expect('found')?.opp.name).toBe('甲'); // 甲仍排在最前
+    ding.drop(); // 等确认时掉线：另一方得知对方已离开，继续匹配
+    expect(jia.expect('unmatched')).toEqual({ t: 'unmatched', requeued: true, reason: 'match.left' });
   });
 
   it('确认超时：没接受的退出，接受了的继续匹配', () => {
@@ -63,7 +65,7 @@ describe('匹配', () => {
     yi.send({ t: 'confirm', ok: true });
     idle(16, jia, yi);
     expect(jia.expect('unmatched')?.requeued).toBe(false);
-    expect(yi.expect('unmatched')).toEqual({ t: 'unmatched', requeued: true, reason: '对方未确认' });
+    expect(yi.expect('unmatched')).toEqual({ t: 'unmatched', requeued: true, reason: 'match.unconfirmed' });
     expect(srv.queued('match', 0)).toBe(1);
   });
 });
@@ -99,7 +101,7 @@ describe('离开队列与排位', () => {
     expect(wht.expect('rated')).toEqual({ t: 'rated', type: 0, rating: { points: 1216, win: 1, loss: 0, draw: 0 }, delta: 16 });
     expect(blk.expect('rated')?.rating).toEqual({ points: 1184, win: 0, loss: 1, draw: 0 });
     wht.send({ t: 'rematch' });
-    expect(wht.expect('info')?.text).toBe('排位赛不能再来一局');
+    expect(wht.expect('error')?.code).toBe('game.rematch-ranked');
 
     const again = new Client(srv, '胜者', undefined, wht.uid); // 重新登录读回段位
     expect(again.welcome?.ratings.gomoku.points).toBe(1216);
@@ -151,9 +153,9 @@ describe('好友房间', () => {
     const { code } = must(jia.expect('created'), '开房间的回应');
     expect(code).toMatch(/^\d{4}$/);
     jia.send({ t: 'join', code });
-    expect(jia.expect('joinNo')?.reason).toBe('你已经在一个房间里了');
+    expect(jia.expect('joinNo')?.code).toBe('room.already-in');
     yi.send({ t: 'join', code: '0000' });
-    expect(yi.expect('joinNo')?.reason).toBe('房号不存在，或房间已经开始');
+    expect(yi.expect('joinNo')?.code).toBe('room.not-found');
     jia.send({ t: 'close' });
     yi.send({ t: 'join', code });
     expect(yi.expect('joinNo')).toBeTruthy();
@@ -183,14 +185,6 @@ describe('好友房间', () => {
     expect(sb.white.name).toBe('棋手');
   });
 
-  it('版本不一致被拒', () => {
-    const { srv } = world();
-    const inbox: S2C[] = [];
-    const sess = must(srv.connect({ send: m => inbox.push(expectClientAccepts(m)), close: () => {} }) ?? undefined, '服务端接受的连接');
-    srv.message(sess, { t: 'hello', v: 1, name: 'x', uid: '' });
-    expect(inbox[0]).toEqual({ t: 'error', text: '客户端版本与服务器不一致，请更新游戏' });
-  });
-
   it('等待中的房间很多、随机房号接连撞上时，仍然发出可以加入的四位房号', () => {
     const { srv } = world(); // 假随机数恒为 0.3：每次随机出的房号都相同
     const hosts = Array.from({ length: 3 }, (_, i) => new Client(srv, `房主${i}`));
@@ -203,5 +197,44 @@ describe('好友房间', () => {
     const guest = new Client(srv, '客');
     guest.send({ t: 'join', code: codes[2] ?? '' });
     expect(guest.expect('start')?.white.name).toBe('客');
+  });
+});
+
+describe('协议版本不符（API-004）', () => {
+  it('版本不一致被拒：下发 proto.version-mismatch，附最新版本号与下载地址，以 4000 关闭，不创建玩家（API-004）', () => {
+    const { srv } = world(new MemoryStore(), { latest: '4.0.1', download: 'https://yi.lightking.com.cn/download/' });
+    const inbox: S2C[] = [];
+    const closed: (number | undefined)[] = [];
+    const sess = must(srv.connect({ send: m => inbox.push(expectClientAccepts(m)), close: code => closed.push(code) }) ?? undefined, '服务端接受的连接');
+    srv.message(sess, { t: 'hello', v: 5, name: 'x', uid: '' });
+    expect(inbox).toEqual([
+      { t: 'error', code: 'proto.version-mismatch', level: 'E4', params: { latest: '4.0.1', url: 'https://yi.lightking.com.cn/download/' } },
+    ]);
+    expect(closed).toEqual([CLOSE_CODE.version]);
+    expect(srv.health().players).toBe(0);
+  });
+
+  it('第 3 版客户端：以它能理解的 welcome（带下载地址）与文本错误提示更新，再以 4000 关闭（protocol-v4.md 第 8 章）', () => {
+    const { srv } = world(new MemoryStore(), { latest: '4.0.1', download: 'https://yi.lightking.com.cn/download/' });
+    const inbox: S2C[] = [];
+    const legacy: LegacyS2C[] = [];
+    const closed: (number | undefined)[] = [];
+    const conn = { send: (m: S2C) => inbox.push(m), sendLegacy: (m: LegacyS2C) => legacy.push(m), close: (code?: number) => closed.push(code) };
+    const sess = must(srv.connect(conn) ?? undefined, '服务端接受的连接');
+    srv.message(sess, { t: 'hello', v: 3, name: '旧版', uid: 'legacy-device-0001' });
+    expect(inbox).toEqual([]);
+    expect(legacy).toEqual([
+      {
+        t: 'welcome',
+        id: 1,
+        token: expect.stringMatching(/^[0-9a-f]{32}$/),
+        ratings: { gomoku: newRating(), go: newRating() },
+        latest: '4.0.1',
+        url: 'https://yi.lightking.com.cn/download/',
+      },
+      { t: 'error', text: '客户端版本与服务器不一致，请更新游戏' },
+    ]);
+    expect(closed).toEqual([CLOSE_CODE.version]);
+    expect(srv.health().players).toBe(0);
   });
 });

@@ -14,7 +14,7 @@ import { T } from '../src/i18n';
 import { TABLE } from '../src/i18n/table';
 import * as net from '../src/online/client';
 import { isInvalid, parseS2C } from '../src/shared/parse';
-import type { C2S } from '../src/shared/protocol';
+import { PROTO_VERSION, type C2S } from '../src/shared/protocol';
 import { typedEmail } from '../src/ui/accountNav';
 import { INFO_PAGES } from '../src/ui/info';
 import { startStub, stub } from './account-stub';
@@ -83,7 +83,7 @@ class Opponent {
   /** 连上并握手 */
   async open() {
     await waitFor(() => this.ws.readyState === WebSocket.OPEN, '对手连上服务端');
-    this.send({ t: 'hello', v: 3, name: 'Opponent', uid: 'fit-check-opponent-0001' });
+    this.send({ t: 'hello', v: PROTO_VERSION, name: 'Opponent', uid: 'fit-check-opponent-0001' });
   }
 
   send(m: C2S) {

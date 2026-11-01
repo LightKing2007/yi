@@ -7,7 +7,6 @@
 import { isInvalid, parseC2S } from '../src/shared/parse';
 import type { Log } from './log';
 import type { Metrics } from './metrics';
-import { errorCode } from './metrics';
 import { ConnLimits, IpCounter, JOIN_FAIL_WINDOW_SECS, JOIN_FAILS_PER_IP } from './ratelimit';
 import { CLOSE_CODE, newRating, type C2S, type QueueMode, type S2C } from '../src/shared/protocol';
 import {
@@ -25,10 +24,11 @@ import {
   type Session,
 } from './roomTypes';
 import { typeKey } from './rating';
-import { MAINTENANCE_TEXT, afterGame, inGame } from './play';
+import { afterGame, inGame } from './play';
+import { errorMsg } from './errorMsg';
 import { lobby } from './lobby';
 import { evict, guard, kick, report, scrapMatch, scrapRoom } from './faults';
-import { BUSY_TEXT, PENDING_MAX, confirmToken, goOffline, hello, limited, rejectInvalid, tickPlayer } from './hub';
+import { PENDING_MAX, confirmToken, goOffline, hello, limited, rejectInvalid, tickPlayer } from './hub';
 import { tickMatch, unqueue } from './matchmaking';
 import { byId, colorOf, endAtLimit, freeRoom, newRoom, seatPlayers, tickRoom } from './room';
 
@@ -132,7 +132,7 @@ export class RoomServer {
    */
   connect(conn: Conn): Session | null {
     if (this.pending() >= PENDING_MAX) {
-      conn.send({ t: 'error', text: BUSY_TEXT });
+      conn.send(errorMsg('server.full'));
       return null;
     }
     const now = this.now();
@@ -299,13 +299,13 @@ export class RoomServer {
 
   /**
    * 进入维护模式（OPS-045）：取消排队、待确认的配对与等待对手的好友房间，撤回待回应的再来一局申请；此后拒绝开始新的对局，
-   * 已开始的对局照常进行。受影响的玩家收到 error（客户端回到大厅），其余在线玩家收到 info。已在维护模式时什么也不做，返回 false
+   * 已开始的对局照常进行。受影响的玩家收到 error（客户端回到大厅），其余在线玩家收到 notice。已在维护模式时什么也不做，返回 false
    */
   maintain(): boolean {
     if (this.maintenance) return false;
     this.maintenance = true;
     const cancelled = this.cancelPending();
-    for (const p of this.players) if (p.id) this.send(p, { t: cancelled.has(p) ? 'error' : 'info', text: MAINTENANCE_TEXT });
+    for (const p of this.players) if (p.id) this.send(p, cancelled.has(p) ? errorMsg('server.maintenance') : { t: 'notice', code: 'server.maintenance' });
     const { games, players } = this.health();
     this.log('info', 'server.maintenance', { msg: '进入维护模式', games, players });
     return true;
@@ -349,8 +349,8 @@ export class RoomServer {
   private send(p: Player | null | undefined, msg: S2C) {
     if (!p?.conn) return;
     p.conn.send(msg);
-    if (msg.t === 'error' || msg.t === 'info') this.metrics?.inc('yi_errors_total', { code: errorCode(msg.text) });
-    else if (msg.t === 'joinNo') this.metrics?.inc('yi_errors_total', { code: errorCode(msg.reason) });
+    // 服务端只下发错误码表中的错误码（errorMsg），标签的取值有界（OPS-072）
+    if (msg.t === 'error' || msg.t === 'joinNo') this.metrics?.inc('yi_errors_total', { code: msg.code });
   }
   /** 握手之后的消息：先看是不是不在对局中也能发的，再按房间的状态交给对局中或终局后的处理 */
   private handle(p: Player, m: C2S) {

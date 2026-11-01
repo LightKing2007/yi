@@ -4,12 +4,14 @@
  */
 import { MAXN } from '../core/types';
 import { bool, intIn, isRecord, match, member, oneOf, text, type Check } from './check';
+import type { ErrorLevel } from './errors';
 import {
   ACTS_MAX,
   DOWNLOAD_URL_PATTERN,
   DRAWN,
   PROTO_VERSION,
   UID_PATTERN,
+  type ErrorParams,
   VERSION_PATTERN,
   type Act,
   type AskKind,
@@ -27,6 +29,8 @@ import {
 export interface Invalid {
   invalid: 'version' | 'format';
   why: string;
+  /** 协议版本不符时对方所用的版本（服务端据此决定以哪一版的格式提示更新） */
+  version?: number;
 }
 
 /** 校验结果是否为失败 */
@@ -52,8 +56,13 @@ const TOKEN_PATTERN = /^[0-9a-f]{32}$/;
 /** 错误编号：UUID v4 的小写形式（API-023） */
 const ERROR_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
-/** 服务端下发的提示文字（info、error、joinNo 与 unmatched 的原因）的长度上限（UTF-16 码元数）：现有提示都不超过 30 个字 */
-const TEXT_MAX = 200;
+/** 错误码（04-api.md 第 3.1 条）：两段式 kebab-case，长度有上限 */
+const ERROR_CODE = /^[a-z]{1,24}(-[a-z]{1,24}){0,4}\.[a-z]{1,24}(-[a-z]{1,24}){0,4}$/;
+/** 错误附加参数的个数与字符串取值的长度上限：现有参数只有禁着原因、版本号与下载地址 */
+const PARAMS_MAX = 8;
+const PARAM_TEXT_MAX = 2048;
+/** 建议等待时长的上限（毫秒）：一小时，足够任何限流与维护提示 */
+const RETRY_AFTER_MAX_MS = 3_600_000;
 /**
  * 服务端下发的秒数（配对确认时限、本手剩余时间、掉线后等待）的绝对值上限：协议中的时限都不超过 2 分钟，
  * 留足余量，又不至于让界面算出离谱的截止时刻
@@ -185,7 +194,7 @@ const C2S_SCHEMA: Schema<C2S, 't'> = {
  */
 export function parseC2S(raw: unknown): C2S | Invalid {
   if (isRecord(raw) && raw.t === 'hello' && intIn(1, PROTO_MAX)(raw.v) && raw.v !== PROTO_VERSION) {
-    return { invalid: 'version', why: `协议版本 ${String(raw.v)}` };
+    return { invalid: 'version', why: `协议版本 ${String(raw.v)}`, version: raw.v };
   }
   return parseBy<C2S>(raw, C2S_SCHEMA);
 }
@@ -196,9 +205,30 @@ export function parseC2S(raw: unknown): C2S | Invalid {
 const COLOR = need(oneOf([1, 2]));
 const SECS = need(intIn(0, SECS_MAX));
 const UNDO_PLIES = need(intIn(0, UNDO_PLIES_MAX));
-const TEXT = need(text(TEXT_MAX));
+const CODE = match(ERROR_CODE);
+const LEVELS: Record<ErrorLevel, true> = { E1: true, E2: true, E3: true, E4: true, E5: true };
+/** 错误的附加参数：至多 PARAMS_MAX 项，键为 lowerCamelCase，取值为有界的字符串或安全整数 */
+function isParams(val: unknown): val is ErrorParams {
+  if (!isRecord(val)) return false;
+  const entries = Object.entries(val);
+  return (
+    entries.length <= PARAMS_MAX &&
+    entries.every(([key, item]) => /^[a-z][A-Za-z]{0,31}$/.test(key) && (text(PARAM_TEXT_MAX)(item) || Number.isSafeInteger(item)))
+  );
+}
 const GAME_KINDS: Record<GameKind, true> = { match: true, ranked: true, friend: true };
-const OVER_REASONS: Record<OverReason, true> = { five: true, full: true, score: true, resign: true, timeout: true, disconnect: true, draw: true, left: true };
+const OVER_REASONS: Record<OverReason, true> = {
+  five: true,
+  full: true,
+  score: true,
+  resign: true,
+  timeout: true,
+  disconnect: true,
+  draw: true,
+  left: true,
+  'limit-moves': true,
+  'limit-acts': true,
+};
 const RATING = record({ points: need(count), win: need(count), loss: need(count), draw: need(count) });
 const OPPONENT = record({ name: need(text(NAME_RAW_MAX)), points: opt(count) });
 
@@ -223,9 +253,9 @@ const S2C_SCHEMA: Schema<S2C, 't'> = {
   queued: { mode: need(member(QUEUE_MODES)), type: TYPE, size: SIZE },
   found: { opp: OPPONENT, secs: SECS },
   accepted: {},
-  unmatched: { requeued: OK, reason: TEXT },
+  unmatched: { requeued: OK, reason: opt(CODE) },
   created: { code: need(match(ROOM_CODE)) },
-  joinNo: { reason: TEXT },
+  joinNo: { code: need(CODE) },
   start: {
     kind: need(member(GAME_KINDS)),
     color: COLOR,
@@ -251,8 +281,14 @@ const S2C_SCHEMA: Schema<S2C, 't'> = {
   peer: { online: OK, wait: opt(intIn(0, SECS_MAX)) },
   left: {},
   sync: { acts: list(ACTS_MAX, ACT) },
-  info: { text: TEXT },
-  error: { text: TEXT, errorId: opt(match(ERROR_ID_PATTERN)) },
+  notice: { code: need(CODE) },
+  error: {
+    code: need(CODE),
+    level: need(member(LEVELS)),
+    params: opt(isParams),
+    retryAfterMs: opt(intIn(0, RETRY_AFTER_MAX_MS)),
+    errorId: opt(match(ERROR_ID_PATTERN)),
+  },
 };
 
 /** 校验一条服务端消息（已由 JSON 解析，解析失败时传入 undefined）。不通过时调用方丢弃该消息并写 warn 日志（API-016） */

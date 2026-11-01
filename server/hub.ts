@@ -5,9 +5,9 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { other } from '../src/core/types';
 import type { Invalid } from '../src/shared/parse';
-import { CLOSE_CODE, GRACE_SECS, HELLO_SECS, IDLE_SECS, cleanName, newRating, type C2S } from '../src/shared/protocol';
+import { CLOSE_CODE, GRACE_SECS, HELLO_SECS, IDLE_SECS, LEGACY_PROTO_VERSION, cleanName, newRating, type C2S } from '../src/shared/protocol';
+import { errorMsg } from './errorMsg';
 import { dropMatch, unqueue } from './matchmaking';
-import { MAINTENANCE_TEXT } from './play';
 import { BAN_SECS, type LimitedOp } from './ratelimit';
 import { bothOnline, colorOf, finish, leaveRoom, resync, seat } from './room';
 import { RoomState, type Conn, type Player, type Room, type ServerContext } from './roomTypes';
@@ -23,10 +23,8 @@ export const PENDING_MAX = MAX_PLAYERS;
 const TOKEN_BYTES = 16;
 /** 匿名身份散列保留的十六进制位数（DAT-075） */
 const UID_HASH_CHARS = 32;
-/** 超出频率限制时的提示（v3 以文本下发；协议 v4 起为错误码 rate.limited，E3） */
-const LIMITED_TEXT = '操作过于频繁，请稍后再试';
-/** 玩家数或未握手的连接数达到上限时的提示（错误码 server.full，E2） */
-export const BUSY_TEXT = '服务器繁忙，请稍后再试';
+/** 第 3 版客户端的更新提示（protocol-v4.md 第 8 章）：以它能显示的文本下发 */
+const LEGACY_UPDATE_TEXT = '客户端版本与服务器不一致，请更新游戏';
 /** 令牌的散列（十六进制）：按令牌查找时以它为键（SEC-022） */
 const tokenHash = (token: string) => createHash('sha256').update(token).digest('hex');
 /** 两个十六进制散列是否相同：常量时间比较（SEC-022）；长度不同（含空串）时不同 */
@@ -51,7 +49,7 @@ export function goOffline(ctx: ServerContext, p: Player, conn?: Conn, code?: num
   }
   ctx.log('info', 'player.offline', { msg: `${p.name} 断开`, playerId: p.id, code });
   unqueue(ctx, p);
-  if (p.match) dropMatch(ctx, p.match, [p], '对方已离开');
+  if (p.match) dropMatch(ctx, p.match, [p], 'match.left');
   const r = ctx.rooms.get(p.room);
   if (r && r.state === RoomState.Play) {
     if (r.deadline) {
@@ -92,7 +90,7 @@ export function limited(ctx: ServerContext, p: Player) {
   ctx.metrics?.inc('yi_rate_limited_total');
   const now = ctx.now();
   if (p.limits.notice(now)) {
-    ctx.send(p, { t: 'error', text: LIMITED_TEXT });
+    ctx.send(p, errorMsg('rate.limited'));
     // 随提示每秒至多记一行；count 含本次即将累计的这一次违规
     ctx.log('warn', 'rate.limited', { playerId: p.id || undefined, count: p.limits.violations(now) + 1 });
   }
@@ -117,20 +115,41 @@ export function allow(ctx: ServerContext, p: Player, op: LimitedOp) {
   return false;
 }
 
-/** 非法消息（API-015）：版本不符时提示更新，其余回复格式错误后丢弃；都累计一次违规。每条连接只记第一条的日志，免得被刷屏 */
+/**
+ * 非法消息（API-015）：版本不符时提示更新并以 4000 关闭（API-004）；其余回复格式错误后丢弃并累计一次违规。
+ * 每条连接只记第一条的日志，免得被刷屏
+ */
 export function rejectInvalid(ctx: ServerContext, p: Player, m: Invalid) {
-  if (m.invalid === 'version') ctx.send(p, { t: 'error', text: '客户端版本与服务器不一致，请更新游戏' });
-  else {
-    ctx.send(p, { t: 'error', text: '消息格式错误' });
-    if (p.invalid++ === 0) ctx.log('warn', 'proto.invalid', { msg: '非法消息', playerId: p.id || undefined, reason: m.why });
+  if (m.invalid === 'version') {
+    outdated(ctx, p, m.version);
+    return;
   }
+  ctx.send(p, errorMsg('proto.invalid-message'));
+  if (p.invalid++ === 0) ctx.log('warn', 'proto.invalid', { msg: '非法消息', playerId: p.id || undefined, reason: m.why });
   violate(ctx, p);
+}
+
+/**
+ * 协议版本不符（API-004）：第 3 版客户端收到它能理解的 welcome（带最新版本号与下载地址，使其显示下载提示）与文本错误
+ * （protocol-v4.md 第 8 章），不创建玩家；其他版本收到 proto.version-mismatch，附最新版本号与下载地址。都以 4000 关闭；
+ * 版本不符不是对方的过错，不累计违规
+ */
+export function outdated(ctx: ServerContext, p: Player, version: number | undefined) {
+  const conn = p.conn;
+  if (!conn) return;
+  const { latest, url } = ctx.latest;
+  if (version === LEGACY_PROTO_VERSION) {
+    conn.sendLegacy?.({ t: 'welcome', id: 1, token: hex(TOKEN_BYTES), ratings: { gomoku: newRating(), go: newRating() }, ...ctx.latest });
+    conn.sendLegacy?.({ t: 'error', text: LEGACY_UPDATE_TEXT });
+  } else ctx.send(p, errorMsg('proto.version-mismatch', latest && url ? { params: { latest, url } } : {}));
+  ctx.log('info', 'proto.outdated', { msg: `协议版本 ${String(version)} 的客户端，已提示更新`, version });
+  drop(ctx, p, CLOSE_CODE.version);
 }
 
 /** 握手（hello）：校验匿名身份是否被暂时拒绝；带有效令牌时回到原来的会话，否则在玩家数上限内作为新玩家上线 */
 export function hello(ctx: ServerContext, p: Player, m: C2S): Player {
   if (m.t !== 'hello') {
-    ctx.send(p, { t: 'error', text: '协议错误' });
+    ctx.send(p, errorMsg('proto.not-hello'));
     violate(ctx, p);
     return p;
   }
@@ -141,7 +160,7 @@ export function hello(ctx: ServerContext, p: Player, m: C2S): Player {
     .slice(0, UID_HASH_CHARS);
   if ((ctx.banned.get(key) ?? 0) > ctx.now()) {
     // 刚因累计违规被断开（API-045）
-    ctx.send(p, { t: 'error', text: LIMITED_TEXT });
+    ctx.send(p, errorMsg('rate.limited'));
     drop(ctx, p, CLOSE_CODE.policy);
     return p;
   }
@@ -150,7 +169,7 @@ export function hello(ctx: ServerContext, p: Player, m: C2S): Player {
   if (found) return resume(ctx, p, found.player, found.hash); // p 还没握手，不会是 found.player
   if (ctx.players.size - ctx.pending() >= MAX_PLAYERS) {
     // 满员（API-046）：只拒绝新来的玩家；带令牌重连的已在上一行回到原来的会话，不占新的名额
-    ctx.send(p, { t: 'error', text: BUSY_TEXT });
+    ctx.send(p, errorMsg('server.full'));
     drop(ctx, p, CLOSE_CODE.overload);
     return p;
   }
@@ -163,7 +182,7 @@ export function hello(ctx: ServerContext, p: Player, m: C2S): Player {
   p.ratings = { gomoku: { ...newRating(), ...saved?.gomoku }, go: { ...newRating(), ...saved?.go } };
   ctx.send(p, { t: 'welcome', id: p.id, token, ratings: p.ratings, ...ctx.latest });
   if (m.token !== undefined) ctx.send(p, { t: 'resumeFailed' }); // 原来的对局已经不在了（服务器重启过，或掉线太久）
-  if (ctx.maintenance) ctx.send(p, { t: 'info', text: MAINTENANCE_TEXT });
+  if (ctx.maintenance) ctx.send(p, { t: 'notice', code: 'server.maintenance' });
   ctx.log('info', 'player.online', { msg: `${p.name} 上线`, playerId: p.id });
   return p;
 }

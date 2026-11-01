@@ -350,50 +350,11 @@ D2、D4、D13、雅号允许重名与存储方向已决定；邮件服务与认�
 
 ## 8 阶段 7：联机协议 v4（与阶段 6 同时发布）
 
-以下为草案。`seq`、快照、散列与认证失败的确切语义须按 [next-development.md](next-development.md) 第 4 章细化后才可实施；不得把未定稿字段当作已接受的协议契约。
+8.1 协议第 4 版的逐消息契约见 [protocol-v4.md](protocol-v4.md)，2026-11-01 经项目所有者确认，取代本节原有的草案（局面散列、单消息快照、`app` 字段及 `outdated`、`kicked`、`restricted` 等消息未被采纳，以契约为准）。要点：握手改用账号的登录令牌，段位与对局归属账号；同一账号只保留一条联机连接；错误与提示一律下发错误码；对局状态带局编号与状态版本，请求带序号，发现不同步即完整同步；第 3 版客户端只收到更新指引。
 
-### 8.1 变更一览（`src/shared/protocol.ts`，`PROTO_VERSION = 4`）
+8.2 按契约第 11 章分四批实施，每批一个 PR：F1 错误码、终局原因、`PROTO_VERSION = 4` 与第 3 版客户端的更新指引；F2 账号握手、一个账号一条连接、段位按账号；F3 状态版本与重同步；F4 打开客户端的账号入口与发布准备。
 
-**客户端 → 服务端**
-
-| 消息 | 变化 |
-|---|---|
-| `hello` | `{ v: 4, app, name, uid, auth?: string, resume?: string }`：`app` 是客户端版本号；`auth` 是登录令牌；`resume` 是断线重连令牌（原来的 `token` 改名；与 v3 相同，每次重连成功都换发新的一枚，SEC-020） |
-| `move` | 增加 `seq`：客户端认为这是第几手（从 1 开始）。不一致就拒绝，防止重复提交和乱序 |
-| `pass`、`undo`、`draw`、`resign`、`mark`、`agree`、`resume` | 同样带 `seq` |
-| `resync` | 新：客户端发现局面散列不一致时请求完整同步 |
-| `name` | 会员不能用它改名（改名走 HTTP） |
-
-**服务端 → 客户端**
-
-| 消息 | 变化 |
-|---|---|
-| `welcome` | `{ id, resume, user: { id, name, member, status }, ratings, latest?, url? }` |
-| `resumeFailed` | 2.0.1 已加入，v4 保留：重连令牌无效，客户端退出对局并提示 |
-| `start` | 增加 `gameId`，`black/white` 改为 `{ id, name, member, points?, provisional? }` |
-| `moved`、`passed`、`undone`、`marked`、`resumed` | 增加 `seq`（这之后的手数）和 `hash`（Zobrist 局面散列的 16 位十六进制） |
-| `sync` | 改为 `{ record: GameRecord, seq, hash, dead, agreed, ask?, turn, over?, rated? }`，一条消息恢复整局（包括已结束的对局，A4） |
-| `over` | 增加 `gameId` |
-| `rated` | 增加 `provisional`（是否仍在定级期）、`games` |
-| `error`、`info`、`joinNo`、`unmatched` | 文字改为 `code` 加可选参数，如 `{ t: 'error', code: 'ranked-login-required' }`，客户端翻译。服务端内部错误（E5）的 `error` 保留 v3 已有的 `errorId`（P2-15 加入，API-023） |
-| `outdated` | 新：客户端版本过旧，带 `{ min, latest, url }`，客户端显示“请更新到 x.y.z”并给出下载链接 |
-| `kicked` | 新：`{ reason: 'elsewhere' \| 'banned' \| 'server' }` |
-| `restricted` | 新：`{ what: 'ranked', until }`，告诉客户端暂时不能排位及原因 |
-| `maintenance` | 新：`{ at }`，服务器即将维护 |
-
-### 8.2 一致性校验
-
-- 服务端每次确认一手，下发 `seq` 和 `hash`。客户端用本地的 `Match` 照做后计算散列；**不一致就发 `resync`**，收到 `sync` 后用 `Match.fromRecord()` 静默重建。
-- 客户端落子前本地先用 `Rules.apply` 预检，不合法的直接提示，不发给服务端（服务端照样校验）；发出落子后到收到确认前不再接受第二次点击。
-
-### 8.3 兼容与发布
-
-- 服务端只接受 v4。v3 客户端连上来时回一条 v3 格式的 `error`（“客户端版本与服务器不一致，请更新游戏”）；2.0.1 以后的客户端还会因 `welcome.latest` 提前看到“有新版本”的提示。
-- 发布目标为 4.0，阶段 6、7 验收后发布配套客户端与服务端（2026-10-31 决定阶段 8 移至 4.0 之后）。下载产物可用后再下发更新提示；停服、协议切换、数据库迁移及回滚顺序须在发布前验证，不向玩家推荐尚不可下载的版本。
-
-### 8.4 测试
-
-服务端拆分后的 `tests/server*.test.ts` 及客户端联机测试按 v4 更新；新增：`seq` 乱序与重复提交被拒；人为制造散列不一致后 `resync` 能恢复；带登录令牌的 `hello`；同一账号两处登录；过旧客户端收到 `outdated`。
+8.3 发布目标为 4.0，阶段 6、7 验收后发布配套客户端与服务端（2026-10-31 决定阶段 8 移至 4.0 之后）。4.0 为强制更新，按 VER-010 在发布说明中写明；下载产物可用后再下发更新提示，停服、协议切换、数据库迁移及回滚顺序须在发布前验证。
 
 ## 9 阶段 8：反作弊与管理工具（待实施）
 

@@ -12,7 +12,7 @@ import { CLOSE_CODE, HELLO_SECS, PROTO_VERSION, type S2C } from '../src/shared/p
 import { must } from './must';
 import { expectClientAccepts, newUid, Client, world, startGame } from './serverWorld';
 
-const LIMITED = { t: 'error', text: '操作过于频繁，请稍后再试' };
+const LIMITED = { t: 'error', code: 'rate.limited', level: 'E3' };
 /** 绕过类型检查，发一条任意内容的消息 */
 const raw = (client: Client, m: unknown) => {
   client.sess = client.srv.message(client.sess, m, client.conn);
@@ -151,7 +151,7 @@ describe('全局上限（API-046）', () => {
     for (let i = 0; i < 2048; i++) new Client(srv, '丙');
     const late = new Client(srv, '丁');
     expect(late.welcome).toBeUndefined();
-    expect(late.inbox).toEqual([{ t: 'error', text: '服务器繁忙，请稍后再试' }]);
+    expect(late.inbox).toEqual([{ t: 'error', code: 'server.full', level: 'E2' }]);
     expect(late.closeCode).toBe(CLOSE_CODE.overload);
     expect(srv.health().players).toBe(2048);
   });
@@ -170,7 +170,7 @@ describe('全局上限（API-046）', () => {
     for (let i = 0; i < PENDING_MAX; i++) expect(srv.connect({ send: () => {}, close: () => {} })).not.toBeNull();
     const inbox: S2C[] = [];
     expect(srv.connect({ send: m => inbox.push(expectClientAccepts(m)), close: () => {} })).toBeNull();
-    expect(inbox).toEqual([{ t: 'error', text: '服务器繁忙，请稍后再试' }]);
+    expect(inbox).toEqual([{ t: 'error', code: 'server.full', level: 'E2' }]);
   });
 });
 

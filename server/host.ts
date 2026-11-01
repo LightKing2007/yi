@@ -124,6 +124,9 @@ function accept(ws: WebSocket, ip: string, server: RoomServer, { limits, timed }
     send: msg => {
       if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
     },
+    sendLegacy: msg => {
+      if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
+    },
     close: code => {
       if (code) ws.close(code);
       else ws.terminate();

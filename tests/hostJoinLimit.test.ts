@@ -11,7 +11,7 @@ describe('按 IP 的加入失败次数（API-044，原问题 A6）', () => {
     /** 以 ip 经“代理”连上并握手，发 n 次错误的房号，返回最后一次的回应 */
     const tryJoin = async (ip: string, n: number) => {
       const ws = new WebSocket(`ws://127.0.0.1:${host.port}`, { headers: { 'x-forwarded-for': ip } });
-      const replies: { t: string; reason?: string }[] = [];
+      const replies: { t: string; code?: string }[] = [];
       let wake = () => {};
       ws.on('message', data => {
         replies.push(JSON.parse(String(data)));
@@ -33,11 +33,11 @@ describe('按 IP 的加入失败次数（API-044，原问题 A6）', () => {
         last = await next('joinNo');
       }
       ws.close();
-      return last?.reason;
+      return last?.code;
     };
-    for (let n = 0; n < 5; n++) expect(await tryJoin('203.0.113.7', 4)).toBe('房号不存在，或房间已经开始');
-    expect(await tryJoin('203.0.113.7', 1)).toBe('尝试次数太多，请稍后再试');
-    expect(await tryJoin('198.51.100.1', 1)).toBe('房号不存在，或房间已经开始');
+    for (let n = 0; n < 5; n++) expect(await tryJoin('203.0.113.7', 4)).toBe('room.not-found');
+    expect(await tryJoin('203.0.113.7', 1)).toBe('room.join-throttled');
+    expect(await tryJoin('198.51.100.1', 1)).toBe('room.not-found');
     expect(host.gauges().joinFailIps).toBe(2); // 监控指标 yi_join_fail_ips
     await host.close();
   });

@@ -108,10 +108,10 @@ describe('联机客户端', () => {
     net.connect();
     pump();
     const notice = net.st.notice;
-    inject({ t: 'info', text: '字'.repeat(10000) });
+    inject({ t: 'notice', code: '字'.repeat(10000) });
     expect(warns()).toEqual([
       '联机: 丢弃服务端的非法消息：未知的消息类型 "shout"',
-      '联机: 丢弃服务端的非法消息：info.text 不合法："' + '字'.repeat(39), // 日志中的取值截到 40 个字符
+      '联机: 丢弃服务端的非法消息：notice.code 不合法："' + '字'.repeat(39), // 日志中的取值截到 40 个字符
     ]);
     expect(net.st.notice).toBe(notice); // 超长的提示没有显示
   });
@@ -142,6 +142,47 @@ describe('联机客户端', () => {
     expect(net.netTick.value).toBe(before + 1);
     net.update(fake.now + 1.5);
     expect(net.netTick.value).toBe(before + 2);
+  });
+
+  it('错误码按当前语言显示：落子被拒按禁着原因，不认识的错误码按服务器出现问题；对局中的请求被拒时撤回待回应的申请', () => {
+    const peer = startGame(0);
+    net.st.askOut = 'undo';
+    inject({ t: 'error', code: 'game.illegal-move', level: 'E1', params: { reject: 'ko' } });
+    expect(net.st.notice).toEqual([['打劫时不能马上提回，请先在别处下一手']]);
+    expect(net.st.askOut).toBeNull();
+    inject({ t: 'error', code: 'game.illegal-move', level: 'E1', params: { reject: 'toString' } });
+    expect(net.st.notice).toEqual([['这里不能落子']]);
+    inject({ t: 'error', code: 'future.unknown-code', level: 'E2' });
+    expect(net.st.notice).toEqual([['服务器出现问题，请稍后再试']]);
+    inject({ t: 'notice', code: 'server.maintenance' });
+    expect(net.st.notice).toEqual([['服务器即将维护，暂不开始新的对局']]);
+    expect(net.st.phase).toBe(net.Phase.Playing);
+    advance(1, peer);
+  });
+
+  it('匹配中被拒回到大厅；配对作罢时按错误码说明对方的原因，自己拒绝时没有原因', () => {
+    net.queue('match', 0, 15);
+    pump();
+    inject({ t: 'error', code: 'server.maintenance', level: 'E2' });
+    expect(net.st.phase).toBe(net.Phase.Lobby);
+    inject({ t: 'unmatched', requeued: true, reason: 'match.declined' });
+    expect(net.st.notice).toEqual([['对方未接受'], ['继续为你寻找']]);
+    inject({ t: 'unmatched', requeued: true });
+    expect(net.st.notice).toEqual([['继续为你寻找']]);
+    inject({ t: 'joinNo', code: 'room.own' });
+    expect(net.st.notice).toEqual([['这是你自己的房间']]);
+  });
+
+  it('协议版本不符：提示更新，并按附带的版本号与下载地址显示下载提示；不合格式的地址不采用', () => {
+    net.connect();
+    pump();
+    inject({ t: 'error', code: 'proto.version-mismatch', level: 'E4', params: { latest: '99.0.0', url: 'javascript:alert(1)' } });
+    expect(net.st.update).toBeNull();
+    inject({ t: 'error', code: 'proto.version-mismatch', level: 'E4', params: { latest: '99.0.0 <b>', url: 'https://example.com/yi' } });
+    expect(net.st.update).toBeNull();
+    inject({ t: 'error', code: 'proto.version-mismatch', level: 'E4', params: { latest: '99.0.0', url: 'https://example.com/yi' } });
+    expect(net.st.notice).toEqual([['客户端版本与服务器不一致，请更新游戏']]);
+    expect(net.st.update).toEqual({ version: '99.0.0', url: 'https://example.com/yi' });
   });
 
   it('服务端告知新版本：比本机新才提示，并记在本地', () => {

@@ -79,10 +79,10 @@ describe('2.0.1 联机修复：加入房间的失败次数', () => {
     const wrong = code === '1234' ? '4321' : '1234';
     for (let i = 0; i < 5; i++) {
       yi.send({ t: 'join', code: wrong });
-      expect(yi.expect('joinNo')?.reason).toBe('房号不存在，或房间已经开始');
+      expect(yi.expect('joinNo')?.code).toBe('room.not-found');
     }
     yi.send({ t: 'join', code });
-    expect(yi.expect('joinNo')?.reason).toBe('尝试次数太多，请稍后再试');
+    expect(yi.expect('joinNo')?.code).toBe('room.join-throttled');
     jia.send({ t: 'ping' });
     yi.send({ t: 'ping' });
     advance(30);
@@ -105,15 +105,15 @@ describe('2.0.1 联机修复：加入房间的失败次数', () => {
       const tryer = clientAt(srv, `试${n}`, IP);
       for (let i = 0; i < 4; i++) {
         tryer.send({ t: 'join', code: wrong });
-        expect(tryer.expect('joinNo')?.reason).toBe('房号不存在，或房间已经开始');
+        expect(tryer.expect('joinNo')?.code).toBe('room.not-found');
       }
     }
     const again = clientAt(srv, '又来', IP);
     again.send({ t: 'join', code });
-    expect(again.expect('joinNo')?.reason).toBe('尝试次数太多，请稍后再试');
+    expect(again.expect('joinNo')?.code).toBe('room.join-throttled');
     const other = clientAt(srv, '别处', '198.51.100.1');
     other.send({ t: 'join', code: wrong });
-    expect(other.expect('joinNo')?.reason).toBe('房号不存在，或房间已经开始');
+    expect(other.expect('joinNo')?.code).toBe('room.not-found');
     expect(srv.joinFailIpCount()).toBe(2);
     idle(61, host, again, other);
     expect(srv.joinFailIpCount()).toBe(0); // 滑出窗口的 IP 已清理，不一直占着内存
@@ -129,7 +129,7 @@ describe('2.0.1 联机修复：同一台设备、新版本提示', () => {
       jia2 = new Client(srv, '甲', undefined, jia.uid);
     jia.send({ t: 'queue', mode: 'ranked', type: 0, size: 15 });
     jia2.send({ t: 'queue', mode: 'ranked', type: 0, size: 15 });
-    expect(jia2.expect('error')?.text).toBe('这台设备已经在排位中了');
+    expect(jia2.expect('error')?.code).toBe('queue.ranked-elsewhere');
     jia2.send({ t: 'queue', mode: 'match', type: 0, size: 15 });
     expect(jia2.expect('queued')?.mode).toBe('match');
   });

@@ -2,8 +2,8 @@
  * 对局中的请求（整改项 P2-12 自 rooms.ts 拆出）：落子、停一手、悔棋与求和的申请、认输、点目时标记死子与确认结果、
  * 点目有分歧时回到对局，以及终局后的再来一局。每一手都以 src/core/game.ts 的规则校验。
  */
+import { errorMsg } from './errorMsg';
 import { BLACK, GameType, WHITE, other } from '../src/core/types';
-import { rejectText } from '../src/shared/reject';
 import { ASK_SECS, DRAWN, DRAW_LIMIT, UNDO_LIMIT, type AskKind, type C2S } from '../src/shared/protocol';
 import { stampMove } from './record';
 import { addAct, broadcast, finish, resolveAsk, seat, startTurn } from './room';
@@ -17,7 +17,6 @@ export interface Actor {
 }
 
 /** 维护模式中拒绝开始新的对局时的提示，也是进入维护模式时下发给在线玩家的通知（OPS-045，错误码 server.maintenance） */
-export const MAINTENANCE_TEXT = '服务器即将维护，暂不开始新的对局';
 
 /** 终局后：只接受再来一局的申请与回应 */
 export function afterGame(ctx: ServerContext, { r, p, me }: Actor, m: C2S) {
@@ -27,13 +26,13 @@ export function afterGame(ctx: ServerContext, { r, p, me }: Actor, m: C2S) {
   }
   if (m.t !== 'rematch') return;
   if (ctx.maintenance) {
-    ctx.send(p, { t: 'info', text: MAINTENANCE_TEXT });
+    ctx.send(p, errorMsg('server.maintenance'));
     return;
   }
   const opp = seat(ctx, r, other(me));
-  if (r.kind === 'ranked') ctx.send(p, { t: 'info', text: '排位赛不能再来一局' });
+  if (r.kind === 'ranked') ctx.send(p, errorMsg('game.rematch-ranked'));
   else if (!r.ask && opp?.conn) ask(ctx, r, me, 'rematch');
-  else ctx.send(p, { t: 'info', text: r.ask ? '请先等对方回应' : '对方已离开，无法再来一局' });
+  else ctx.send(p, errorMsg(r.ask ? 'game.awaiting-reply' : 'game.rematch-opponent-left'));
 }
 
 /** 对局中（含点目）的操作 */
@@ -82,15 +81,15 @@ export function ask(ctx: ServerContext, r: Room, me: number, kind: AskKind) {
 export function playMove(ctx: ServerContext, { r, p, me }: Actor, x: number, y: number) {
   const g = r.g;
   if (g.scoring || g.cur.toMove !== me) {
-    ctx.send(p, { t: 'info', text: '还没轮到你' });
+    ctx.send(p, errorMsg('game.not-your-turn'));
     return;
   }
   if (r.ask) {
-    ctx.send(p, { t: 'info', text: '请先等对方回应申请' });
+    ctx.send(p, errorMsg('game.awaiting-reply'));
     return;
   }
   if (!g.play(x, y)) {
-    ctx.send(p, { t: 'info', text: rejectText(g.lastReject ?? 'occupied') });
+    ctx.send(p, errorMsg('game.illegal-move', { params: { reject: g.lastReject ?? 'occupied' } }));
     return;
   } // 含落在本局棋盘之外
   stampMove(ctx, r);
@@ -116,15 +115,15 @@ export function passTurn(ctx: ServerContext, r: Room, me: number) {
 export function askUndo(ctx: ServerContext, r: Room, p: Player, me: number) {
   const g = r.g;
   if (r.ask || g.scoring) {
-    ctx.send(p, { t: 'info', text: '现在不能申请悔棋' });
+    ctx.send(p, errorMsg('game.undo-not-allowed'));
     return;
   }
   if ((r.undoUsed[me] ?? 0) >= UNDO_LIMIT) {
-    ctx.send(p, { t: 'info', text: '本局悔棋次数已用完' });
+    ctx.send(p, errorMsg('game.undo-exhausted'));
     return;
   }
   if (g.hist.length < (g.cur.toMove === me ? 2 : 1)) {
-    ctx.send(p, { t: 'info', text: '你还没有可以悔的棋' });
+    ctx.send(p, errorMsg('game.undo-nothing'));
     return;
   } // 轮到自己时要连对方那一手一起退
   r.undoUsed[me] = (r.undoUsed[me] ?? 0) + 1;
@@ -134,11 +133,11 @@ export function askUndo(ctx: ServerContext, r: Room, p: Player, me: number) {
 /** 申请和棋：每局每方至多 DRAW_LIMIT 次 */
 export function askDraw(ctx: ServerContext, r: Room, p: Player, me: number) {
   if (r.ask) {
-    ctx.send(p, { t: 'info', text: '请先等对方回应申请' });
+    ctx.send(p, errorMsg('game.awaiting-reply'));
     return;
   }
   if ((r.drawUsed[me] ?? 0) >= DRAW_LIMIT) {
-    ctx.send(p, { t: 'info', text: '本局求和次数已用完' });
+    ctx.send(p, errorMsg('game.draw-exhausted'));
     return;
   }
   r.drawUsed[me] = (r.drawUsed[me] ?? 0) + 1;

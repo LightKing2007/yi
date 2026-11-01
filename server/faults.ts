@@ -9,7 +9,8 @@ import { drop, forget } from './hub';
 import type { LogEntry } from './log';
 import { freeRoom, seat } from './room';
 import { recordAbort } from './record';
-import { INTERNAL_TEXT, type Match, type Player, type Room, type ServerContext } from './roomTypes';
+import { errorMsg } from './errorMsg';
+import { type Match, type Player, type Room, type ServerContext } from './roomTypes';
 
 /** 记录一次未预期的异常：完整调用栈与新的错误编号（UUID v4）写入 internal.error 日志；返回错误编号，供下发给客户端对照 */
 export function report(ctx: ServerContext, err: unknown, entry: LogEntry): string {
@@ -30,7 +31,7 @@ export function guard(ctx: ServerContext, work: () => void, fault: LogEntry, cle
 /** 以服务端内部错误（E5）断开一位玩家：先下发提示与错误编号（不含异常的内容），再按断线处理并以 1011 关闭 */
 export function kick(ctx: ServerContext, p: Player, errorId: string) {
   try {
-    ctx.send(p, { t: 'error', text: INTERNAL_TEXT, errorId });
+    ctx.send(p, errorMsg('server.internal', { errorId }));
   } catch {
     // 发送本身抛出说明连接已经出错：异常已记录，不再告知，照常断开
   }
