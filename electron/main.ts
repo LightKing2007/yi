@@ -2,10 +2,11 @@
  * 弈 · 桌面版主进程：窗口与少量系统功能（退出、匹配成功时提醒、错误日志）。只允许运行一个实例。
  * 页面由自定义协议 app://yi/ 提供（模块脚本、Worker、本地存储都按普通网站的规则工作）。
  */
-import { app, BrowserWindow, ipcMain, Menu, net, protocol, screen, shell, type IpcMainEvent } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, net, protocol, safeStorage, screen, shell, type IpcMainEvent } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { CredentialStore, encryptionUsable } from './credentials';
 import { devOrigin, isAppUrl, MIN_HEIGHT_PX, MIN_WIDTH_PX, pageLog, parseBounds, type Bounds } from './guard';
 
 const DIST = path.join(__dirname, '..', 'dist');
@@ -131,7 +132,39 @@ function createWindow() {
 // ---------------- 启动 ----------------
 
 /** 只处理游戏页面自己发来的 IPC 消息（A-10，Electron 安全清单第 17 条）：发送方的框架须是 app://yi/ 或开发服务器 */
-const fromApp = (event: IpcMainEvent) => isAppUrl(event.senderFrame?.url, DEV_ORIGIN);
+const fromApp = (event: Pick<IpcMainEvent, 'senderFrame'>) => isAppUrl(event.senderFrame?.url, DEV_ORIGIN);
+
+// ---------------- 登录状态 ----------------
+
+/** 加密保存的登录：userData/account.bin，只有本机当前系统用户能解密（阶段 6、7 设计第 5.4 条） */
+const accountFile = () => path.join(app.getPath('userData'), 'account.bin');
+const credentials = new CredentialStore(
+  {
+    available: () =>
+      encryptionUsable(
+        safeStorage.isEncryptionAvailable(),
+        process.platform,
+        process.platform === 'linux' ? safeStorage.getSelectedStorageBackend() : undefined,
+      ),
+    encrypt: text => safeStorage.encryptString(text),
+    decrypt: data => safeStorage.decryptString(data),
+  },
+  {
+    read: () => (fs.existsSync(accountFile()) ? fs.readFileSync(accountFile()) : undefined),
+    write: data => {
+      const temp = `${accountFile()}.tmp`;
+      fs.writeFileSync(temp, data, { mode: 0o600 });
+      fs.renameSync(temp, accountFile()); // 先写临时文件再改名，写到一半退出时不留下损坏的记录
+    },
+    remove: () => fs.rmSync(accountFile(), { force: true }),
+  },
+  Date.now,
+);
+ipcMain.handle('account:load', event => (fromApp(event) ? credentials.load() : undefined));
+ipcMain.handle('account:save', (event, token: unknown, expiresAt: unknown) => fromApp(event) && credentials.save(token, expiresAt));
+ipcMain.handle('account:clear', event => {
+  if (fromApp(event)) credentials.clear();
+});
 
 ipcMain.on('app:quit', event => {
   if (fromApp(event)) app.quit();
