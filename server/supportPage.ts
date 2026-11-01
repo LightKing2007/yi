@@ -53,6 +53,7 @@ const STYLE = `
 .support-search input::placeholder { color: var(--faint); }
 .support-search input:focus { outline: none; }
 .support-catalog { max-width: var(--max); margin: 0 auto; }
+.support-catalog .document-link[hidden] { display: none; }
 @media (min-width: 721px) {
   .support-catalog .document-description { width: calc(100% - 32px); transition: width 0.55s var(--ease); }
   .support-catalog .document-link:hover .document-description { width: 100%; }

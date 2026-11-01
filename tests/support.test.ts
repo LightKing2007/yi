@@ -21,6 +21,7 @@ it('目录复用文书布局，六类三十四个问题分别链接到独立页�
   expect(html).not.toContain('class="support-route"');
   expect(html).not.toContain('class="agreement-ornaments"');
   expect(html).not.toContain('class="burst"');
+  expect(html).toContain('.support-catalog .document-link[hidden] { display: none; }');
   expect(html).toContain('<form class="support-search" action="/support" method="get" role="search">');
   expect(html).toContain('type="search" name="q"');
   expect(html).not.toContain('support-search-submit');

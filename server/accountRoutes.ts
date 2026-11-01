@@ -257,8 +257,8 @@ const required: Handler = {
     body: {
       privacy: deps.required.privacy,
       terms: deps.required.terms,
-      privacyUrl: `${SITE_ORIGIN}/privacy-policy`,
-      termsUrl: `${SITE_ORIGIN}/terms-of-service`,
+      privacyUrl: `${SITE_ORIGIN}/agreement/privacy-policy`,
+      termsUrl: `${SITE_ORIGIN}/agreement/terms-of-service`,
     },
   }),
 };
