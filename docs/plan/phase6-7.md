@@ -102,6 +102,8 @@
 
 5.4 桌面令牌只经受校验 IPC 保存到主进程的 `safeStorage` 加密文件；加密不可用或文件损坏时回到未登录状态，不写明文。浏览器调试仅内存会话。CSP 与 CORS 精确允许生产 HTTPS 来源及桌面 `app://yi/`，本机调试单独配置，不开放通配来源。
 
+桌面端的保存已实现（`electron/credentials.ts`）：令牌与绝对期限经 `safeStorage` 加密写入 `userData/account.bin`，先写临时文件再改名；Linux 上只有明文后端 `basic_text` 时视为不可用；文件过期、解不开或格式不符即删除。页面经 `yiNative.loadLogin`、`saveLogin`、`clearLogin` 读写，主进程只接受游戏页面的请求并逐项校验。
+
 ## 6 公开 UID 与雅号
 
 6.1 显示名称称“雅号”，允许重名；公开 UID 是唯一且不可更改的账号标识，查找与举报使用 UID，展示时配合雅号。称呼、重名规则与 UID 格式均已由项目所有者确认。

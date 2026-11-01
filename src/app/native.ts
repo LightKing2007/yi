@@ -5,6 +5,12 @@ export interface YiNative {
   attention(): void;
   log(level: string, text: string): void;
   openLogs(): void;
+  /** 读取加密保存的登录；没有、已过期或解不开时为 undefined */
+  loadLogin(): Promise<{ token: string; expiresAt: string } | undefined>;
+  /** 加密保存一次登录；加密不可用时为 false，页面只在内存中保持登录 */
+  saveLogin(token: string, expiresAt: string): Promise<boolean>;
+  /** 删除保存的登录 */
+  clearLogin(): Promise<void>;
 }
 
 export const native = (): YiNative | undefined => (window as any).yiNative;
