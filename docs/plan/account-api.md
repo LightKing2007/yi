@@ -59,7 +59,7 @@
 
 2.4.3 预检请求只允许第 3 章所列的方法与 `Authorization`、`Content-Type` 两个请求头，`Access-Control-Max-Age` 为 600 秒；不设置 `Access-Control-Allow-Credentials`，因为本接口不使用 Cookie。
 
-2.4.4 桌面页面的 CSP 需在 `connect-src` 中增加 `https://yi.lightking.com.cn`，随批次 E 修改 `index.html`；不放宽为通配来源。
+2.4.4 桌面页面的 CSP 在 `connect-src` 中增加 `https://yi.lightking.com.cn`（已随客户端模块 `src/online/accountApi.ts` 修改 `index.html`；开发模式另加本机的 http 地址）；不放宽为通配来源。
 
 ### 2.5 来源标识与限流
 
