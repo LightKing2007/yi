@@ -1,10 +1,11 @@
 /**
- * 验证码邮件的组装（RFC 5322、RFC 2045、RFC 2047、RFC 2387）：主题、HTML 正文与内嵌的“弈”字图组成 multipart/related，
- * 只发 HTML、只用一种语言（项目所有者 2026-11-01 的决定；文案见 codeMailText.ts，版式见 codeMailHtml.ts）。
+ * 验证码邮件的组装（RFC 5322、RFC 2045、RFC 2046、RFC 2047、RFC 2387）：纯文本与 HTML 组成 multipart/alternative，
+ * 其中 HTML 正文与内嵌的“弈”字图组成 multipart/related。客户端支持 HTML 时只显示 HTML（项目所有者 2026-11-01 定稿的版式），
+ * 纯文本只供不支持 HTML 的客户端与垃圾邮件过滤器；整封只用一种语言（文案见 codeMailText.ts，版式见 codeMailHtml.ts）。
  * 各部分以 base64 传输，头部只含校验过的地址与固定文字。不含发送；协议在 smtp.ts。
  */
 import type { CodePurpose } from './codeCredentials';
-import { codeHtml } from './codeMailHtml';
+import { codeHtml, codePlain } from './codeMailHtml';
 import { mailText, type MailLanguage } from './codeMailText';
 
 /** 正文 base64 每行的字符数（RFC 2045 第 6.8 节：不超过 76） */
@@ -13,7 +14,8 @@ const BASE64_LINE = 76;
 const ADDRESS = /^[\x21-\x7e]+@[\x21-\x7e]+$/;
 const CODE = /^[0-9]{6}$/;
 const MESSAGE_ID = /^<[\x21-\x3b\x3d\x3f-\x7e]+@[\x21-\x3b\x3d\x3f-\x7e]+>$/;
-/** 分隔各部分的边界：含“-”，不会出现在 base64 内容中 */
+/** 分隔各部分的边界：含“-”，不会出现在 base64 内容中；外层为纯文本与 HTML 二选一，内层为 HTML 与内嵌图片 */
+const ALTERNATIVE = 'yi-mail-alt-boundary';
 const BOUNDARY = 'yi-mail-part-boundary';
 /** 内嵌图片的 Content-ID */
 const IMAGE_CID = 'yi-glyph@yi.lightking.com.cn';
@@ -61,6 +63,14 @@ export function composeCodeMail(letter: CodeLetter): string {
     `Date: ${letter.date.toUTCString().replace('GMT', '+0000')}`,
     `Message-ID: ${letter.messageId}`,
     'MIME-Version: 1.0',
+    `Content-Type: multipart/alternative; boundary="${ALTERNATIVE}"`,
+    '',
+    `--${ALTERNATIVE}`,
+    'Content-Type: text/plain; charset=UTF-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    wrapped(Buffer.from(codePlain(text, letter.code).replaceAll('\n', '\r\n'), 'utf8')),
+    `--${ALTERNATIVE}`,
     `Content-Type: multipart/related; type="text/html"; boundary="${BOUNDARY}"`,
     '',
     `--${BOUNDARY}`,
@@ -76,5 +86,6 @@ export function composeCodeMail(letter: CodeLetter): string {
     '',
     wrapped(letter.image),
     `--${BOUNDARY}--`,
+    `--${ALTERNATIVE}--`,
   ].join('\r\n');
 }

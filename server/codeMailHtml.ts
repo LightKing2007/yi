@@ -52,7 +52,7 @@ function footer(text: CodeMailText): string {
 }
 
 /** 提醒与求助同一段：中文与文言把提醒句末的句号换成逗号接下去（项目所有者 2026-11-01 的要求），英文仍为两句 */
-const joined = (text: CodeMailText) => (text.lang === 'en-GB' ? `${text.warn} ` : `${text.warn.replace(/。$/, '')}，`);
+export const joined = (text: CodeMailText) => (text.lang === 'en-GB' ? `${text.warn} ` : `${text.warn.replace(/。$/, '')}，`);
 
 /** 求助一句，“支持页面”为链接 */
 const support = (text: CodeMailText) => `${text.support[0]}<a href="${text.supportUrl}" style="${LINK_STYLE}">${text.support[1]}</a>${text.support[2]}`;
@@ -77,4 +77,25 @@ ${footer(text)}
 </td></tr></table>
 </td></tr></table>
 </body></html>`;
+}
+
+/**
+ * 同一封邮件的纯文本版本：与 HTML 同样的文字与顺序，链接以括号附上地址。放在 multipart/alternative 中，
+ * 支持 HTML 的客户端只显示 HTML；缺少纯文本版本会被垃圾邮件过滤器扣分（2026-11-01 实测 iCloud 归入垃圾邮件）
+ */
+export function codePlain(text: CodeMailText, code: string): string {
+  const links = text.links.map(([name, href]) => `${name}：${href}`).join('\n');
+  return [
+    text.title,
+    '',
+    text.lead,
+    '',
+    code,
+    '',
+    text.ttl,
+    `${joined(text)}${text.support[0]}${text.support[1]}（${text.supportUrl}）${text.support[2]}`,
+    '',
+    links,
+    `${text.copyright}${text.lang === 'en-GB' ? ' ' : ''}${text.notice}`,
+  ].join('\n');
 }
