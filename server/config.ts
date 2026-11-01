@@ -5,6 +5,7 @@
 import net from 'node:net';
 import path from 'node:path';
 import { PROTO_PORT, PROTO_VERSION } from '../src/shared/protocol';
+import { parseAccountConfig, type AccountConfig } from './accountConfig';
 import { parseLogLevel, type LogLevel } from './log';
 
 /** 退出码：配置不合法（sysexits.h 的 EX_CONFIG，ARC-042） */
@@ -20,8 +21,11 @@ const HOSTNAME = /^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-
 export interface ServerConfig {
   /** 只打出版本号与提交号后退出（`--version`） */
   version: boolean;
-  /** 要执行的命令：serve 运行服务端（默认）；backup 备份数据库后退出（命令行第一个参数为 `backup`） */
-  command: 'serve' | 'backup';
+  /**
+   * 要执行的命令：serve 运行服务端（默认）；backup 备份数据库后退出（命令行第一个参数为 `backup`）；
+   * account-keys 打出一份新生成的账号密钥后退出（供 root 写入凭据文件，见 accountSecrets.ts）
+   */
+  command: 'serve' | 'backup' | 'account-keys';
   /** 主端口：命令行第一个参数，其次 `PORT`，默认 8443 */
   port: number;
   /** 监听地址（`HOST`），不设时监听所有网卡 */
@@ -40,6 +44,8 @@ export interface ServerConfig {
   logLevel: LogLevel;
   /** 是否在 systemd 之下运行（有 `JOURNAL_STREAM`），是则日志加级别前缀（OPS-060） */
   journal: boolean;
+  /** 账号功能（`YI_ACCOUNTS=1` 时），关闭时为 undefined，账号接口一律 404 */
+  accounts?: AccountConfig;
 }
 
 /** 校验失败的一项：变量名与期望的格式 */
@@ -90,7 +96,7 @@ function parseTexts(env: Env, fail: Fail) {
 /** 解析各项，不合法的记入 errors 并取默认值；backup 命令不监听端口，不解析端口 */
 function collect({ argv, env, cwd, command }: { argv: string[]; env: Env; cwd: string; command: ServerConfig['command'] }, errors: ConfigError[]) {
   const fail: Fail = (variable, expected) => errors.push({ variable, expected });
-  const ports = command === 'backup' ? { port: PROTO_PORT } : parsePorts(argv, env, fail),
+  const ports = command === 'serve' ? parsePorts(argv, env, fail) : { port: PROTO_PORT },
     texts = parseTexts(env, fail);
   const logLevel = parseLogLevel(env.YI_LOG_LEVEL);
   if (logLevel === null) fail('YI_LOG_LEVEL', 'error、warn、info、debug 之一');
@@ -105,6 +111,7 @@ function collect({ argv, env, cwd, command }: { argv: string[]; env: Env; cwd: s
     files: files === undefined ? undefined : path.resolve(cwd, files),
     logLevel: logLevel ?? 'info',
     journal: Boolean(env.JOURNAL_STREAM),
+    accounts: command === 'serve' ? parseAccountConfig(env, fail) : undefined,
   };
 }
 
@@ -126,9 +133,9 @@ function isWebUrl(text: string) {
 export function parseConfig(argv: string[], env: Env, cwd: string): ConfigResult {
   const version = argv.includes('--version');
   const args = argv.filter(arg => arg !== '--version');
-  const command = args[0] === 'backup' ? 'backup' : 'serve';
+  const command = args[0] === 'backup' || args[0] === 'account-keys' ? args[0] : 'serve';
   const errors: ConfigError[] = [];
-  if (command === 'backup' && args.length > 1) errors.push({ variable: '命令行参数', expected: 'backup 之后不带其他参数' });
+  if (command !== 'serve' && args.length > 1) errors.push({ variable: '命令行参数', expected: `${command} 之后不带其他参数` });
   const config = { version, command, ...collect({ argv: args, env, cwd, command }, errors) } as const;
   return { config, errors: version ? [] : errors };
 }

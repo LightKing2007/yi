@@ -8,11 +8,13 @@ import { ApiProblem, internalProblem, originOf, preflight, readEmpty, readJson, 
 import { ROUTES, type Handler, type RouteDeps } from './accountRoutes';
 import { clientIp } from './clientIp';
 import type { Web } from './health';
+import type { Limited } from './http';
 import type { Log } from './log';
 
 /** 由本入口接管的路径前缀 */
 export const API_PREFIX = '/api/';
 const HTTP_NOT_FOUND = 404;
+const MS_PER_SEC = 1000;
 const HTTP_TOO_LARGE = 413;
 const PARAM_ROUTE = /^(\/api\/v1\/email-codes)\/([^/]+)$/;
 
@@ -92,5 +94,21 @@ export function withAccountApi(next: Web, opt: AccountApiOptions): Web {
       opt.log?.('error', 'internal.error', { msg: '账号接口异常', errorId: problem.errorId, err: error });
       sendProblem(res, origin, problem);
     });
+  };
+}
+
+/**
+ * 按 IP 的 HTTP 限流（API-041）落在账号接口上时的回应：契约第 2.5.2 条的 429 `rate.limited`，带 retryAfterMs，
+ * 允许的来源照常回显，页面才能读到等待时长；其他路径交给 fallback
+ */
+export function apiLimited(origins: readonly string[], fallback: Limited): Limited {
+  const allowed = new Set(origins);
+  return (res, retryAfterSecs, req) => {
+    if (!pathOf(req.url).startsWith(API_PREFIX)) {
+      fallback(res, retryAfterSecs, req);
+      return;
+    }
+    req.resume();
+    sendProblem(res, originOf(req, allowed).origin, { status: 429, code: 'rate.limited', retryAfterMs: retryAfterSecs * MS_PER_SEC });
   };
 }

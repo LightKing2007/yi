@@ -1,6 +1,6 @@
 /**
  * 弈 · 联机服务端：node server.cjs [端口]（默认 8443）；node server.cjs --version 只打出版本号与提交号；
- * node server.cjs backup 备份数据库后退出（server/backupCommand.ts）。
+ * node server.cjs backup 备份数据库后退出（server/backupCommand.ts）；node server.cjs account-keys 打出一份新的账号密钥后退出（server/accountSecrets.ts）。
  * 环境变量（由 server/config.ts 解析并校验，不合法时写 server.config-invalid 并以退出码 78 退出，ARC-042）：
  *   PORT          端口
  *   HOST          监听地址（默认所有网卡，放在反向代理后面时设为 127.0.0.1）
@@ -10,11 +10,15 @@
  *   YI_DOWNLOAD   新版本的下载地址
  *   YI_FILES      旧配置兼容字段，联机入口已不使用；官网由独立进程提供
  *   YI_LOG_LEVEL  日志级别：error、warn、info（默认）、debug（OPS-062）
+ *   YI_ACCOUNTS   账号功能：1 打开，默认关闭（关闭时 /api 一律 404）；打开时还须设置以下各项，并以 LoadCredential= 传入两份凭据
+ *   YI_PRIVACY_VERSION、YI_TERMS_VERSION  必需同意的隐私政策与服务条款版本
+ *   YI_CODE_BUDGET  全局每分钟发送验证码的上限（默认 30）；YI_DEV_ORIGIN 本机开发时额外允许的来源
  *
  * 日志按 07-operations.md 第 5 节输出 JSON Lines 到标准输出（server/log.ts）。
  * 信号：SIGTERM、SIGINT 以 1001 断开全部连接、落盘后退出（OPS-052）；SIGUSR2 进入维护模式（OPS-045），只能以重启结束。
  */
 import { monitorEventLoopDelay } from 'node:perf_hooks';
+import { newAccountKeys } from './accountSecrets';
 import { runBackup } from './backupCommand';
 import { EXIT_CONFIG, loadConfig } from './config';
 import { processLogger } from './log';
@@ -36,6 +40,10 @@ for (const { variable, expected } of errors) logger.log('error', 'server.config-
 if (errors.length) {
   logger.flush(true);
   process.exit(EXIT_CONFIG);
+}
+if (config.command === 'account-keys') {
+  process.stdout.write(newAccountKeys() + '\n');
+  process.exit(0);
 }
 if (config.command === 'backup') {
   const code = runBackup({ config, log: logger.log, now: Date.now });

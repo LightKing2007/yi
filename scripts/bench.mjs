@@ -10,7 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { build } from 'esbuild';
-import { pageAssets } from './page-assets.mjs';
+import { mailImage, pageAssets } from './page-assets.mjs';
 
 const root = path.join(path.dirname(new URL(import.meta.url).pathname), '..');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
@@ -50,6 +50,7 @@ async function main(argv) {
         __APP_VERSION__: JSON.stringify(pkg.version),
         __APP_COMMIT__: JSON.stringify('bench'),
         __PAGE_ASSETS__: JSON.stringify(pageAssets(new URL('../', import.meta.url))),
+        __MAIL_IMAGE__: JSON.stringify(mailImage(new URL('../', import.meta.url))),
       },
     });
     const { runBench } = await import(outfile);

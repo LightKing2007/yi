@@ -31,7 +31,7 @@ export interface WebsiteOptions {
 export async function startWebsite(opt: WebsiteOptions) {
   const files = fileServer(opt.files);
   const gate = new HttpGate();
-  const web = withHttpLimit(files, gate, opt.now, opt.log);
+  const web = withHttpLimit(files, gate, opt.now, { log: opt.log });
   const server = http.createServer((req, res) => {
     if (req.url === '/healthz' && req.method === 'GET' && fromThisHost(req)) {
       res.writeHead(HTTP_OK, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });

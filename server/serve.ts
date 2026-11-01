@@ -2,8 +2,10 @@
  * 联机服务端的运行：打开数据库、监听端口、定时输出日志汇总与指标快照、按信号关闭或进入维护模式。
  * 进程级的依赖（退出、信号、定时器、事件循环延迟）都由入口 server/main.ts 注入，测试中以假实现替换。
  */
+import { AccountSecretsError, loadAccountSecrets } from './accountSecrets';
+import { startAccounts, type AccountService } from './accountService';
 import type { ServerConfig } from './config';
-import { startEntry } from './config';
+import { EXIT_CONFIG, startEntry } from './config';
 import { startPersistence } from './db/startup';
 import type { Build } from './health';
 import { startHost, type Host } from './host';
@@ -56,9 +58,17 @@ export async function serve(deps: ServeDeps): Promise<void> {
     deps.exit(persistence); // 失败的原因已写入日志
     return;
   }
+  const accounts = openAccounts(deps, persistence);
+  if (accounts === null) {
+    persistence.close();
+    logger.flush(true);
+    deps.exit(EXIT_CONFIG);
+    return;
+  }
   const stopFlush = deps.every(LOG_FLUSH_MS, () => logger.flush());
-  const started = await listen(deps, persistence, metrics);
+  const started = await listen(deps, persistence, metrics, accounts);
   if (!started) {
+    accounts?.close();
     persistence.close();
     stopFlush();
     deps.exit(EXIT_LISTEN);
@@ -72,6 +82,7 @@ export async function serve(deps: ServeDeps): Promise<void> {
   const stop = (signal: NodeJS.Signals) => {
     log('info', 'server.stop', { msg: '正在关闭', reason: signal });
     stopSnapshots();
+    accounts?.close();
     persistence.close();
     void started.close().then(() => {
       stopFlush();
@@ -84,8 +95,27 @@ export async function serve(deps: ServeDeps): Promise<void> {
   deps.onSignal('SIGUSR2', () => started.server.maintain());
 }
 
+/**
+ * 账号功能：未打开时为 undefined；打开但凭据缺失或不合格时逐项写 account.secrets-invalid 并返回 null，调用者以退出码 78 拒绝启动，
+ * 不在缺少密钥或发信凭据时半开着运行。日志只含凭据名与期望的格式
+ */
+function openAccounts(deps: ServeDeps, persistence: Persistence): AccountService | undefined | null {
+  const config = deps.config.accounts;
+  if (!config) return undefined;
+  const { log } = deps.logger;
+  try {
+    const secrets = loadAccountSecrets(config.credentialsDir);
+    return startAccounts({ config, secrets, db: persistence.db, now: deps.now, every: deps.every, log });
+  } catch (err) {
+    if (!(err instanceof AccountSecretsError)) throw err;
+    for (const { credential, expected } of err.problems)
+      log('error', 'account.secrets-invalid', { msg: `${credential} 不合格，拒绝启动`, credential, expected });
+    return null;
+  }
+}
+
 /** 监听端口；失败时写 server.listen-failed 日志并返回 undefined */
-async function listen(deps: ServeDeps, persistence: Persistence, metrics: Metrics): Promise<Host | undefined> {
+async function listen(deps: ServeDeps, persistence: Persistence, metrics: Metrics, accounts?: AccountService): Promise<Host | undefined> {
   const { config } = deps;
   const { host, latest, download } = config;
   const ports = [config.port];
@@ -100,6 +130,7 @@ async function listen(deps: ServeDeps, persistence: Persistence, metrics: Metric
       metrics,
       eventLoopLag: deps.eventLoopLag,
       dbFileBytes: persistence.fileBytes,
+      accounts,
     });
   } catch (err) {
     deps.logger.log('error', 'server.listen-failed', { msg: `无法在端口 ${ports.join('、')} 启动`, ports, err });

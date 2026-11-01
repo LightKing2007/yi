@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import type { Plugin } from 'vite';
 import { defineConfig } from 'vite';
 import { devCsp } from './scripts/dev-csp.mjs';
-import { pageAssets } from './scripts/page-assets.mjs';
+import { mailImage, pageAssets } from './scripts/page-assets.mjs';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
@@ -46,6 +46,7 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version), // 版本号只写在 package.json 一处
     __PAGE_ASSETS__: JSON.stringify(pageAssets(new URL('./', import.meta.url))), // 只有服务端的下载页面引用（测试中用到）
+    __MAIL_IMAGE__: JSON.stringify(mailImage(new URL('./', import.meta.url))), // 只有联机服务端的验证码邮件引用（测试中用到）
   },
   oxc: { jsx: { runtime: 'automatic', importSource: 'preact' } }, // Vite 8 起以 Oxc 转换 TypeScript 与 JSX（原 esbuild 选项已弃用）
   build: { outDir: 'dist', target: 'es2022', chunkSizeWarningLimit: 2000 },

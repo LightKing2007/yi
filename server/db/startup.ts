@@ -3,6 +3,7 @@
  * 失败时抛出 DbOpenError，调用方以其中的退出码拒绝启动（EDGE-002）。
  */
 import fs from 'node:fs';
+import type { DatabaseSync } from 'node:sqlite';
 import type { Log } from '../log';
 import { DbOpenError, openDatabase } from './index';
 import { DbRatingStore } from './ratingStore';
@@ -25,6 +26,8 @@ export interface PersistenceOptions {
 /** 已就绪的持久化：段位与对局记录的存放处，以及退出前的关闭 */
 export interface Persistence {
   store: DbRatingStore;
+  /** 同一数据库连接，供账号功能使用（账号、会话、验证码与段位同库） */
+  db: DatabaseSync;
   /** 数据库文件与其 WAL 文件的字节数合计（监控指标 yi_db_file_bytes）；文件不存在时计为 0 */
   fileBytes(): number;
   /** 退出前调用：关闭数据库 */
@@ -43,6 +46,7 @@ export function openPersistence(opt: PersistenceOptions): Persistence {
   if (aborted) opt.log?.('info', 'db.games-aborted', { msg: `上次运行时有 ${aborted} 局尚未终局，已记为服务端放弃`, count: aborted });
   return {
     store: new DbRatingStore(repo, { now: opt.now }),
+    db,
     fileBytes: () => sizeOf(opt.dbFile) + sizeOf(`${opt.dbFile}-wal`),
     close: () => db.close(),
   };
