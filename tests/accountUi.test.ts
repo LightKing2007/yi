@@ -8,7 +8,10 @@ import {
   emailLooksValid,
   loginStoreOf,
   mailLanguage,
-  passwordLongEnough,
+  newPasswordProblem,
+  PASSWORD_INPUT_MAX,
+  passwordTooLong,
+  passwordValid,
   problemText,
   startAccounts,
 } from '../src/app/account';
@@ -92,13 +95,35 @@ describe('换算与检查', () => {
     expect(emailLooksValid('player example.com')).toBe(false);
     expect(emailLooksValid(`${'a'.repeat(243)}@example.com`)).toBe(false); // 255 字节
     expect(emailLooksValid(`${'a'.repeat(242)}@example.com`)).toBe(true);
-    expect(passwordLongEnough('密码密码密码密码')).toBe(true);
-    expect(passwordLongEnough('😀😀😀😀😀😀😀')).toBe(false); // 7 个码点、14 个码元
-    expect(passwordLongEnough('1234567')).toBe(false);
+    expect(passwordValid('密码密码密码密码')).toBe(true);
+    expect(passwordValid('😀😀😀😀😀😀😀')).toBe(false); // 7 个码点、14 个码元
+    expect(passwordValid('1234567')).toBe(false);
     expect(codeComplete('962914')).toBe(true);
     expect(codeComplete('96291')).toBe(false);
     expect(codeComplete('96291a')).toBe(false);
     expect(codeComplete('9629145')).toBe(false);
+  });
+});
+
+describe('密码的长度上限（与服务端一致：UTF-8 至多 1024 字节）', () => {
+  it('1024 个字节合格，多一个字节即过长；多字节字符按字节计', () => {
+    expect(passwordValid('a'.repeat(1024))).toBe(true);
+    expect(passwordTooLong('a'.repeat(1025))).toBe(true);
+    expect(passwordValid('a'.repeat(1025))).toBe(false);
+    expect(passwordTooLong('密'.repeat(341))).toBe(false); // 1023 字节
+    expect(passwordTooLong('密'.repeat(342))).toBe(true); // 1026 字节、342 个码元
+  });
+
+  it('输入框的码元上限不会截断合格的密码，超长的内容也不会被截成合格的长度', () => {
+    expect(PASSWORD_INPUT_MAX).toBeGreaterThanOrEqual(1024);
+    expect(passwordTooLong('a'.repeat(PASSWORD_INPUT_MAX))).toBe(true);
+  });
+
+  it('新密码的提示：过长优先，其次两次不一致；未再次输入或没有问题时为空', () => {
+    expect(newPasswordProblem('a'.repeat(1025), 'x')).toBe('密码过长');
+    expect(newPasswordProblem('password1', 'password2')).toBe('两次输入的密码不一致');
+    expect(newPasswordProblem('password1', '')).toBe('');
+    expect(newPasswordProblem('password1', 'password1')).toBe('');
   });
 });
 

@@ -78,8 +78,25 @@ export function emailLooksValid(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed) && new TextEncoder().encode(trimmed).length <= EMAIL_MAX_BYTES;
 }
 
-/** 密码是否够长（按码点计数，原文不修剪） */
-export const passwordLongEnough = (password: string) => [...password].length >= PASSWORD_MIN;
+/** 密码的最大长度（UTF-8 字节，与服务端一致） */
+const PASSWORD_MAX_BYTES = 1024;
+/**
+ * 密码输入框的码元上限：比最大字节数多一，超长的内容不会被悄悄截成合格的长度，而是由 passwordTooLong 指出。
+ * 一个码元至少占一个 UTF-8 字节，所以合格的密码不会被截断
+ */
+export const PASSWORD_INPUT_MAX = PASSWORD_MAX_BYTES + 1;
+
+/** 密码是否超过服务端接受的长度 */
+export const passwordTooLong = (password: string) => new TextEncoder().encode(password).length > PASSWORD_MAX_BYTES;
+
+/** 密码是否合格：至少 8 个码点、至多 1024 个 UTF-8 字节（原文不修剪） */
+export const passwordValid = (password: string) => [...password].length >= PASSWORD_MIN && !passwordTooLong(password);
+
+/** 设置新密码时的提示原文：过长、两次不一致；没有问题时为空串（过短时按钮不可按，不另提示） */
+export function newPasswordProblem(password: string, again: string): string {
+  if (passwordTooLong(password)) return '密码过长';
+  return again.length > 0 && again !== password ? '两次输入的密码不一致' : '';
+}
 
 /** 验证码是否填满 */
 export const codeComplete = (code: string) => new RegExp(`^\\d{${CODE_LENGTH}}$`).test(code);

@@ -3,13 +3,25 @@
  * 服务端在最后一步才核对验证码，验证码有误时退回第二步；邮箱已注册时提示直接登录或找回密码（契约第 3.5 条）
  */
 import { useEffect, useState } from 'preact/hooks';
-import { accounts, codeComplete, emailLooksValid, passwordLongEnough, problemText } from '../app/account';
+import { accounts, codeComplete, emailLooksValid, newPasswordProblem, passwordValid, problemText } from '../app/account';
 import { T, TF } from '../i18n';
 import type { RequiredConsents } from '../online/accountApi';
 import { clipName } from '../shared/protocol';
 import { accountBack, accountView, typedEmail } from './accountNav';
 import { screen, Screen } from '../app/state';
-import { type Challenge, FormError, FormLinks, FormPanel, maskEmail, PRIMARY_H, requestCode, resendLabel, useSecondsLeft, useSubmit } from './accountForms';
+import {
+  type Challenge,
+  emailChanged,
+  FormError,
+  FormLinks,
+  FormPanel,
+  maskEmail,
+  PRIMARY_H,
+  requestCode,
+  resendLabel,
+  useSecondsLeft,
+  useSubmit,
+} from './accountForms';
 import { ConsentCheck } from './accountConsent';
 import { Button, CodeCells, Field, FieldLabel, Fit, PasswordField } from './widgets';
 
@@ -86,6 +98,7 @@ export function RegisterForm({ h }: { h: number }) {
     sending.submit(async () => {
       const got = await requestCode('register', email);
       if (typeof got === 'string') return got;
+      if (emailChanged(got)) return undefined;
       setChallenge(got);
       setCode('');
       setCodeError('');
@@ -107,7 +120,7 @@ export function RegisterForm({ h }: { h: number }) {
       {step === STEP.email && <EmailStep email={email} challenge={challenge} sending={sending} onSend={send} />}
       {step === STEP.code && challenge && (
         <CodeStep
-          email={email}
+          email={challenge.email}
           challenge={challenge}
           code={code}
           error={codeError || sending.error}
@@ -118,7 +131,7 @@ export function RegisterForm({ h }: { h: number }) {
           onChangeEmail={() => setStep(STEP.email)}
         />
       )}
-      {step === STEP.profile && challenge && <Profile email={email} challenge={challenge} code={code} onCodeError={toCode} />}
+      {step === STEP.profile && challenge && <Profile email={challenge.email} challenge={challenge} code={code} onCodeError={toCode} />}
     </FormPanel>
   );
 }
@@ -135,7 +148,7 @@ function EmailStep({
   sending: { busy: boolean; error: string };
   onSend: () => void;
 }) {
-  const left = useSecondsLeft(challenge?.resendAt ?? 0);
+  const left = useSecondsLeft(challenge?.email === email.trim() ? challenge.resendAt : 0); // 换了邮箱可以立即发送
   return (
     <>
       <div style={{ height: '14px' }} />
@@ -201,15 +214,15 @@ function Profile({ email, challenge, code, onCodeError }: { email: string; chall
   const [consents, setConsents] = useState<RequiredConsents | null>(null);
   const [agreed, setAgreed] = useState(false);
   const { busy, error, setError, submit } = useSubmit();
-  const mismatch = again.length > 0 && again !== password;
-  const ready = name.trim().length > 0 && passwordLongEnough(password) && again === password && agreed && consents !== null && !busy;
+  const problem = newPasswordProblem(password, again);
+  const ready = name.trim().length > 0 && passwordValid(password) && again === password && agreed && consents !== null && !busy;
   const go = () => {
     if (!ready) return;
     submit(async () => {
       const session = accounts()?.session;
       if (!session) return problemText({ status: 0, code: 'server.internal', level: 'E5' });
       const consent = { accepted: true as const, privacy: consents.privacy, terms: consents.terms };
-      const r = await session.register({ name: name.trim(), email: email.trim(), password, challengeId: challenge.id, code, consent });
+      const r = await session.register({ name: name.trim(), email, password, challengeId: challenge.id, code, consent });
       if (r.ok) {
         if (screen.value === Screen.Account && accountView.value === 'register') accountBack(); // 等待期间已离开注册页时不再跳转
         return undefined;
@@ -240,7 +253,7 @@ function Profile({ email, challenge, code, onCodeError }: { email: string; chall
       <PasswordField value={again} onInput={setAgain} placeholder={T('再次输入密码')} label={T('再次输入密码')} autoComplete="new-password" onEnter={go} />
       <div style={{ height: '12px' }} />
       <ConsentCheck checked={agreed} onChange={setAgreed} consents={consents} onConsents={setConsents} onError={setError} />
-      <FormError text={mismatch ? '两次输入的密码不一致' : error} />
+      <FormError text={problem || error} />
       <Button label={T('注册并登录')} primary height={PRIMARY_H} disabled={!ready} style={{ width: '100%' }} onClick={go} />
     </>
   );

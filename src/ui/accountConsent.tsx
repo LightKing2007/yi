@@ -16,8 +16,8 @@ const openDoc = (url: string) => {
   if (/^https:\/\//.test(url)) window.open(url);
 };
 
-/** 取当前必需的协议版本；失败时经 onError 给出错误原文 */
-function useConsents(consents: RequiredConsents | null, onConsents: (c: RequiredConsents) => void, onError: (text: string) => void) {
+/** 取当前必需的协议版本；失败时经 onError 给出错误原文。attempt 变化时重新获取（失败后玩家按“重试”） */
+function useConsents(consents: RequiredConsents | null, attempt: number, onConsents: (c: RequiredConsents) => void, onError: (text: string) => void) {
   useEffect(() => {
     const api = accounts()?.api;
     if (consents || !api) return;
@@ -31,7 +31,7 @@ function useConsents(consents: RequiredConsents | null, onConsents: (c: Required
     return () => {
       live = false;
     };
-  }, [consents]);
+  }, [consents, attempt]);
 }
 
 /** “我已阅读并同意《用户服务条款》与《隐私政策》”：两个文书名为链接；版本取到之前不可勾选 */
@@ -48,7 +48,17 @@ export function ConsentCheck({
   onConsents: (c: RequiredConsents) => void;
   onError: (text: string) => void;
 }) {
-  useConsents(consents, onConsents, onError);
+  const [attempt, setAttempt] = useState(0);
+  const [failed, setFailed] = useState(false);
+  useConsents(consents, attempt, onConsents, text => {
+    setFailed(true);
+    onError(text);
+  });
+  const retry = () => {
+    setFailed(false);
+    onError('');
+    setAttempt(n => n + 1);
+  };
   const [before, between, after] = T('我已阅读并同意%s与%s').split('%s');
   const link = (name: string, url: string | undefined) => (
     <a
@@ -69,6 +79,11 @@ export function ConsentCheck({
       {between}
       {link('《隐私政策》', consents?.privacyUrl)}
       {after}
+      {failed && consents === null && (
+        <button type="button" class="text-link retry" onClick={retry}>
+          {T('重试')}
+        </button>
+      )}
     </Check>
   );
 }

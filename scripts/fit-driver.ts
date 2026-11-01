@@ -18,6 +18,7 @@ import type { C2S } from '../src/shared/protocol';
 import { typedEmail } from '../src/ui/accountNav';
 import { INFO_PAGES } from '../src/ui/info';
 import { startStub, stub } from './account-stub';
+import { runAccountRegressions } from './account-regression';
 
 /** 每一步之后的停留：长于 Fit 等布局稳定的 500 毫秒，否则界面切走后才量就漏报 */
 const STEP_MS = 900;
@@ -282,6 +283,7 @@ export async function runAll(serverUrl: string) {
       await press('返回');
     }
     // 账号功能开启后多人游戏页先显示登录门槛，所以放在联机流程全部走完之后
+    await runAccountRegressions();
     startStub();
     for (const lang of [Lang.WY, Lang.ZH, Lang.EN]) {
       setSettings({ lang });

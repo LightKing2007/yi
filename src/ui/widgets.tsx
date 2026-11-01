@@ -2,6 +2,7 @@
 import { signal } from '@preact/signals';
 import type { ComponentChildren } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
+import { PASSWORD_INPUT_MAX } from '../app/account';
 import { logWarn } from '../app/native';
 import { sfx } from '../audio';
 import { T, TF } from '../i18n';
@@ -269,8 +270,6 @@ export function PasswordField({
     />
   );
 }
-/** 密码输入框的码元上限：服务端按 UTF-8 不超过 1024 字节，这里只防粘贴进过长的内容 */
-const PASSWORD_INPUT_MAX = 256;
 
 /**
  * 六格验证码（项目所有者 2026-11-01 定稿）：规则见 codeCells.ts。值为各格数字连起来的字符串，未填的格为空；

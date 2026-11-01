@@ -818,9 +818,9 @@ canvas {
   margin: 0 0 8px 2px;
   height: 20px;
 }
-.gap {
+.account .gap {
   height: 14px;
-}
+} /* 只限账号面板：“更多”页面另有 .info .gap */
 .field-wrap {
   position: relative;
 }
@@ -980,6 +980,11 @@ canvas {
 .check-text {
   min-width: 0;
 }
+.check .retry {
+  font-size: 13px;
+  margin-left: 6px;
+  color: var(--text);
+}
 .doc-link {
   color: var(--text);
   text-decoration: underline;
@@ -1052,7 +1057,7 @@ canvas {
   background: var(--hover);
   color: var(--text);
 }
-.kv {
+.account .kv {
   display: flex;
   justify-content: space-between;
   gap: 12px;
@@ -1060,7 +1065,7 @@ canvas {
   height: 40px;
   border-bottom: 1px solid var(--hairline);
 }
-.kv .k {
+.account .kv .k {
   color: var(--dim);
   flex: none;
   max-width: 40%;

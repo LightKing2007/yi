@@ -4,7 +4,7 @@
  */
 import type { ComponentChildren } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
-import { accounts, codeComplete, emailLooksValid, mailLanguage, passwordLongEnough, problemText } from '../app/account';
+import { accounts, codeComplete, emailLooksValid, mailLanguage, newPasswordProblem, passwordValid, problemText } from '../app/account';
 import { settings } from '../app/settings';
 import { screen, Screen } from '../app/state';
 import { T, TF } from '../i18n';
@@ -92,9 +92,10 @@ export function useSecondsLeft(until: number) {
   return left;
 }
 
-/** 已申请的验证码：挑战编号、何时可以重发、何时失效（Date.now 的毫秒） */
+/** 已申请的验证码：挑战编号、所发往的邮箱（服务端按邮箱核对，提交时须用这一个）、何时可以重发、何时失效（Date.now 的毫秒） */
 export interface Challenge {
   id: string;
+  email: string;
   resendAt: number;
   expiresAt: number;
 }
@@ -103,11 +104,15 @@ export interface Challenge {
 export async function requestCode(purpose: CodePurpose, email: string): Promise<Challenge | string> {
   const api = accounts()?.api;
   if (!api) return UNAVAILABLE;
-  const r = await api.requestCode(purpose, email.trim(), mailLanguage(settings.value.lang));
+  const target = email.trim();
+  const r = await api.requestCode(purpose, target, mailLanguage(settings.value.lang));
   if (!r.ok) return problemText(r.problem);
   const now = Date.now();
-  return { id: r.value.challengeId, resendAt: now + r.value.resendAfterMs, expiresAt: Date.parse(r.value.expiresAt) };
+  return { id: r.value.challengeId, email: target, resendAt: now + r.value.resendAfterMs, expiresAt: Date.parse(r.value.expiresAt) };
 }
+
+/** 申请验证码期间邮箱已被改动：回应属于原来的邮箱，丢弃 */
+export const emailChanged = (challenge: Challenge) => challenge.email !== typedEmail.value.trim();
 
 /** 接口结果转为错误原文（成功为 undefined） */
 export const failure = (r: AccountResult<unknown>) => (r.ok ? undefined : problemText(r.problem));
@@ -166,30 +171,38 @@ export function LoginForm({ h }: { h: number }) {
 
 // ---------------- 找回密码 ----------------
 
-/** 找回密码：同一屏填邮箱、申请验证码、填验证码与新密码；成功后回到登录 */
-export function ResetForm({ h }: { h: number }) {
-  const email = typedEmail.value;
-  const [challenge, setChallenge] = useState<Challenge | null>(null);
+/** 找回密码的验证码状态；改了邮箱便停止使用此前的验证码，忽略旧邮箱的迟到回应。 */
+function useResetCode() {
+  const [requested, setChallenge] = useState<Challenge | null>(null);
+  const challenge = requested && !emailChanged(requested) ? requested : null; // 改了邮箱，之前的验证码作废，须重新获取
   const [code, setCode] = useState('');
-  const [password, setPassword] = useState('');
-  const sending = useSubmit(),
-    resetting = useSubmit();
-  const left = useSecondsLeft(challenge?.resendAt ?? 0);
+  const sending = useSubmit();
   const send = () =>
     sending.submit(async () => {
-      const got = await requestCode('reset', email);
+      const got = await requestCode('reset', typedEmail.value);
       if (typeof got === 'string') return got;
+      if (emailChanged(got)) return undefined;
       setChallenge(got);
       setCode('');
       return undefined;
     });
-  const ready = challenge !== null && codeComplete(code) && passwordLongEnough(password) && !resetting.busy;
+  return { challenge, code, setCode, sending, send };
+}
+
+/** 找回密码：同一屏填邮箱、申请验证码、填验证码与新密码；成功后回到登录 */
+export function ResetForm({ h }: { h: number }) {
+  const email = typedEmail.value;
+  const { challenge, code, setCode, sending, send } = useResetCode();
+  const [password, setPassword] = useState('');
+  const resetting = useSubmit();
+  const left = useSecondsLeft(challenge?.resendAt ?? 0);
+  const ready = challenge !== null && codeComplete(code) && passwordValid(password) && !resetting.busy;
   const go = () => {
     if (!ready) return;
     resetting.submit(async () => {
       const api = accounts()?.api;
       if (!api) return UNAVAILABLE;
-      const r = await api.resetPassword({ email: email.trim(), password, challengeId: challenge.id, code });
+      const r = await api.resetPassword({ email: challenge.email, password, challengeId: challenge.id, code });
       if (!r.ok) return problemText(r.problem);
       accountView.value = 'login';
       showToast('密码已重设，请重新登录');
@@ -221,7 +234,7 @@ export function ResetForm({ h }: { h: number }) {
           {T('重设后，所有设备上的登录都会失效，需要重新登录。')}
         </Fit>
       </div>
-      <FormError text={sending.error || resetting.error} />
+      <FormError text={newPasswordProblem(password, '') || sending.error || resetting.error} />
       <Button label={T('重设密码')} primary height={PRIMARY_H} disabled={!ready} style={{ width: '100%' }} onClick={go} />
     </FormPanel>
   );

@@ -499,4 +499,5 @@ export const TABLE: [string, string, string][] = [
   ["更换邮箱", "易邮址", "Change email"],
   ["注册并登录", "立籍并入", "Create account and sign in"],
   ["第 %d 位，共 %d 位", "第%d位，凡%d位", "Digit %d of %d"],
+  ["密码过长", "密语过长", "The password is too long"],
 ];

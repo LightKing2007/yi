@@ -2,7 +2,7 @@
  * 账号的界面（设计稿经项目所有者 2026-11-01 定稿）：账号页按当前一屏分派；账号资料、修改雅号、修改密码；
  * 多人游戏页的登录门槛（未登录、资料暂不可取、协议待补签）与大厅中的账号条。账号功能未开启时这些都不出现
  */
-import { account, accounts, passwordLongEnough, problemText } from '../app/account';
+import { account, accounts, newPasswordProblem, passwordValid, problemText } from '../app/account';
 import { goScreen } from '../app/controller';
 import { Screen } from '../app/state';
 import { T } from '../i18n';
@@ -66,8 +66,10 @@ function ProfileView({ h }: { h: number }) {
   const uid = displayPublicId(user.publicId) ?? user.publicId;
   const logout = () =>
     submit(async () => {
-      await accounts()?.session.logout();
-      goScreen(Screen.Online); // 回到多人游戏页，显示登录门槛
+      // 本机的登录在调用时即已清除，随即回到多人游戏页（显示登录门槛），不等撤销请求：等待期间玩家可能已去了别处
+      const revoking = accounts()?.session.logout();
+      goScreen(Screen.Online);
+      await revoking;
       return undefined;
     });
   return (
@@ -153,8 +155,8 @@ function PasswordForm({ h }: { h: number }) {
   const [password, setPassword] = useState('');
   const [again, setAgain] = useState('');
   const { busy, error, submit } = useSubmit();
-  const mismatch = again.length > 0 && again !== password;
-  const ready = old.length > 0 && passwordLongEnough(password) && again === password && !busy;
+  const problem = newPasswordProblem(password, again);
+  const ready = old.length > 0 && passwordValid(password) && again === password && !busy;
   const go = () => {
     if (!ready) return;
     submit(async () => {
@@ -185,7 +187,7 @@ function PasswordForm({ h }: { h: number }) {
           {T('修改后，所有设备上的登录都会失效，需要重新登录。')}
         </Fit>
       </div>
-      <FormError text={mismatch ? '两次输入的密码不一致' : error} />
+      <FormError text={problem || error} />
       <Button label={T('确认修改')} primary height={PRIMARY_H} disabled={!ready} style={{ width: '100%' }} onClick={go} />
     </FormPanel>
   );
