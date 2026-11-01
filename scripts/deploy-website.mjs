@@ -44,7 +44,7 @@ if (command === 'bootstrap' && !version) {
   const dir = upload('root', ['scripts/server/website-activate.sh', 'scripts/server/yi.caddy']);
   ssh('root', `sh ${quote(dir + '/website-activate.sh')} ${quote(dir)}`);
 } else if (command === 'install' && /^web-[a-f0-9]{12}$/.test(version ?? '')) {
-  const dir = upload('deploy', release(version, ['web.cjs', 'manifest.json', 'SHA256SUMS']));
+  const dir = upload('deploy', release(version, ['web.cjs', 'manifest.json', 'site.tar', 'SHA256SUMS']));
   ssh('deploy', `sudo -n /usr/local/sbin/yi-web-deploy install ${quote(version)} ${quote(dir)}`);
 } else if (command === 'downloads' && /^\d+\.\d+\.\d+$/.test(version ?? '')) {
   const dir = upload('deploy', release(`v${version}`, ['SHA256SUMS']));

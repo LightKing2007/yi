@@ -19,7 +19,7 @@ trap restore EXIT HUP INT TERM
 install -o root -g root -m 644 "$src/yi.caddy" "$site"
 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 systemctl reload caddy
-for route in / /download/ /agreement /privacy-policy /terms-of-service /minors-privacy-rules; do
+for route in / /download/ /support /support/black-screen-webgl /agreement /agreement/privacy-policy /agreement/terms-of-service /agreement/minors-privacy-rules; do
   curl --fail --silent --show-error --max-time 10 "https://yi.lightking.com.cn$route" -o /dev/null
 done
 systemctl enable yi-web

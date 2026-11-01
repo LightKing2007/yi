@@ -39,6 +39,8 @@ const SKIPPED_FILES: Record<string, string> = {
   'server/homePage.ts': '网站页面只有中文，标点由 I18N-011 检查',
   'server/downloadPage.ts': '网站页面只有中文，标点由 I18N-011 检查',
   'server/agreementPage.ts': '网站页面只有中文，标点由 I18N-011 检查',
+  'server/supportPage.ts': '网站支持页只有中文，正文与标点由 I18N-011 检查',
+  'server/notFoundPage.ts': '网站 404 页面只有中文，正文与标点由 I18N-011 检查',
   'server/agreementText.ts': '网站文书标题与摘要只有中文，标点由 I18N-011 检查',
   'server/agreementStyle.ts': '网站页面的样式',
   'server/pageStyle.ts': '网站页面的样式',

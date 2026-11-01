@@ -9,13 +9,14 @@ function ornaments() {
   return `<div class="agreement-ornaments" aria-hidden="true">
 <span class="depth-near">私</span><span class="depth-middle">护</span><span class="depth-far">约</span><span class="depth-near">知</span>
 <span class="depth-middle">童</span><span class="depth-far">责</span><span class="depth-middle">允</span><span class="depth-near">宀</span>
-<span class="depth-far">讠</span><span class="depth-middle">扌</span><span class="depth-near">丶</span><span class="depth-far">丨</span></div>`;
+<span class="depth-far">讠</span><span class="depth-middle">扌</span><span class="depth-near">丶</span><span class="depth-far">丨</span>
+<span class="depth-far">权</span><span class="depth-middle">明</span><span class="depth-far">守</span><span class="depth-near">信</span></div>`;
 }
 
 /** 目录中每一行都可点击，链接文字与独立页面标题保持一致。 */
 function catalog() {
   const entries = AGREEMENT_DOCUMENTS.map(
-    doc => `<a class="document-link rv" href="/${esc(doc.slug)}"><span class="document-number idx" aria-hidden="true">${doc.number}</span>
+    doc => `<a class="document-link rv" href="/agreement/${esc(doc.slug)}"><span class="document-number idx" aria-hidden="true">${doc.number}</span>
 <div class="document-description"><h2>${esc(doc.name)}</h2><p>${esc(doc.summary)}</p>
 <span class="document-status">${esc(AGREEMENT_INFO.status)} · ${esc(AGREEMENT_INFO.statusNote)}</span></div>
 <span class="document-arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
@@ -54,8 +55,7 @@ export function agreementPage(assetVersion: string, doc?: AgreementDocument) {
     title: `弈 · ${title}`,
     description: doc ? `阅读“弈”的《${doc.name}》草案，了解相关规则与待完善事项。` : '“弈”的文书目录：隐私政策、用户服务条款与未成年人个人信息保护规则。',
     assetVersion,
-    nav: AGREEMENT_DOCUMENTS.map(document => [`/${document.slug}`, document.name]),
-    action: doc ? ['/agreement', '文书目录'] : ['#documents', '查看文书'],
+    nav: [...AGREEMENT_DOCUMENTS.map(document => [`/agreement/${document.slug}`, document.name] as [string, string]), ['/support', '帮助与支持']],
     style: agreementStyle(),
     body: `<section class="agreement-hero ink${doc ? ' agreement-file' : ''}" id="top">${ornaments()}<div class="agreement-hero-in">
 <div class="agreement-kicker"><span class="label">文书</span></div><h1>${esc(title)}</h1>
@@ -64,10 +64,10 @@ export function agreementPage(assetVersion: string, doc?: AgreementDocument) {
   });
 }
 
-/** 目录与三份文件均在启动时生成，不依赖安装包目录或数据库。键为已解码的根路径。 */
+/** 目录与三份文件均在启动时生成，不依赖安装包目录或数据库。键为已解码的相对路径。 */
 export function agreementPages(assetVersion: string): ReadonlyMap<string, Buffer> {
   return new Map([
     ['agreement', Buffer.from(agreementPage(assetVersion))],
-    ...AGREEMENT_DOCUMENTS.map(doc => [doc.slug, Buffer.from(agreementPage(assetVersion, doc))] as const),
+    ...AGREEMENT_DOCUMENTS.map(doc => [`agreement/${doc.slug}`, Buffer.from(agreementPage(assetVersion, doc))] as const),
   ]);
 }

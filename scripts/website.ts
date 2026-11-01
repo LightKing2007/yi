@@ -13,7 +13,7 @@ if (config.errors.length) {
   process.stderr.write(config.errors.join('\n') + '\n');
   process.exit(EXIT_CONFIG);
 }
-void startWebsite({ port: config.port, files: config.files, commit: __APP_COMMIT__, now: () => performance.now() / MS_PER_SEC })
+void startWebsite({ port: config.port, files: config.files, pages: config.pages, commit: __APP_COMMIT__, now: () => performance.now() / MS_PER_SEC })
   .then(site => {
     process.stdout.write(`yi-web ${__APP_COMMIT__} 127.0.0.1:${site.port}\n`);
     const stop = () => void site.close().then(() => process.exit(0));

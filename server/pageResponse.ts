@@ -12,20 +12,34 @@ const HTML_HEADERS = {
   'Cache-Control': 'no-cache',
 };
 
-/** HEAD 与 GET 的长度一致但不发送正文；纯阅读页面不请求客户端芯片等提示。 */
-export function sendPage(res: ServerResponse, body: Buffer, head: boolean, platform = true) {
-  res.writeHead(OK, { ...HTML_HEADERS, ...(platform ? CLIENT_HINT_HEADERS : {}), 'Content-Length': body.length }).end(head ? undefined : body);
+interface PageOptions {
+  head: boolean;
+  platform?: boolean;
+  status?: number;
+  /** 仅静态帮助目录允许加载同源外部脚本 */
+  script?: boolean;
 }
 
-/** 文书白名单：直接返回草案页或规范化尾斜杠，不接受其他文件名或子路径。 */
+/** HEAD 与 GET 的长度一致但不发送正文；纯阅读页面不请求客户端芯片等提示。 */
+export function sendPage(res: ServerResponse, body: Buffer, { head, platform = true, status = OK, script = false }: PageOptions) {
+  const security = script ? { ...HTML_HEADERS, 'Content-Security-Policy': `${HTML_HEADERS['Content-Security-Policy']}; script-src 'self'` } : HTML_HEADERS;
+  res.writeHead(status, { ...security, ...(platform ? CLIENT_HINT_HEADERS : {}), 'Content-Length': body.length }).end(head ? undefined : body);
+}
+
+/** 路径逐段编码，保留文书目录中的斜杠。 */
+function documentLocation(name: string) {
+  return `/${name.split('/').map(encodeURIComponent).join('/')}`;
+}
+
+/** 文书白名单：直接返回页面或规范化尾斜杠，不接受其他路径。 */
 export function sendDocument(res: ServerResponse, pages: ReadonlyMap<string, Buffer>, name: string, head: boolean) {
   const body = pages.get(name);
   if (body) {
-    sendPage(res, body, head, false);
+    sendPage(res, body, { head, platform: false });
     return true;
   }
   const canonical = name.endsWith('/') ? name.slice(0, -1) : '';
   if (!pages.has(canonical)) return false;
-  res.writeHead(MOVED, { 'X-Content-Type-Options': 'nosniff', Location: `/${encodeURIComponent(canonical)}` }).end();
+  res.writeHead(MOVED, { 'X-Content-Type-Options': 'nosniff', Location: documentLocation(canonical) }).end();
   return true;
 }

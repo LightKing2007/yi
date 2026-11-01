@@ -1,6 +1,6 @@
 /**
  * 网站页面共用部分：安装程序与平台描述、推荐程序、文档外壳、顶栏与页脚；协议页也复用同一外壳。
- * 页面不含任何脚本（API-063）：交互与动画全部以 CSS 实现，访客的操作系统由服务端按请求头推断（platform.ts）。
+ * 动效以 CSS 实现，访客的操作系统由服务端按请求头推断（platform.ts）；仅静态帮助目录使用同源外部检索脚本（API-063）。
  */
 import { siteStyle } from './pageStyle';
 import { AGREEMENT_INFO } from './agreementText';
@@ -65,13 +65,13 @@ export interface ShellSpec {
   /** 资源地址的版本参数 */
   assetVersion: string;
   nav: NavLink[];
-  /** 顶栏右侧按钮的地址与文字 */
-  action: NavLink;
   /** 页面专有的样式 */
   style: string;
   body: string;
   /** 页面载入后自动打开的地址（下载页面借此开始下载，不用脚本） */
   refresh?: string;
+  /** 可选的同源外部脚本；只有静态帮助目录使用 */
+  script?: string;
 }
 
 /** 完整的 HTML 文档：头部、顶栏、正文与页脚 */
@@ -79,19 +79,20 @@ export function shell(spec: ShellSpec) {
   const version = spec.assetVersion;
   const nav = spec.nav.map(([href, text]) => `<a href="${href}">${text}</a>`).join('');
   const refresh = spec.refresh ? `<meta http-equiv="refresh" content="1;url=${spec.refresh}">` : '';
+  const script = spec.script ? `<script defer src="${spec.script}"></script>` : '';
   return `<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${spec.title}</title><meta name="description" content="${spec.description}">${refresh}
 <meta name="color-scheme" content="dark light"><meta name="theme-color" content="#0b0a09"><link rel="icon" href="/assets/icon.png?v=${version}">
-<style>${siteStyle(version)}${spec.style}</style></head>
+<style>${siteStyle(version)}${spec.style}</style>${script}</head>
 <body>
 <a class="skip" href="#main">跳至正文</a>
 <header class="bar"><a class="logo" href="/" aria-label="弈 主页"><span class="glyph"></span></a>
-<nav aria-label="页面导航">${nav}</nav><a class="pill" href="${spec.action[0]}">${spec.action[1]}</a></header>
+<nav aria-label="页面导航">${nav}</nav></header>
 <main id="main">${spec.body}</main>
 <footer class="foot"><div class="foot-in">
 <div class="foot-brand"><span class="glyph"></span><span class="foot-motto">以木为枰，以石为子</span></div>
-<div class="foot-links"><a href="/">主页</a><a href="/download/">下载</a>
+<div class="foot-links"><a href="/">主页</a><a href="/download/">下载</a><a href="/support">帮助与支持</a>
 <a href="/agreement">${esc(AGREEMENT_INFO.title)}</a>
 <a href="https://github.com/LightKing2007/yi" target="_blank" rel="noopener noreferrer">GitHub</a></div>
 <div class="foot-legal"><span>Copyright © 2026 LightKing。保留所有权利。</span>

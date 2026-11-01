@@ -9,7 +9,15 @@ export interface LegalHeading {
 }
 
 /** 文书之间及项目反馈的固定入口；不执行任意协议、外部图片或内嵌 HTML。 */
-const LINKS = new Set(['/agreement', '/privacy-policy', '/terms-of-service', '/minors-privacy-rules', 'https://github.com/LightKing2007/yi/issues']);
+const LINKS = new Set([
+  '/agreement',
+  '/download/',
+  '/agreement/privacy-policy',
+  '/agreement/terms-of-service',
+  '/agreement/minors-privacy-rules',
+  'https://github.com/LightKing2007/yi/issues',
+  'https://github.com/LightKing2007/yi/security/advisories/new',
+]);
 
 /** 链接的标签与普通文字分别转义，仅白名单地址生成可点击链接。 */
 function linked(text: string) {

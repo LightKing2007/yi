@@ -32,11 +32,12 @@ const DOCUMENTS = [
   { slug: 'minors-privacy-rules', name: '未成年人个人信息保护规则' },
 ];
 const ROUTES = [{ slug: 'agreement', name: '隐私政策与服务条款' }, ...DOCUMENTS];
+const routeFor = (slug: string) => (slug === 'agreement' ? '/agreement' : `/agreement/${slug}`);
 
-it('文书目录与三个英文文件名草案分别可读，正文不使用棋子装饰，尾斜杠规范化并忽略查询参数', async () => {
+it('文书目录与三个草案子页面分别可读，正文不使用棋子装饰，尾斜杠规范化并忽略查询参数', async () => {
   await withAgreement(async base => {
     for (const { slug, name } of ROUTES) {
-      const route = `/${slug}`;
+      const route = routeFor(slug);
       const response = await fetch(base + route);
       expect(response.status).toBe(200);
       const html = await response.text();
@@ -46,7 +47,7 @@ it('文书目录与三个英文文件名草案分别可读，正文不使用棋�
       if (slug === 'agreement') {
         expect(html).toContain('<h1>隐私政策与服务条款</h1>');
         expect(html.match(/class="document-link rv"/g)).toHaveLength(3);
-        for (const document of DOCUMENTS) expect(html).toContain(`href="/${document.slug}"`);
+        for (const document of DOCUMENTS) expect(html).toContain(`href="${routeFor(document.slug)}"`);
         expect(html).not.toContain('id="document"');
       } else {
         expect(html).toContain(`<h1>${name}</h1>`);
@@ -70,10 +71,10 @@ it('文书目录与三个英文文件名草案分别可读，正文不使用棋�
   });
 });
 
-it('目录与文书页均保持无脚本安全头和 HEAD 语义，拒绝写入方法及未知子路径', async () => {
+it('目录与文书页均保持无脚本安全头和 HEAD 语义，旧根地址不可用，拒绝写入方法及未知子路径', async () => {
   await withAgreement(async base => {
     for (const { slug } of ROUTES) {
-      const route = `/${slug}`;
+      const route = routeFor(slug);
       const response = await fetch(base + route);
       const html = await response.text();
       expect(response.headers.get('content-security-policy')).toBe("default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; font-src 'self'");
@@ -87,7 +88,13 @@ it('目录与文书页均保持无脚本安全头和 HEAD 语义，拒绝写入�
       expect([post.status, post.headers.get('allow')]).toEqual([405, 'GET, HEAD']);
       expect((await fetch(`${base}${route}/private`)).status).toBe(404);
     }
-    for (const doc of DOCUMENTS) expect((await fetch(`${base}/${encodeURIComponent(doc.name)}`)).status).toBe(404);
+    for (const doc of DOCUMENTS) {
+      expect((await fetch(`${base}/${encodeURIComponent(doc.name)}`)).status).toBe(404);
+      for (const suffix of ['', '/']) {
+        const old = await fetch(`${base}/${doc.slug}${suffix}?from=old`, { redirect: 'manual' });
+        expect([old.status, old.headers.get('location')]).toEqual([404, null]);
+      }
+    }
     expect((await fetch(`${base}/privacy-policy-copy`)).status).toBe(404);
     expect((await fetch(`${base}/%E9%ZZ`)).status).toBe(400);
   });
@@ -98,14 +105,14 @@ it('主页导航不显示协议，页脚使用完整名称且移除校验清单�
     const home = await (await fetch(base)).text();
     const header = home.slice(home.indexOf('<header'), home.indexOf('</header>'));
     expect(header).not.toContain('href="/agreement"');
-    for (const route of ['/', '/download/', ...ROUTES.map(doc => `/${doc.slug}`)]) {
+    for (const route of ['/', '/download/', ...ROUTES.map(doc => routeFor(doc.slug))]) {
       const html = await (await fetch(`${base}${route}`)).text();
       const footer = html.slice(html.indexOf('<footer'));
       expect(footer).toContain('href="/agreement">隐私政策与服务条款</a>');
       expect(footer).not.toContain('href="/SHA256SUMS"');
     }
     const download = await (await fetch(`${base}/download/`)).text();
-    expect(download).toContain('href="/privacy-policy">隐私政策（草案）</a>');
+    expect(download).toContain('href="/agreement/privacy-policy">隐私政策（草案）</a>');
     expect(download).toContain('对局记录');
   });
 });
@@ -131,7 +138,7 @@ it('统一配置的修改同步到目录、页脚和正文信息，日期只填�
       expect(catalog).toContain('统一目录引言。');
       expect(catalog).toContain('校对稿 · 测试中');
       for (const doc of DOCUMENTS) {
-        const html = await (await fetch(`${base}/${doc.slug}`)).text();
+        const html = await (await fetch(`${base}${routeFor(doc.slug)}`)).text();
         expect(html).toContain('校对稿 0.2 · 测试中');
         expect(html).toContain('<time datetime="2026-11-01">更新于 2026年11月1日</time>');
         expect(html).toContain('维护用例 &#60;甲&#62;');

@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.15 |
+| 文件版本 | 1.1.18 |
 | 修订日期 | 2026-11-01 |
 | 规则前缀 | `API` |
 
@@ -118,10 +118,10 @@
 
 | 编号 | 等级 | 规定 | 现状 |
 |---|---|---|---|
-| API-060 | A | 官网由独立进程监听本机 8444，经 Caddy 提供公开页面；联机服务只处理 WebSocket、健康检查、指标及后续 `/api/*`。对公网开放的官网 HTTP 路径统一以白名单定义（`GET` 与 `HEAD`）：`/`（主页）、`/download/`（下载页面，只认查询参数 `start`，表示进入页面即开始下载推荐的安装程序；`/download` 以 301 重定向到 `/download/`）、`/agreement`（文书目录）、`/privacy-policy`、`/terms-of-service`、`/minors-privacy-rules`（三份独立文件，正文为尚未生效的草案；目录与文书路径均忽略查询参数，带尾斜杠时以 301 重定向至无尾斜杠路径）、`/安装程序文件名`（文件名必须匹配 `server/files.ts` 中的正则）、`/SHA256SUMS`、`/assets/资源名`（网站各页所用的标题图、图标、ICP 备案图标与字体，名单以常量定义在 `server/files.ts` 中，内容在构建时嵌入独立官网程序，运行时不读取磁盘）；后续账号接口按 API-062 开放 `/api/v1/*`，未装配的接口返回 404 | 满足 |
+| API-060 | A | 官网由独立进程监听本机 8444，经 Caddy 提供公开页面；联机服务只处理 WebSocket、健康检查、指标及后续 `/api/*`。对公网开放的官网 HTTP 路径统一以白名单定义（`GET` 与 `HEAD`）：`/`（主页）、`/download/`（下载页面，只认查询参数 `start`，表示进入页面即开始下载推荐的安装程序；`/download` 以 301 重定向到 `/download/`）、`/agreement`（文书目录）、`/support`（帮助目录，只认查询参数 `q`，以原生 GET 表单检索标题、分类与答案）、`/support/问题地址`（每个问题一份 Markdown 与独立阅读页，白名单来自 `server/supportContent.ts`）、`/agreement/privacy-policy`、`/agreement/terms-of-service`、`/agreement/minors-privacy-rules`（三份独立文件，正文为尚未生效的草案；目录与文书路径忽略查询参数，帮助目录忽略其他查询参数；带尾斜杠时以 301 重定向至无尾斜杠路径，帮助目录保留规范化后的 `q`）、`/安装程序文件名`（文件名必须匹配 `server/files.ts` 中的正则）、`/SHA256SUMS`、`/assets/资源名`（名单以常量定义在 `server/files.ts` 中；动态主页与下载页资源在构建时嵌入独立官网程序，静态页面与 `assets/support-search.js` 由发布产物 `site.tar` 提供，运行时读取当前不可变发布目录）；其他未知页面路径返回与官网同风格的 HTML 404 页面，未知资源仍返回纯文本 404；后续账号接口按 API-062 开放 `/api/v1/*`，未装配的接口返回 404 | 满足 |
 | API-061 | A | 健康检查 `GET /healthz` 与指标 `GET /metrics` 只允许来自 127.0.0.1 与 ::1 的请求，其他来源一律返回 404。`/healthz` 返回 200 与 `application/json; charset=utf-8`，字段为 `version`、`commit`、`proto`、`players`（已握手的在线玩家数）、`games`（已开局且未终局的对局数，含点目阶段）、`maintenance`（是否处于维护模式，OPS-045）。启用反向代理后，代理必须对这两个路径一律返回 404：经代理转发的请求在服务端看来都来自本机；服务端另把带 `X-Forwarded-For` 的请求视为经代理转来的外部请求，同样不回应 | 满足（`/healthz`：P1-09，#73；`/metrics`：OPS-071，#92；不回应经代理转来的请求：#115） |
 | API-062 | A | `/api/*` 统一带主版本前缀 `/v1/`；请求与响应体统一为 `application/json; charset=utf-8`；字段名统一为 lowerCamelCase；时间统一为 RFC 3339 UTC 字符串 | 不适用 |
-| API-063 | A | 所有 HTTP 响应必须带 `X-Content-Type-Options: nosniff`；HTML 响应必须带 `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; font-src 'self'`（不允许任何脚本）与 `Referrer-Policy: no-referrer` | 满足（`server/pageResponse.ts`；`tests/serverTransport.test.ts` 核对各页面的响应头） |
+| API-063 | A | 所有 HTTP 响应必须带 `X-Content-Type-Options: nosniff`；HTML 响应必须带 `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; font-src 'self'` 与 `Referrer-Policy: no-referrer`。默认不允许任何脚本；仅静态帮助目录为同源 `assets/support-search.js` 追加 `script-src 'self'`，无脚本时仍以原生 GET 表单完成检索 | 满足（`server/pageResponse.ts`；`tests/serverTransport.test.ts` 核对各页面的响应头） |
 
 ## 8 初始错误码表
 

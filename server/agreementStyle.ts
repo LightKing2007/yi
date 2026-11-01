@@ -7,7 +7,9 @@ export const agreementStyle = () => minify(STYLE);
 const STYLE = `
 .bar nav { gap: 24px; font-size: 13px; letter-spacing: 0.06em; }
 .bar nav a { line-height: 1.5; }
-.agreement-hero { position: relative; isolation: isolate; overflow: hidden; padding: 152px var(--gut) 84px; }
+.agreement-hero { position: relative; isolation: isolate; overflow: hidden; padding: 152px var(--gut) 84px;
+  background: radial-gradient(62% 100% at 78% 42%, rgb(214 169 100 / 0.16), rgb(156 108 47 / 0.06) 42%, transparent 74%),
+    radial-gradient(42% 72% at 12% 82%, rgb(156 108 47 / 0.05), transparent 76%); }
 .agreement-hero-in { position: relative; z-index: 2; max-width: var(--max); margin: 0 auto; }
 .agreement-kicker { margin-bottom: 28px; animation: rise 0.9s var(--ease) 0.08s both; }
 .agreement-hero h1 { max-width: 15em; font: 900 clamp(42px, 6.7vw, 88px)/1.3 var(--serif); letter-spacing: 0.035em; text-wrap: balance;
@@ -32,6 +34,10 @@ const STYLE = `
 .agreement-ornaments span:nth-child(10) { right: 16%; top: 82%; font-size: 50px; --travel: 52px; }
 .agreement-ornaments span:nth-child(11) { right: 57%; top: 64%; font-size: 28px; --travel: 88px; }
 .agreement-ornaments span:nth-child(12) { right: 77%; top: 16%; font-size: 44px; --travel: -16px; }
+.agreement-ornaments span:nth-child(13) { right: 30%; top: 18%; font-size: 34px; --travel: 38px; }
+.agreement-ornaments span:nth-child(14) { right: 22%; top: 44%; font-size: 44px; --travel: -48px; }
+.agreement-ornaments span:nth-child(15) { right: 4%; top: 38%; font-size: 32px; --travel: 64px; }
+.agreement-ornaments span:nth-child(16) { right: 18%; top: 78%; font-size: 40px; --travel: -34px; }
 @keyframes document-depth { from { transform: translateY(0); } to { transform: translateY(var(--travel)); } }
 @supports (animation-timeline: view()) {
   @media (prefers-reduced-motion: no-preference) {
@@ -83,12 +89,11 @@ const STYLE = `
   .document-toc nav { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; }
 }
 @media (max-width: 720px) {
-  .bar { height: 108px; display: grid; grid-template-columns: 1fr auto; grid-template-rows: 36px minmax(0, 1fr);
-    padding-top: 10px; padding-bottom: 8px; gap: 4px 20px; }
-  .bar .pill { grid-column: 2; grid-row: 1; }
-  .bar nav { display: grid; grid-column: 1 / -1; grid-row: 2; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 2.3fr);
-    gap: 10px; margin-left: 0; font-size: 12px; letter-spacing: 0.03em; }
-  .bar nav a { padding: 4px 0; text-align: center; text-wrap: balance; }
+  .bar { height: 108px; display: grid; grid-template-rows: 36px minmax(0, 1fr); padding-top: 10px; padding-bottom: 8px; gap: 4px 20px; }
+  .bar nav { display: flex; grid-row: 2; gap: 24px; margin-left: 0; font-size: 12px; letter-spacing: 0.08em;
+    overflow-x: auto; white-space: nowrap; scrollbar-width: none; }
+  .bar nav::-webkit-scrollbar { display: none; }
+  .bar nav a { flex: none; padding: 4px 0; }
   .agreement-hero { padding-top: 158px; padding-bottom: 60px; }
   .agreement-catalog, .agreement-content { scroll-margin-top: 108px; }
   .agreement-ornaments { opacity: 0.8; }
@@ -104,6 +109,10 @@ const STYLE = `
   .agreement-ornaments span:nth-child(10) { right: 19%; top: 92%; font-size: 34px; }
   .agreement-ornaments span:nth-child(11) { right: 58%; top: 69%; font-size: 20px; }
   .agreement-ornaments span:nth-child(12) { right: 84%; top: 30%; font-size: 30px; }
+  .agreement-ornaments span:nth-child(13) { right: 30%; top: 18%; font-size: 24px; }
+  .agreement-ornaments span:nth-child(14) { right: 22%; top: 44%; font-size: 28px; }
+  .agreement-ornaments span:nth-child(15) { right: 4%; top: 38%; font-size: 22px; }
+  .agreement-ornaments span:nth-child(16) { right: 18%; top: 78%; font-size: 26px; }
   .agreement-catalog, .agreement-content { padding-top: 40px; padding-bottom: 64px; }
   .document-link { grid-template-columns: 34px minmax(0, 1fr) 36px; gap: 14px; padding: 30px 0; }
   .document-link:hover { padding-left: 0; padding-right: 0; }

@@ -204,7 +204,8 @@ describe('下载名额与未设安装包目录', () => {
   it('联机端口不提供官网页面或安装程序', async () => {
     const host = await startHost(0, { host: '127.0.0.1' });
     try {
-      for (const route of ['/', '/download/', '/agreement', '/privacy-policy']) expect((await fetch(`http://127.0.0.1:${host.port}${route}`)).status).toBe(404);
+      for (const route of ['/', '/download/', '/agreement', '/agreement/privacy-policy'])
+        expect((await fetch(`http://127.0.0.1:${host.port}${route}`)).status).toBe(404);
     } finally {
       await host.close();
     }

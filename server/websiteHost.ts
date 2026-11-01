@@ -21,6 +21,8 @@ function repeat(task: () => void, ms: number) {
 export interface WebsiteOptions {
   port: number;
   files: string;
+  /** 构建生成的 HTML 目录；缺省时使用工作目录下的 site */
+  pages?: string;
   commit: string;
   now: () => number;
   log?: Log;
@@ -29,7 +31,7 @@ export interface WebsiteOptions {
 
 /** 只在本机监听；本机直连的健康检查用于独立部署与回滚。 */
 export async function startWebsite(opt: WebsiteOptions) {
-  const files = fileServer(opt.files);
+  const files = fileServer(opt.files, undefined, opt.pages);
   const gate = new HttpGate();
   const web = withHttpLimit(files, gate, opt.now, { log: opt.log });
   const server = http.createServer((req, res) => {
