@@ -2,11 +2,11 @@
  * 大厅中的请求（整改项 P2-12 自 rooms.ts 拆出）：心跳、离开、改名、进入与退出匹配、配对确认、开房间、关房间、
  * 凭房号加入好友房间。维护模式中不再开始新的对局（OPS-045），加入失败过多时暂时拒绝（防止遍历房号）。
  */
+import { errorMsg } from './errorMsg';
 import { BLACK, WHITE } from '../src/core/types';
 import { cleanName, queueRules, type C2S } from '../src/shared/protocol';
 import { allow, violate } from './hub';
 import { confirm, enqueue, rankedElsewhere, unqueue } from './matchmaking';
-import { MAINTENANCE_TEXT } from './play';
 import { byId, freeRoom, leaveRoom, newRoom, roomCode, seatPlayers } from './room';
 import { RoomState, type Player, type QEntry, type ServerContext } from './roomTypes';
 
@@ -68,15 +68,15 @@ export function rename(ctx: ServerContext, p: Player, raw: string) {
 /** 进入匹配或排位：维护模式中、已在房间里、同一台设备已在排位时拒绝；否则重新排队 */
 export function queueFor(ctx: ServerContext, p: Player, { mode, type, size }: Pick<QEntry, 'mode' | 'type' | 'size'>) {
   if (ctx.maintenance) {
-    ctx.send(p, { t: 'error', text: MAINTENANCE_TEXT });
+    ctx.send(p, errorMsg('server.maintenance'));
     return;
   }
   if (busy(p)) {
-    ctx.send(p, { t: 'error', text: '你已经在一个房间里了' });
+    ctx.send(p, errorMsg('room.already-in'));
     return;
   }
   if (mode === 'ranked' && rankedElsewhere(ctx, p)) {
-    ctx.send(p, { t: 'error', text: '这台设备已经在排位中了' });
+    ctx.send(p, errorMsg('queue.ranked-elsewhere'));
     return;
   }
   unqueue(ctx, p);
@@ -86,15 +86,15 @@ export function queueFor(ctx: ServerContext, p: Player, { mode, type, size }: Pi
 /** 开好友房间：维护模式中、已在房间里、房间数已满时拒绝；路数与匹配相同，禁手与每步限时由房主选 */
 export function createRoom(ctx: ServerContext, p: Player, m: Extract<C2S, { t: 'create' }>) {
   if (ctx.maintenance) {
-    ctx.send(p, { t: 'error', text: MAINTENANCE_TEXT });
+    ctx.send(p, errorMsg('server.maintenance'));
     return;
   }
   if (busy(p)) {
-    ctx.send(p, { t: 'error', text: '你已经在一个房间里了' });
+    ctx.send(p, errorMsg('room.already-in'));
     return;
   }
   if (ctx.rooms.size >= MAX_ROOMS) {
-    ctx.send(p, { t: 'error', text: '服务器房间已满，请稍后再试' });
+    ctx.send(p, errorMsg('server.full'));
     return;
   }
   unqueue(ctx, p);
@@ -119,26 +119,26 @@ export function closeRoom(ctx: ServerContext, p: Player) {
 /** 凭房号加入好友房间：本连接或同一 IP 一分钟内失败过多时暂时拒绝并累计违规；房主已离开时释放房间；成功即入座开局 */
 export function joinRoom(ctx: ServerContext, p: Player, code: string) {
   if (ctx.maintenance) {
-    ctx.send(p, { t: 'joinNo', reason: MAINTENANCE_TEXT });
+    ctx.send(p, { t: 'joinNo', code: 'server.maintenance' });
     return;
   }
   const now = ctx.now();
   p.joinFails = p.joinFails.filter(t0 => now - t0 < JOIN_WINDOW_SECS);
   const ip = p.conn?.ip; // 按 IP 计数：换一条连接也躲不开（原问题 A6）
   if (p.joinFails.length >= JOIN_FAILS || (ip !== undefined && ctx.joinFailsByIp.full(ip, now))) {
-    ctx.send(p, { t: 'joinNo', reason: '尝试次数太多，请稍后再试' });
+    ctx.send(p, { t: 'joinNo', code: 'room.join-throttled' });
     violate(ctx, p);
     return;
   } // E3
   const r = [...ctx.rooms.values()].find(room => room.state === RoomState.Wait && room.code === code);
   if (busy(p)) {
-    ctx.send(p, { t: 'joinNo', reason: '你已经在一个房间里了' });
+    ctx.send(p, { t: 'joinNo', code: 'room.already-in' });
     return;
   }
   const noRoom = () => {
     p.joinFails.push(now);
     if (ip !== undefined) ctx.joinFailsByIp.hit(ip, now);
-    ctx.send(p, { t: 'joinNo', reason: '房号不存在，或房间已经开始' });
+    ctx.send(p, { t: 'joinNo', code: 'room.not-found' });
   };
   if (!r) {
     noRoom();
@@ -151,7 +151,7 @@ export function joinRoom(ctx: ServerContext, p: Player, code: string) {
     return;
   }
   if (host === p) {
-    ctx.send(p, { t: 'joinNo', reason: '这是你自己的房间' });
+    ctx.send(p, { t: 'joinNo', code: 'room.own' });
     return;
   }
   unqueue(ctx, p);

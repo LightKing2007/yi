@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.22 |
+| 文件版本 | 1.1.23 |
 | 修订日期 | 2026-11-01 |
 | 规则前缀 | `OPS` |
 
@@ -149,6 +149,7 @@
 | `game.limit` | warn | 对局达到手数或动作记录的上限，按和棋结束（API-046） | `roomId`、`gameId`、`moves`（含停一手）、`acts` |
 | `rating.changed` | info | 段位变化 | `playerId`、`before`、`after` |
 | `proto.invalid` | warn | 非法消息 | `playerId`、`reason` |
+| `proto.outdated` | info | 协议版本不符的客户端，已提示更新并断开 | `version` |
 | `rate.limited` | warn | 触发限流；同一连接每秒至多一行 | `playerId`、`count`（60 秒内累计的违规次数，API-045） |
 | `http.limited` | warn | HTTP 请求超出按 IP 的频率上限（API-041）；至多每 60 秒一行，不记 IP（DAT-073） | `count`（距上一行以来被拒的请求数） |
 | `account.enabled` | info | 账号功能已启用（`YI_ACCOUNTS=1`）；启动时已把上次中断的验证码发送记为结果不明 | `recovered`、`privacy`、`terms` |

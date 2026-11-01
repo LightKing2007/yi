@@ -131,10 +131,10 @@ const LEGAL_S2C: S2C[] = [
   { t: 'found', opp: { name: '乙', points: 1200 }, secs: 15 },
   { t: 'found', opp: { name: '乙' }, secs: 15 },
   { t: 'accepted' },
-  { t: 'unmatched', requeued: true, reason: '对方没有及时确认' },
-  { t: 'unmatched', requeued: false, reason: '' },
+  { t: 'unmatched', requeued: true, reason: 'match.unconfirmed' },
+  { t: 'unmatched', requeued: false },
   { t: 'created', code: '0427' },
-  { t: 'joinNo', reason: '房号不存在，或房间已经开始' },
+  { t: 'joinNo', code: 'room.not-found' },
   { t: 'start', kind: 'friend', color: 2, type: 1, size: 9, renju: false, moveTime: 120, black: { name: '甲' }, white: { name: '乙' } },
   { t: 'moved', x: 18, y: 0 },
   { t: 'passed' },
@@ -147,14 +147,19 @@ const LEGAL_S2C: S2C[] = [
   { t: 'agreed', color: 1 },
   { t: 'resumed' },
   { t: 'over', winner: 3, reason: 'draw' },
+  { t: 'over', winner: 3, reason: 'limit-moves' },
   { t: 'rated', type: 0, rating: RATING, delta: -16 },
   { t: 'peer', online: false, wait: 60 },
   { t: 'peer', online: true },
   { t: 'left' },
   { t: 'sync', acts: [{ k: 'M', x: 3, y: 3 }, { k: 'P' }, { k: 'U', n: 1 }, { k: 'K', x: 3, y: 3 }, { k: 'R' }] },
-  { t: 'info', text: '还没轮到你' },
-  { t: 'error', text: '服务器繁忙，请稍后再试' },
-  { t: 'error', text: '服务器出现问题，请稍后再试', errorId: '0b6f1c52-9d4e-4f3a-8c21-5e7d9a0b1c2d' },
+  { t: 'notice', code: 'server.maintenance' },
+  { t: 'error', code: 'game.not-your-turn', level: 'E1' },
+  { t: 'error', code: 'game.illegal-move', level: 'E1', params: { reject: 'ko' } },
+  { t: 'error', code: 'rate.limited', level: 'E3', retryAfterMs: 3000 },
+  { t: 'error', code: 'proto.version-mismatch', level: 'E4', params: { latest: '4.0.1', url: 'https://yi.lightking.com.cn/download/' } },
+  { t: 'error', code: 'server.internal', level: 'E5', errorId: '0b6f1c52-9d4e-4f3a-8c21-5e7d9a0b1c2d' },
+  { t: 'error', code: 'future.unknown-code', level: 'E2' },
 ];
 
 /** 期望服务端消息校验不通过，返回失败的种类 */
@@ -187,6 +192,22 @@ describe('服务端消息校验：结构', () => {
     expect(Object.getPrototypeOf(go)).toBe(Object.prototype);
     const sync = parseS2C(JSON.parse('{"t":"sync","acts":[{"k":"M","x":1,"y":2,"extra":true}]}'));
     expect(sync).toEqual({ t: 'sync', acts: [{ k: 'M', x: 1, y: 2 }] });
+  });
+
+  it('错误消息：级别须为 E1 至 E5，错误码须为两段式，附加参数有个数与取值的限制', () => {
+    const many = Object.fromEntries(Array.from({ length: 9 }, (_, i) => [`p${'a'.repeat(i + 1)}`, i]));
+    for (const raw of [
+      { t: 'error', code: 'game.not-your-turn', level: 'E9' },
+      { t: 'error', code: 'game.not-your-turn' },
+      { t: 'error', code: 'game', level: 'E1' },
+      { t: 'error', code: 'game.illegal-move', level: 'E1', params: many },
+      { t: 'error', code: 'game.illegal-move', level: 'E1', params: { reject: { nested: true } } },
+      { t: 'error', code: 'game.illegal-move', level: 'E1', params: { Reject: 'ko' } },
+      { t: 'error', text: '服务器繁忙，请稍后再试' },
+      { t: 'info', text: '还没轮到你' },
+    ]) {
+      expect(kindS2C(raw), JSON.stringify(raw)).toBe('format');
+    }
   });
 
   it('顶层不是对象、类型未知或缺少类型时不通过（新版服务端的新消息也按此丢弃）', () => {

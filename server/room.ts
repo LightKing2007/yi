@@ -14,9 +14,6 @@ const CODE_MIN = 1000,
   CODE_SPAN = 9000;
 /** 随机挑房号的尝试次数；都撞上时按顺序找一个空闲的 */
 const CODE_TRIES = 100;
-/** 对局达到手数上限（MOVES_MAX）、动作记录上限（ACTS_MAX）而按和棋结束时的说明（API-046） */
-const MOVES_LIMIT_TEXT = '本局已达到 1024 手的上限，按和棋结束';
-const ACTS_LIMIT_TEXT = '本局的动作记录已达到 4096 条的上限，按和棋结束';
 
 /** 房间的时限：申请无人回应，视为拒绝；本手超时，判负 */
 export function tickRoom(ctx: ServerContext, r: Room, now: number) {
@@ -78,7 +75,6 @@ export function newRoom(ctx: ServerContext, kind: GameKind, rules: RoomRules, se
     deadline: 0,
     paused: 0,
     result: null,
-    limitNote: null,
     rated: [null, null, null],
     recordId: 0,
     turnAt: 0,
@@ -136,8 +132,12 @@ export function bothOnline(ctx: ServerContext, r: Room) {
   return !!(seat(ctx, r, BLACK)?.conn && seat(ctx, r, WHITE)?.conn);
 }
 
-/** 结束对局并写入对局记录；atLimit 为真表示因达到上限而结束（记为 limit），排位赛也不结算段位 */
-export function finish(ctx: ServerContext, r: Room, { winner, reason }: { winner: number; reason: OverReason }, atLimit = false) {
+/** 达到对局上限的终局原因（API-046） */
+const isLimit = (reason: OverReason) => reason === 'limit-moves' || reason === 'limit-acts';
+
+/** 结束对局并写入对局记录；因达到上限而结束的（终局原因 limit-moves、limit-acts）记为 limit，排位赛也不结算段位 */
+export function finish(ctx: ServerContext, r: Room, { winner, reason }: { winner: number; reason: OverReason }) {
+  const atLimit = isLimit(reason);
   if (r.state !== RoomState.Play) return;
   r.state = RoomState.Over;
   r.ask = null;
@@ -152,16 +152,14 @@ export function finish(ctx: ServerContext, r: Room, { winner, reason }: { winner
 
 /**
  * 对局达到手数上限（MOVES_MAX，停一手也计入）或动作记录上限（ACTS_MAX）时按和棋结束（API-046）：
- * 终局原因沿用 draw，现有客户端都能识别；随后说明达到的是哪一项上限。排位赛这一局不结算段位
+ * 终局原因 limit-moves 或 limit-acts 说明达到的是哪一项上限，客户端据此显示；排位赛这一局不结算段位
  */
 export function endAtLimit(ctx: ServerContext, r: Room) {
   const moves = r.g.hist.length,
     acts = r.acts.length;
-  const note = moves >= MOVES_MAX ? MOVES_LIMIT_TEXT : acts >= ACTS_MAX ? ACTS_LIMIT_TEXT : null;
-  if (!note || r.state !== RoomState.Play) return;
-  finish(ctx, r, { winner: DRAWN, reason: 'draw' }, true);
-  r.limitNote = note;
-  broadcast(ctx, r, { t: 'info', text: note });
+  const reason = moves >= MOVES_MAX ? 'limit-moves' : acts >= ACTS_MAX ? 'limit-acts' : null;
+  if (!reason || r.state !== RoomState.Play) return;
+  finish(ctx, r, { winner: DRAWN, reason });
   ctx.log('warn', 'game.limit', { msg: `房间 ${r.id} 达到上限，按和棋结束`, roomId: r.id, gameId: r.gameId, moves, acts });
 }
 
@@ -201,7 +199,6 @@ export function newRoomGame(ctx: ServerContext, r: Room) {
   r.state = RoomState.Play;
   r.paused = 0;
   r.result = null;
-  r.limitNote = null;
   r.rated = [null, null, null];
 }
 
@@ -263,7 +260,6 @@ export function resync(ctx: ServerContext, r: Room, p: Player) {
   if (r.state === RoomState.Over) {
     // 掉线期间对局已经结束：补发结果与排位结算
     if (r.result) ctx.send(p, { t: 'over', ...r.result });
-    if (r.limitNote) ctx.send(p, { t: 'info', text: r.limitNote });
     const rt = r.rated[colorOf(r, p)];
     if (rt) ctx.send(p, { t: 'rated', ...rt });
     return;

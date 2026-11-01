@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 文件编号 | YI-STD-001 |
-| 文件版本 | 1.1.72 |
+| 文件版本 | 1.1.73 |
 | 发布日期 | 2026-10-02 |
 | 状态 | 现行；整改项按 [plan/remediation.md](../plan/remediation.md) 的期限实施 |
 | 编制 | LightKing、Claude |
@@ -334,3 +334,4 @@ GB/T 11457—2006 界定的以及下列术语和定义适用于本规范。
 | 1.1.70 | 2026-11-01 | 修订 [04-api.md](04-api.md) 的 API-060：三份文书移至 `/agreement/privacy-policy`、`/agreement/terms-of-service`、`/agreement/minors-privacy-rules`，旧根路径不再提供页面或跳转；规则编号不变 |
 | 1.1.71 | 2026-11-01 | 修订 [04-api.md](04-api.md) 的 API-060：未知页面路径返回复用官网外壳与首页终章样式的 HTML 404 页面，保持安全头与 HEAD 语义；未知资源仍返回纯文本 404；规则编号不变 |
 | 1.1.72 | 2026-11-01 | 修订 [04-api.md](04-api.md) 的 API-060 与 API-063：帮助与支持改为分类目录和三十四个独立问题页，每个问题一份 Markdown；文书、帮助和 404 构建为静态 HTML，帮助目录以原生 GET 表单作为检索回退，并仅加载同源外部检索脚本；规则编号不变 |
+| 1.1.73 | 2026-11-01 | 随联机协议第 4 版的第一批（F1）更新 [04-api.md](04-api.md)：第 8 节新增错误码 `game.limit-moves`、`game.limit-acts`、`match.declined`、`match.left`、`match.unconfirmed`；API-004、API-015、API-020 改为满足，API-024 改为部分满足，API-046 的终局原因改为 `limit-moves`、`limit-acts`；[07-operations.md](07-operations.md) 新增日志事件 `proto.outdated`；规则编号不变 |

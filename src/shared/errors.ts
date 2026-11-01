@@ -9,7 +9,7 @@ export interface ErrorDef {
   text: string;
 }
 
-/** 全部错误码。联机协议 v3 仍以文本下发，各项随协议 v4 启用；账号接口的错误码已由 HTTP 下发。 */
+/** 全部错误码：联机协议第 4 版与账号接口均只下发错误码（API-020）。 */
 export const ERRORS = {
   'proto.invalid-message': { level: 'E4', text: '消息格式错误' },
   'proto.not-hello': { level: 'E4', text: '请先完成连接握手' },
@@ -32,6 +32,11 @@ export const ERRORS = {
   'game.draw-exhausted': { level: 'E2', text: '本局求和次数已用完' },
   'game.rematch-ranked': { level: 'E2', text: '排位赛不能再来一局' },
   'game.rematch-opponent-left': { level: 'E2', text: '对方已离开，无法再来一局' },
+  'game.limit-moves': { level: 'E2', text: '本局已达到 1024 手的上限，按和棋结束' },
+  'game.limit-acts': { level: 'E2', text: '本局的动作记录已达到 4096 条的上限，按和棋结束' },
+  'match.declined': { level: 'E2', text: '对方未接受' },
+  'match.left': { level: 'E2', text: '对方已离开' },
+  'match.unconfirmed': { level: 'E2', text: '对方未确认' },
   'auth.required': { level: 'E2', text: '请先登录' },
   'auth.invalid': { level: 'E4', text: '登录已失效，请重新登录' },
   'auth.credentials-invalid': { level: 'E2', text: '邮箱或密码不正确' },

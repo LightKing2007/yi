@@ -81,7 +81,7 @@ function client(i, port, stats, rooms) {
   const state = { color: 0, toMove: 0, board: new Set(), sentAt: 0, open: false };
   const send = msg => ws.readyState === ws.OPEN && ws.send(JSON.stringify(msg));
   const host = i % 2 === 0;
-  const rejected = msg => stats.errors.push(msg.text ?? msg.reason);
+  const rejected = msg => stats.errors.push(msg.code);
   /** 各类服务端消息的处理 */
   const on = {
     welcome: () => host && send({ t: 'create', type: 0, size: SIZE, hostColor: 0, renju: false, moveTime: 0 }),
@@ -99,12 +99,11 @@ function client(i, port, stats, rooms) {
     over: () => host && send({ t: 'rematch' }),
     ask: msg => msg.kind === 'rematch' && send({ t: 'reply', kind: 'rematch', ok: true }),
     error: rejected,
-    info: rejected,
     joinNo: rejected,
   };
   ws.on('open', () => {
     state.open = true;
-    send({ t: 'hello', v: 3, name: `压测${i}`, uid: `loadtest-${String(i).padStart(12, '0')}` });
+    send({ t: 'hello', v: 4, name: `压测${i}`, uid: `loadtest-${String(i).padStart(12, '0')}` });
   });
   ws.on('message', data => {
     const msg = JSON.parse(String(data));

@@ -109,7 +109,7 @@ describe('断线重连：按关闭码决定是否重连、多久后重连（04-a
     const peer = startGame(0); // 不限时：推进时间时不会因超时结束对局
     advance(1, peer); // 先走一帧，客户端记下正在对局
     net.setRetryRandom(() => 0);
-    inject({ t: 'error', text: '服务器出现问题，请稍后再试', errorId: ERROR_ID });
+    inject({ t: 'error', code: 'server.internal', level: 'E5', errorId: ERROR_ID });
     lastSocket().cut(CLOSE_CODE.internal);
     pump();
     expect(secsToNextConnect(peer)).toBe(1);

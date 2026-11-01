@@ -4,48 +4,11 @@
  * 并每 60 秒以 metrics.snapshot 事件写入日志。
  */
 import { PROTO_VERSION } from '../src/shared/protocol';
-import { REJECT_TEXTS } from '../src/shared/reject';
 
 /** 直方图的分桶（秒，07-operations.md 第 9 节）：单条消息处理耗时与数据库事务耗时共用 */
 const BUCKET_SECONDS = { '1ms': 0.001, '5ms': 0.005, '10ms': 0.01, '50ms': 0.05, '100ms': 0.1 };
 /** 分桶的上界（秒），从小到大 */
 export const HANDLE_BUCKETS: readonly number[] = Object.values(BUCKET_SECONDS);
-
-/**
- * 协议第 3 版以文本下发错误：按 04-api.md 第 8 节的初始错误码表把文本对应到错误码，作为 yi_errors_total 的 code 标签。
- * 表外的文本记为 other（标签基数有界，OPS-072）
- */
-const ERROR_CODES: Record<string, string> = {
-  消息格式错误: 'proto.invalid-message',
-  协议错误: 'proto.not-hello',
-  '客户端版本与服务器不一致，请更新游戏': 'proto.version-mismatch',
-  '操作过于频繁，请稍后再试': 'rate.limited',
-  '服务器繁忙，请稍后再试': 'server.full',
-  '服务器房间已满，请稍后再试': 'server.full',
-  '服务器即将维护，暂不开始新的对局': 'server.maintenance',
-  '服务器出现问题，请稍后再试': 'server.internal',
-  你已经在一个房间里了: 'room.already-in',
-  '房号不存在，或房间已经开始': 'room.not-found',
-  这是你自己的房间: 'room.own',
-  '尝试次数太多，请稍后再试': 'room.join-throttled',
-  这台设备已经在排位中了: 'queue.ranked-elsewhere',
-  还没轮到你: 'game.not-your-turn',
-  请先等对方回应申请: 'game.awaiting-reply',
-  请先等对方回应: 'game.awaiting-reply',
-  现在不能申请悔棋: 'game.undo-not-allowed',
-  本局悔棋次数已用完: 'game.undo-exhausted',
-  你还没有可以悔的棋: 'game.undo-nothing',
-  本局求和次数已用完: 'game.draw-exhausted',
-  排位赛不能再来一局: 'game.rematch-ranked',
-  '对方已离开，无法再来一局': 'game.rematch-opponent-left',
-};
-
-/** 下发的提示文本对应的错误码 */
-export function errorCode(text: string) {
-  const code = Object.hasOwn(ERROR_CODES, text) ? ERROR_CODES[text] : undefined;
-  if (code) return code;
-  return REJECT_TEXTS.includes(text) ? 'game.illegal-move' : 'other';
-}
 
 /** 读取时由调用方给出的仪表 */
 export interface Gauges {

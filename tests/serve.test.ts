@@ -65,7 +65,7 @@ describe('服务端的运行', () => {
     await serve(run.deps);
     expect(run.events()).toEqual(['db.migrating', 'db.migrated', 'db.opened', 'server.start']);
     const start = run.lines.at(-1);
-    expect(start).toMatchObject({ msg: '弈 联机服务端已启动', protoRange: [3, 3], dbFile: path.join(dir, 'yi.db') });
+    expect(start).toMatchObject({ msg: '弈 联机服务端已启动', protoRange: [4, 4], dbFile: path.join(dir, 'yi.db') });
     const [port] = start?.ports as number[];
     const health = await (await fetch(`http://127.0.0.1:${port}/healthz`)).json();
     expect(health).toMatchObject({ version: '3.0.0', commit: 'abc1234', maintenance: false });

@@ -105,7 +105,9 @@ describe('服务端日志的事件：连接（07-operations.md 第 8 节）', ()
   });
 });
 
-const MAINT = '服务器即将维护，暂不开始新的对局';
+/** 维护模式：受影响的请求收到错误，其余在线玩家收到通知 */
+const MAINT_ERROR = { t: 'error', code: 'server.maintenance', level: 'E2' } as const;
+const MAINT_NOTICE = { t: 'notice', code: 'server.maintenance' } as const;
 
 /** 带日志的服务端，以及处在各种状态的玩家：对局中（甲乙）、排队（丙）、待确认（丁戊）、等待对手（己）、在大厅（庚） */
 function busyWorld() {
@@ -135,13 +137,13 @@ function busyWorld() {
 }
 
 describe('维护模式（OPS-045）', () => {
-  it('进入时取消排队、待确认的配对与等待对手的房间，受影响的收到 error，其余在线玩家收到 info；对局照常下完', () => {
+  it('进入时取消排队、待确认的配对与等待对手的房间，受影响的收到 error，其余在线玩家收到 notice；对局照常下完', () => {
     const { srv, advance, logs, black, white, queuer, pairA, pairB, host, idler, code } = busyWorld();
     srv.connect({ send: () => {}, close: () => {} }); // 尚未握手的连接不计入在线玩家
     expect(srv.health()).toEqual({ players: 7, games: 1, maintenance: false });
     expect(srv.maintain()).toBe(true);
-    for (const cl of [queuer, pairA, pairB, host]) expect(cl.inbox, cl.name).toEqual([{ t: 'error', text: MAINT }]);
-    for (const cl of [black, white, idler]) expect(cl.inbox, cl.name).toEqual([{ t: 'info', text: MAINT }]);
+    for (const cl of [queuer, pairA, pairB, host]) expect(cl.inbox, cl.name).toEqual([MAINT_ERROR]);
+    for (const cl of [black, white, idler]) expect(cl.inbox, cl.name).toEqual([MAINT_NOTICE]);
     expect(srv.health()).toEqual({ players: 7, games: 1, maintenance: true });
     expect(srv.queued('match', 1)).toBe(0);
     // 已取消的配对到时也不会开局，也不再有任何消息；等待中的房间已不在
@@ -152,7 +154,7 @@ describe('维护模式（OPS-045）', () => {
     advance(CONFIRM_SECS + 1);
     expect([...pairA.inbox, ...pairB.inbox]).toEqual([]);
     idler.send({ t: 'join', code });
-    expect(idler.expect('joinNo')).toEqual({ t: 'joinNo', reason: MAINT });
+    expect(idler.expect('joinNo')).toEqual({ t: 'joinNo', code: 'server.maintenance' });
     play(black, white, [[black, 7, 7]]); // 对局中的照常下
     // 只记一行；再次进入什么也不做
     expect(srv.maintain()).toBe(false);
@@ -165,21 +167,18 @@ describe('维护模式（OPS-045）', () => {
     expect(white.expect('over')).toBeTruthy();
     srv.maintain();
     queuer.send({ t: 'queue', mode: 'match', type: 0, size: 15 });
-    expect(queuer.inbox).toEqual([
-      { t: 'error', text: MAINT },
-      { t: 'error', text: MAINT },
-    ]);
+    expect(queuer.inbox).toEqual([MAINT_ERROR, MAINT_ERROR]);
     expect(srv.queued('match', 0)).toBe(0);
     idler.drain();
     idler.send({ t: 'create', type: 0, size: 15, hostColor: 0, renju: true, moveTime: 0 });
-    expect(idler.inbox).toEqual([{ t: 'error', text: MAINT }]);
+    expect(idler.inbox).toEqual([MAINT_ERROR]);
     black.drain();
     black.send({ t: 'rematch' });
-    expect(black.inbox).toEqual([{ t: 'info', text: MAINT }]);
+    expect(black.inbox).toEqual([MAINT_ERROR]);
     expect(white.has('ask')).toBe(false);
     const late = new Client(srv, '辛');
     expect(late.welcome).toBeTruthy();
-    expect(late.inbox).toEqual([{ t: 'info', text: MAINT }]);
+    expect(late.inbox).toEqual([MAINT_NOTICE]);
     expect(srv.health()).toEqual({ players: 8, games: 0, maintenance: true });
   });
 
@@ -195,6 +194,23 @@ describe('维护模式（OPS-045）', () => {
     replier.drain();
     replier.send({ t: 'reply', kind: 'rematch', ok: true });
     expect([...asker.inbox, ...replier.inbox]).toEqual([]);
+  });
+});
+
+describe('维护模式：撤回终局后的申请（OPS-045）', () => {
+  it('终局后待回应的再来一局申请被撤回：双方都收到 error，此后同意也不再开局', () => {
+    const { srv, black, white } = busyWorld();
+    black.send({ t: 'resign' });
+    expect(white.expect('over')).toBeTruthy();
+    black.send({ t: 'rematch' });
+    expect(white.expect('ask')?.kind).toBe('rematch');
+    black.drain();
+    white.drain();
+    srv.maintain();
+    expect(black.inbox).toEqual([MAINT_ERROR]);
+    expect(white.inbox).toEqual([MAINT_ERROR]);
+    white.send({ t: 'reply', kind: 'rematch', ok: true });
+    expect(black.has('start') || white.has('start')).toBe(false);
   });
 });
 

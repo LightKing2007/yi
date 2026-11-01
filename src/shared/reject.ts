@@ -1,4 +1,4 @@
-/** 不合法着法的提示文字：中文原文（界面经 T() 翻译；v3 协议的服务端直接把原文发给客户端） */
+/** 不合法着法的提示文字：中文原文（界面经 T() 翻译；联机时服务端以错误码 game.illegal-move 下发原因，params.reject） */
 import type { Reject } from '../core/move';
 
 const TEXT: Record<Reject, string> = {
@@ -15,5 +15,3 @@ const TEXT: Record<Reject, string> = {
 };
 
 export const rejectText = (why: Reject) => TEXT[why];
-/** 全部提示文字（服务端的指标按此识别“着法不合法”，07-operations.md 第 9 节 yi_errors_total） */
-export const REJECT_TEXTS: readonly string[] = [...new Set(Object.values(TEXT))];

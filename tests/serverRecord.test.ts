@@ -188,6 +188,7 @@ describe('结算与特殊的终局', () => {
     }
     expect(games()).toEqual([expect.objectContaining({ move_count: MOVES_MAX, winner: 'draw', end_reason: 'limit', is_rated: 0 })]);
     expect(changes()).toEqual([]);
+    expect(record(1).result).toEqual({ winner: 3, reason: 'draw' }); // 棋谱没有“达到上限”一类，按和棋记
     expect(JSON.stringify(record(1)).length).toBeLessThan(256 * 1024);
     expect(record(1).moves.every(move => move.m.k === 'pass' && typeof move.ms === 'number')).toBe(true); // 停一手也记下用时
   });
@@ -262,7 +263,7 @@ describe('对局记录写入失败（10-edge-cases.md 第 4 节）', () => {
     const errorId = failed[0]?.entry.errorId;
     for (const client of [jia, yi]) {
       expect(client.expect('over')).toMatchObject({ reason: 'resign' });
-      expect(client.expect('error')).toEqual({ t: 'error', text: '服务器出现问题，请稍后再试', errorId });
+      expect(client.expect('error')).toEqual({ t: 'error', code: 'server.internal', level: 'E5', errorId });
       expect(client.has('rated')).toBe(false);
       expect(client.closed).toBe(false);
     }
@@ -292,7 +293,7 @@ describe('对局记录写入失败（10-edge-cases.md 第 4 节）', () => {
     expect(logs.filter(row => row.event === 'db.write-failed').map(row => row.entry.op)).toEqual(['start', 'finish']);
     expect(blk.expect('over')).toMatchObject({ winner: 1, reason: 'resign' });
     expect(blk.has('rated')).toBe(false);
-    expect(blk.expect('error')).toMatchObject({ text: '服务器出现问题，请稍后再试' });
+    expect(blk.expect('error')).toMatchObject({ code: 'server.internal' });
   });
 });
 

@@ -28,7 +28,7 @@ describe('入站消息校验', () => {
       { t: 'resign', extra: 1, ...junk(17) },
     ]) {
       raw(jia, m);
-      expect(jia.inbox).toEqual([{ t: 'error', text: '消息格式错误' }]);
+      expect(jia.inbox).toEqual([{ t: 'error', code: 'proto.invalid-message', level: 'E4' }]);
       jia.drain();
     }
     expect(yi.inbox).toEqual([]);
@@ -42,8 +42,8 @@ describe('入站消息校验', () => {
     raw(jia, { t: 'queue', mode: 'match', type: 0, size: 14 });
     raw(jia, { t: 'create', type: 1, size: 19, hostColor: 0, renju: false, moveTime: 600 });
     expect(jia.inbox).toEqual([
-      { t: 'error', text: '消息格式错误' },
-      { t: 'error', text: '消息格式错误' },
+      { t: 'error', code: 'proto.invalid-message', level: 'E4' },
+      { t: 'error', code: 'proto.invalid-message', level: 'E4' },
     ]);
     expect(srv.queued('match', 0)).toBe(0);
   });
@@ -54,7 +54,7 @@ describe('入站消息校验', () => {
     const inbox: S2C[] = [];
     const sess = must(srv.connect({ send: m => inbox.push(expectClientAccepts(m)), close: () => {} }) ?? undefined, '服务端接受的连接');
     for (const m of [undefined, null, [], { t: 'hello', v: PROTO_VERSION, name: '甲', uid: 'bad uid' }]) srv.message(sess, m);
-    expect(inbox).toEqual(Array(4).fill({ t: 'error', text: '消息格式错误' }));
+    expect(inbox).toEqual(Array(4).fill({ t: 'error', code: 'proto.invalid-message', level: 'E4' }));
     expect(logs.filter(row => row.event === 'proto.invalid')).toEqual([{ event: 'proto.invalid', entry: expect.objectContaining({ reason: '消息不是对象' }) }]);
   });
 });
@@ -73,11 +73,11 @@ function undoSteps(jia: Client, yi: Client) {
   yi.send({ t: 'undo' });
   jia.expect('ask');
   yi.send({ t: 'undo' });
-  expect(yi.expect('info')?.text).toBe('现在不能申请悔棋');
+  expect(yi.expect('error')?.code).toBe('game.undo-not-allowed');
   jia.send({ t: 'reply', kind: 'undo', ok: false });
   yi.expect('answer');
   yi.send({ t: 'undo' });
-  expect(yi.expect('info')?.text).toBe('本局悔棋次数已用完');
+  expect(yi.expect('error')?.code).toBe('game.undo-exhausted');
 }
 
 /** 求和被拒、认输，再来一局时交换先后手 */
@@ -117,7 +117,7 @@ function renjuFiveLeave(jia: Client, yi: Client) {
     [jia, 14, 14],
   ]);
   yi.send({ t: 'move', x: 7, y: 7 });
-  expect(yi.expect('info')?.text).toContain('三三');
+  expect(yi.expect('error')).toEqual({ t: 'error', code: 'game.illegal-move', level: 'E1', params: { reject: 'renju-33' } });
 
   // 连成五子
   play(jia, yi, [
@@ -135,7 +135,7 @@ function renjuFiveLeave(jia: Client, yi: Client) {
   jia.send({ t: 'leave' });
   expect(yi.expect('left')).toBeTruthy();
   yi.send({ t: 'rematch' });
-  expect(yi.expect('info')?.text).toBe('对方已离开，无法再来一局');
+  expect(yi.expect('error')?.code).toBe('game.rematch-opponent-left');
   yi.send({ t: 'leave' });
   yi.send({ t: 'queue', mode: 'match', type: 0, size: 15 }); // 离开后可以接着匹配
   expect(yi.expect('queued')).toBeTruthy();
@@ -148,7 +148,7 @@ describe('五子棋对局', () => {
       yi = new Client(srv, '乙');
     startGame(jia, yi);
     yi.send({ t: 'move', x: 7, y: 7 });
-    expect(yi.expect('info')?.text).toBe('还没轮到你');
+    expect(yi.expect('error')?.code).toBe('game.not-your-turn');
     jia.send({ t: 'move', x: 7, y: 7 });
     expect(jia.expect('moved') && yi.expect('moved')).toBeTruthy();
     play(jia, yi, [

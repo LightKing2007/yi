@@ -7,7 +7,8 @@ import type { GameRecord } from '../src/core/record';
 import { BLACK, WHITE, at } from '../src/core/types';
 import type { OverReason } from '../src/shared/protocol';
 import { announceRated, elo, typeKey } from './rating';
-import { INTERNAL_TEXT, type GameSide, type Room, type ServerContext, type StoredEndReason } from './roomTypes';
+import { errorMsg } from './errorMsg';
+import { type GameSide, type Room, type ServerContext, type StoredEndReason } from './roomTypes';
 
 /** 每秒的毫秒数 */
 const MS_PER_SEC = 1000;
@@ -28,7 +29,9 @@ export function stampMove(ctx: ServerContext, r: Room) {
 /** 这一局的棋谱：规则、终局时的着法序列与用时、点目时的死子、结果 */
 export function toRecord(r: Room, winner: number, reason: OverReason): GameRecord {
   const g = r.g;
-  const record: GameRecord = { cfg: g.cfg, moves: g.moves.map(move => ({ ...move })), result: { winner, reason } };
+  // 棋谱的终局原因没有“达到上限”一类，按和棋记（对局表另以 limit 区分，DAT-040）
+  const stored = reason === 'limit-moves' || reason === 'limit-acts' ? 'draw' : reason;
+  const record: GameRecord = { cfg: g.cfg, moves: g.moves.map(move => ({ ...move })), result: { winner, reason: stored } };
   if (reason === 'score') {
     const dead: { x: number; y: number }[] = [];
     for (let x = 0; x < g.N; x++) for (let y = 0; y < g.N; y++) if (g.dead[at(x, y)]) dead.push({ x, y });
@@ -42,7 +45,7 @@ function writeFailed(ctx: ServerContext, r: Room, op: string, err: unknown) {
   const errorId = randomUUID();
   ctx.log('error', 'db.write-failed', { msg: `房间 ${r.id} 的对局记录写入失败（${op}）`, roomId: r.id, gameId: r.gameId, op, errorId, err });
   ctx.metrics?.inc('yi_db_write_failures_total');
-  for (const p of [r.who[BLACK], r.who[WHITE]]) if (p) ctx.send(p, { t: 'error', text: INTERNAL_TEXT, errorId });
+  for (const p of [r.who[BLACK], r.who[WHITE]]) if (p) ctx.send(p, errorMsg('server.internal', { errorId }));
 }
 
 /** 一方在存放处中的身份 */

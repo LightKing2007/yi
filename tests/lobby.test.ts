@@ -52,7 +52,7 @@ describe('匹配：配对与确认', () => {
     pump();
     expect(net.st.phase).toBe(net.Phase.Lobby);
     expect(net.st.opp).toBeNull();
-    expect(peer.last('unmatched')).toEqual({ t: 'unmatched', requeued: true, reason: '对方未接受' });
+    expect(peer.last('unmatched')).toEqual({ t: 'unmatched', requeued: true, reason: 'match.declined' });
   });
 
   it('对方拒绝配对：自动继续匹配，并提示原因', () => {
@@ -126,7 +126,7 @@ describe('好友房间', () => {
     expect([net.st.phase, net.st.code]).toEqual([net.Phase.Lobby, '']);
     const peer = new Peer();
     peer.send({ t: 'join', code });
-    expect(peer.last('joinNo')?.reason).toBe('房号不存在，或房间已经开始');
+    expect(peer.last('joinNo')?.code).toBe('room.not-found');
   });
 
   it('房号不存在：提示原因，可以再试', () => {

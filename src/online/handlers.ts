@@ -8,10 +8,11 @@ import { T } from '../i18n';
 import { sfx } from '../audio';
 import { game, screen, Screen, boardView, session } from '../app/state';
 import { logError, native } from '../app/native';
-import { DRAWN, RESUME_WAIT_SECS, type Act, type AskKind, type OverReason, type S2C } from '../shared/protocol';
+import { DOWNLOAD_URL_PATTERN, DRAWN, RESUME_WAIT_SECS, VERSION_PATTERN, type Act, type AskKind, type OverReason, type S2C } from '../shared/protocol';
 import { Phase, bump, goScreen, myTurn, note, saveUpdate, st } from './state';
 import { send, takePending } from './connection';
 import { move, pass } from './actions';
+import { errorText } from './errorText';
 
 /** 重放一整局（重连时）：不要逐手的动画与声音 */
 function replay(acts: Act[]) {
@@ -67,6 +68,8 @@ const WHY: Record<string, [string, string]> & { five: [string, string] } = {
   full: ['棋盘已满', '棋盘已满'],
   score: ['点目结束', '点目结束'],
   five: ['五子连珠', '五子连珠'],
+  'limit-moves': ['本局已达到 1024 手的上限，按和棋结束', '本局已达到 1024 手的上限，按和棋结束'],
+  'limit-acts': ['本局的动作记录已达到 4096 条的上限，按和棋结束', '本局的动作记录已达到 4096 条的上限，按和棋结束'],
 };
 
 /** 终局：记下胜负与原因，让本地的对局照此结束（点目定局、五连或下满、其余情况放终局动画），并提示结果与原因 */
@@ -169,7 +172,8 @@ function onUnmatched(m: ServerMsg<'unmatched'>) {
   st.opp = null;
   if (m.requeued) {
     st.phase = Phase.Queue;
-    note([m.reason], ['继续为你寻找']);
+    if (m.reason) note([errorText(m.reason)], ['继续为你寻找']);
+    else note(['继续为你寻找']);
     return;
   }
   if (st.phase === Phase.Found && !st.accepted) note(['没有及时确认，已退出匹配']);
@@ -205,7 +209,7 @@ const HANDLERS: { [K in S2C['t']]: Handler<K> } = {
   },
   joinNo: m => {
     st.busy = false;
-    note([m.reason]);
+    note([errorText(m.code)]);
   },
   start: m => {
     st.resumeBy = 0;
@@ -270,17 +274,27 @@ const HANDLERS: { [K in S2C['t']]: Handler<K> } = {
     st.askIn = st.askOut = null;
     note(['对方已离开房间']);
   },
-  // info 只在请求被拒时出现：申请没发出去
-  info: m => {
-    note([m.text]);
-    st.askOut = null;
-  },
+  notice: m => note([errorText(m.code)]),
   error: m => {
     // 服务端内部错误带错误编号：写入本机日志，玩家反馈问题时据此与服务端日志对照（API-023）
     if (m.errorId) logError('联机', `服务端内部错误，错误编号 ${m.errorId}`);
-    note([m.text]);
+    const { latest, url } = m.params ?? {};
+    // 新版本号与下载地址与 welcome 中的同样校验（只接受 http(s) 地址）
+    if (
+      m.code === 'proto.version-mismatch' &&
+      typeof latest === 'string' &&
+      typeof url === 'string' &&
+      VERSION_PATTERN.test(latest) &&
+      DOWNLOAD_URL_PATTERN.test(url)
+    )
+      saveUpdate(latest, url);
+    note([errorText(m.code, m.params)]);
     st.busy = false;
-    if (st.phase >= Phase.Queue && st.phase < Phase.Playing) st.phase = Phase.Lobby;
+    // 对局中（含终局后）的请求被拒：申请没发出去；匹配、等确认、等好友时回到大厅
+    if (st.phase === Phase.Playing) {
+      st.askOut = null;
+      if (m.code === 'server.maintenance' && st.askIn === 'rematch') st.askIn = null; // 维护开始时服务端撤回了再来一局的申请
+    } else if (st.phase >= Phase.Queue && st.phase < Phase.Playing) st.phase = Phase.Lobby;
   },
 };
 
