@@ -51,6 +51,11 @@ export class AccountApiWorld extends AuthenticationWorld {
     return this;
   }
 
+  /** 账号接口的根地址（客户端测试用） */
+  get base(): string {
+    return `http://127.0.0.1:${this.port}/api/v1`;
+  }
+
   /** 发出一次请求并读完响应 */
   ask(method: string, path: string, opt: Ask = {}): Promise<Answer> {
     const raw = opt.body === undefined ? undefined : typeof opt.body === 'string' || Buffer.isBuffer(opt.body) ? opt.body : JSON.stringify(opt.body);

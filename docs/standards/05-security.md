@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.17 |
+| 文件版本 | 1.1.18 |
 | 修订日期 | 2026-11-01 |
 | 规则前缀 | `SEC` |
 
@@ -33,7 +33,7 @@
 | SEC-010 | A | 3.0 版本起，联机统一使用 `wss://`，HTTP 统一使用 `https://`，TLS 版本 ≥ 1.2，证书由 Caddy 自动续期；客户端严禁回退到明文连接 | 满足（3.0.0 起客户端经 `wss://yi.lightking.com.cn/ws` 连接，下载页面经 `https://`，证书由 Caddy 自动续期；客户端的服务器地址只有这一个，没有回退到明文的途径。2026-10-24 随 3.0.0 上线） |
 | SEC-011 | A | 启用 TLS 后，服务端监听地址必须为 127.0.0.1，公网只开放 80、443（80 只用于证书申请与跳转至 HTTPS）；8443 端口必须在安全组与主机防火墙中同时关闭 | 满足（2026-10-24 随 3.0.0 以 `install-service` 安装设 `HOST=127.0.0.1` 的 `yi.service`，服务端只监听本机；同日在安全组与 UFW 中关闭 8443，公网只开放 22、80、443） |
 | SEC-012 | A | 严禁在明文通道上传输口令、邮箱验证码、登录令牌；账号系统（阶段 6）必须在 SEC-010 满足之后才允许上线 | 满足 |
-| SEC-013 | A | `index.html` 的 CSP 中 `connect-src` 必须收紧为生产服务器的确切地址（开发模式另行注入），严禁使用通配的 `ws:`、`wss:` | 满足（`index.html` 的 `connect-src` 为 `'self' wss://yi.lightking.com.cn`；开发模式由 Vite 插件另加本机地址，`scripts/dev-csp.mjs`；`tests/csp.test.ts` 核对。2026-10-24 随 3.0.0 发布） |
+| SEC-013 | A | `index.html` 的 CSP 中 `connect-src` 必须收紧为生产服务器的确切地址（开发模式另行注入），严禁使用通配的 `ws:`、`wss:` | 满足（`index.html` 的 `connect-src` 为 `'self' wss://yi.lightking.com.cn https://yi.lightking.com.cn`，后者为账号接口，账号接口契约第 2.4.4 条；开发模式由 Vite 插件另加本机地址，`scripts/dev-csp.mjs`；`tests/csp.test.ts` 核对。2026-10-24 随 3.0.0 发布） |
 
 ## 3 身份与会话
 
