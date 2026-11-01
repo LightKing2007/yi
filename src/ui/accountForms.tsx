@@ -6,6 +6,7 @@ import type { ComponentChildren } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import { accounts, codeComplete, emailLooksValid, mailLanguage, passwordLongEnough, problemText } from '../app/account';
 import { settings } from '../app/settings';
+import { screen, Screen } from '../app/state';
 import { T, TF } from '../i18n';
 import type { AccountResult, CodePurpose } from '../online/accountApi';
 import { accountBack, accountView, typedEmail } from './accountNav';
@@ -136,7 +137,7 @@ export function LoginForm({ h }: { h: number }) {
       if (!session) return UNAVAILABLE;
       const r = await session.login(email.trim(), password);
       if (r.ok) {
-        accountBack();
+        if (screen.value === Screen.Account && accountView.value === 'login') accountBack(); // 等待期间已离开登录页时不再跳转
         return undefined;
       }
       setPassword('');

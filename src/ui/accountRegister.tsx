@@ -7,7 +7,8 @@ import { accounts, codeComplete, emailLooksValid, passwordLongEnough, problemTex
 import { T, TF } from '../i18n';
 import type { RequiredConsents } from '../online/accountApi';
 import { clipName } from '../shared/protocol';
-import { accountBack, typedEmail } from './accountNav';
+import { accountBack, accountView, typedEmail } from './accountNav';
+import { screen, Screen } from '../app/state';
 import { type Challenge, FormError, FormLinks, FormPanel, maskEmail, PRIMARY_H, requestCode, resendLabel, useSecondsLeft, useSubmit } from './accountForms';
 import { ConsentCheck } from './accountConsent';
 import { Button, CodeCells, Field, FieldLabel, Fit, PasswordField } from './widgets';
@@ -210,7 +211,7 @@ function Profile({ email, challenge, code, onCodeError }: { email: string; chall
       const consent = { accepted: true as const, privacy: consents.privacy, terms: consents.terms };
       const r = await session.register({ name: name.trim(), email: email.trim(), password, challengeId: challenge.id, code, consent });
       if (r.ok) {
-        accountBack();
+        if (screen.value === Screen.Account && accountView.value === 'register') accountBack(); // 等待期间已离开注册页时不再跳转
         return undefined;
       }
       if (r.problem.code === 'code.invalid') onCodeError(problemText(r.problem));
