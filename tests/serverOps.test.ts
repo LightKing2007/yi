@@ -161,21 +161,6 @@ describe('维护模式（OPS-045）', () => {
     expect(logs.filter(row => row.event === 'server.maintenance').map(row => row.entry)).toEqual([expect.objectContaining({ games: 1, players: 7 })]);
   });
 
-  it('终局后待回应的再来一局申请被撤回：双方都收到 error，此后同意也不再开局', () => {
-    const { srv, black, white } = busyWorld();
-    black.send({ t: 'resign' });
-    expect(white.expect('over')).toBeTruthy();
-    black.send({ t: 'rematch' });
-    expect(white.expect('ask')?.kind).toBe('rematch');
-    black.drain();
-    white.drain();
-    srv.maintain();
-    expect(black.inbox).toEqual([MAINT_ERROR]);
-    expect(white.inbox).toEqual([MAINT_ERROR]);
-    white.send({ t: 'reply', kind: 'rematch', ok: true });
-    expect(black.has('start') || white.has('start')).toBe(false);
-  });
-
   it('此后拒绝排队、开房、加入与再来一局；新上线的玩家在 welcome 之后收到通知', () => {
     const { srv, black, white, queuer, idler } = busyWorld();
     black.send({ t: 'resign' });
@@ -209,6 +194,23 @@ describe('维护模式（OPS-045）', () => {
     replier.drain();
     replier.send({ t: 'reply', kind: 'rematch', ok: true });
     expect([...asker.inbox, ...replier.inbox]).toEqual([]);
+  });
+});
+
+describe('维护模式：撤回终局后的申请（OPS-045）', () => {
+  it('终局后待回应的再来一局申请被撤回：双方都收到 error，此后同意也不再开局', () => {
+    const { srv, black, white } = busyWorld();
+    black.send({ t: 'resign' });
+    expect(white.expect('over')).toBeTruthy();
+    black.send({ t: 'rematch' });
+    expect(white.expect('ask')?.kind).toBe('rematch');
+    black.drain();
+    white.drain();
+    srv.maintain();
+    expect(black.inbox).toEqual([MAINT_ERROR]);
+    expect(white.inbox).toEqual([MAINT_ERROR]);
+    white.send({ t: 'reply', kind: 'rematch', ok: true });
+    expect(black.has('start') || white.has('start')).toBe(false);
   });
 });
 
