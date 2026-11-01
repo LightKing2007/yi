@@ -417,7 +417,7 @@ canvas {
 .srow {
   display: flex;
   align-items: center;
-  min-height: 34px;
+  min-height: 38px;
   margin-bottom: 12px;
 }
 .srow > .label {
@@ -432,7 +432,7 @@ canvas {
   min-width: 0;
 }
 .srow .seg {
-  height: 34px;
+  height: 38px;
 }
 .swide {
   margin: 4px 0 10px;
@@ -443,7 +443,7 @@ canvas {
   margin-bottom: 8px;
 }
 .swide .seg {
-  height: 34px;
+  height: 38px;
 }
 
 /* 对局状态 */
