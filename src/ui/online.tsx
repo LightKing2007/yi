@@ -72,16 +72,11 @@ function typeRows(ranked: boolean) {
   return (
     <>
       <Row label={T('棋类')}>
-        <Seg height={34} items={[T('五子棋'), T('围棋')]} sel={u.type} onChange={v => setUi({ type: v })} />
+        <Seg items={[T('五子棋'), T('围棋')]} sel={u.type} onChange={v => setUi({ type: v })} />
       </Row>
       {u.type === 1 && !ranked && (
         <Row label={T('路数')}>
-          <Seg
-            height={34}
-            items={[T('9 路'), T('13 路'), T('19 路')]}
-            sel={u.size === 9 ? 0 : u.size === 13 ? 1 : 2}
-            onChange={v => setUi({ size: [9, 13, 19][v] })}
-          />
+          <Seg items={[T('9 路'), T('13 路'), T('19 路')]} sel={u.size === 9 ? 0 : u.size === 13 ? 1 : 2} onChange={v => setUi({ size: [9, 13, 19][v] })} />
         </Row>
       )}
     </>
@@ -152,17 +147,16 @@ function friendTab() {
   };
   return (
     <>
-      <Seg height={34} items={[T('开房间'), T('加入房间')]} sel={u.friend} onChange={v => setUi({ friend: v })} />
+      <Seg items={[T('开房间'), T('加入房间')]} sel={u.friend} onChange={v => setUi({ friend: v })} />
       <div style={{ height: '18px' }} />
       {u.friend === 0 ? (
         <>
           <Row label={T('棋类')}>
-            <Seg height={34} items={[T('五子棋'), T('围棋')]} sel={u.fType} onChange={v => setUi({ fType: v })} />
+            <Seg items={[T('五子棋'), T('围棋')]} sel={u.fType} onChange={v => setUi({ fType: v })} />
           </Row>
           {u.fType === 1 ? (
             <Row label={T('路数')}>
               <Seg
-                height={34}
                 items={[T('9 路'), T('13 路'), T('19 路')]}
                 sel={u.fSize === 9 ? 0 : u.fSize === 13 ? 1 : 2}
                 onChange={v => setUi({ fSize: [9, 13, 19][v] })}
@@ -170,15 +164,14 @@ function friendTab() {
             </Row>
           ) : (
             <Row label={T('黑棋禁手')}>
-              <Seg height={34} items={[T('开'), T('关')]} sel={renju ? 0 : 1} onChange={v => setUi({ fRenju: v === 0 ? 1 : 0 })} />
+              <Seg items={[T('开'), T('关')]} sel={renju ? 0 : 1} onChange={v => setUi({ fRenju: v === 0 ? 1 : 0 })} />
             </Row>
           )}
           <Row label={T('我执')}>
-            <Seg height={34} items={[T('执黑'), T('执白'), T('随机')]} sel={u.fColor} onChange={v => setUi({ fColor: v })} />
+            <Seg items={[T('执黑'), T('执白'), T('随机')]} sel={u.fColor} onChange={v => setUi({ fColor: v })} />
           </Row>
           <Row label={T('每步限时')}>
             <Seg
-              height={34}
               items={[T('不限'), T('30 秒'), T('60 秒'), T('120 秒')]}
               sel={[0, 30, 60, 120].indexOf(u.fTime)}
               onChange={v => setUi({ fTime: [0, 30, 60, 120][v] })}

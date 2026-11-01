@@ -127,7 +127,7 @@ export function GamePanel({ h }: { h: number }) {
       {vsComputer && (
         <>
           <div style={{ height: '8px' }} />
-          <Seg height={34} items={[T('简单'), T('普通'), T('困难')]} sel={s.aiLevel} onChange={v => setSettings({ aiLevel: v })} />
+          <Seg items={[T('简单'), T('普通'), T('困难')]} sel={s.aiLevel} onChange={v => setSettings({ aiLevel: v })} />
         </>
       )}
       <Hair style={{ margin: `${vsComputer ? 28 : 32}px 0 30px` }} />
@@ -223,7 +223,7 @@ export function Row({ label, children }: { label: string; children: preact.Compo
 function OnOff({ label, on, set }: { label: string; on: boolean; set: (v: boolean) => void }) {
   return (
     <Row label={label}>
-      <Seg height={34} items={[T('开'), T('关')]} sel={on ? 0 : 1} onChange={v => set(v === 0)} />
+      <Seg items={[T('开'), T('关')]} sel={on ? 0 : 1} onChange={v => set(v === 0)} />
     </Row>
   );
 }
@@ -260,13 +260,13 @@ export function SettingsPanel({ h }: { h: number }) {
       {tab === 1 && (
         <>
           <Row label={T('语言')}>
-            <Seg height={34} items={['文言', '中文', 'English']} sel={s.lang} onChange={v => setSettings({ lang: v })} />
+            <Seg items={['文言', '中文', 'English']} sel={s.lang} onChange={v => setSettings({ lang: v })} />
           </Row>
           <Row label={T('主题')}>
-            <Seg height={34} items={[T('浅色'), T('深色')]} sel={s.theme} onChange={v => setSettings({ theme: v })} />
+            <Seg items={[T('浅色'), T('深色')]} sel={s.theme} onChange={v => setSettings({ theme: v })} />
           </Row>
           <Row label={T('终局特效')}>
-            <Seg height={34} items={[T('关闭'), T('简洁'), T('完整')]} sel={s.fx} onChange={v => setSettings({ fx: v })} />
+            <Seg items={[T('关闭'), T('简洁'), T('完整')]} sel={s.fx} onChange={v => setSettings({ fx: v })} />
           </Row>
           <OnOff label={T('屏幕震动')} on={s.shake} set={v => setSettings({ shake: v })} />
           <div class="swide">
@@ -282,13 +282,13 @@ export function SettingsPanel({ h }: { h: number }) {
       {tab === 2 && (
         <>
           <Row label={T('落子动画')}>
-            <Seg height={34} items={[T('慢'), T('标准'), T('快')]} sel={s.animSpeed} onChange={v => setSettings({ animSpeed: v })} />
+            <Seg items={[T('慢'), T('标准'), T('快')]} sel={s.animSpeed} onChange={v => setSettings({ animSpeed: v })} />
           </Row>
           <Row label={T('预览跟随')}>
-            <Seg height={34} items={[T('柔和'), T('标准'), T('跟手')]} sel={s.follow} onChange={v => setSettings({ follow: v })} />
+            <Seg items={[T('柔和'), T('标准'), T('跟手')]} sel={s.follow} onChange={v => setSettings({ follow: v })} />
           </Row>
           <Row label={T('棋盘坐标')}>
-            <Seg height={34} items={[T('隐藏'), T('显示')]} sel={s.coords ? 1 : 0} onChange={v => setSettings({ coords: v === 1 })} />
+            <Seg items={[T('隐藏'), T('显示')]} sel={s.coords ? 1 : 0} onChange={v => setSettings({ coords: v === 1 })} />
           </Row>
           <OnOff label={T('最后一手')} on={s.lastMark} set={v => setSettings({ lastMark: v })} />
           <OnOff
@@ -300,11 +300,10 @@ export function SettingsPanel({ h }: { h: number }) {
             }}
           />
           <Row label={T('电脑难度')}>
-            <Seg height={34} items={[T('简单'), T('普通'), T('困难')]} sel={s.aiLevel} onChange={v => setSettings({ aiLevel: v })} />
+            <Seg items={[T('简单'), T('普通'), T('困难')]} sel={s.aiLevel} onChange={v => setSettings({ aiLevel: v })} />
           </Row>
           <Row label={T('人机执子')}>
             <Seg
-              height={34}
               items={[T('执黑先行'), T('执白后行')]}
               sel={s.humanWhite ? 1 : 0}
               onChange={v => {
@@ -315,7 +314,7 @@ export function SettingsPanel({ h }: { h: number }) {
           </Row>
         </>
       )}
-      <div style={{ position: 'absolute', left: 0, right: 0, top: 4 + 56 + 38 + 38 + 22 + 7 * 46 + 16 + 'px' }}>
+      <div style={{ position: 'absolute', left: 0, right: 0, top: 4 + 56 + 38 + 38 + 22 + 7 * 50 + 16 + 'px' }}>
         <Hair />
         <div class="btns" style={{ marginTop: '24px' }}>
           <Button
