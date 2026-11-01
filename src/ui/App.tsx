@@ -5,7 +5,8 @@ import { settings } from '../app/settings';
 import { game, screen, Screen, uiTick } from '../app/state';
 import { T } from '../i18n';
 import { OnlineGamePanel, OnlinePanel, ScenePlates } from './online';
-import { netTick, st as net } from '../online/client';
+import { netTick, Phase, st as net } from '../online/client';
+import { AccountPanel, accountGate } from './account';
 import { GamePanel, MenuPanel, MorePanel, SettingsPanel } from './panels';
 
 function Panel({ s, h }: { s: Screen; h: number }) {
@@ -20,7 +21,10 @@ function Panel({ s, h }: { s: Screen; h: number }) {
     case Screen.Game:
       return net.shownOnline ? <OnlineGamePanel h={h} /> : <GamePanel h={h} />;
     case Screen.Online:
-      return <OnlinePanel h={h} />;
+      // 登录门槛只替代大厅：匹配中、等好友、对局中不因登录状态变化而被打断
+      return (net.phase <= Phase.Lobby && accountGate(h)) || <OnlinePanel h={h} />;
+    case Screen.Account:
+      return <AccountPanel h={h} />;
   }
 }
 

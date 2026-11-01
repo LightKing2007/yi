@@ -294,7 +294,7 @@ G 完成后进入 4.0 的正式发布验收；阶段 8 不再是 4.0 的前置�
 | 4 | 批次 G：全链路验收与 4.0 发布 | 第 3 项 | 含数据库结构 1 升 5 的升级演练，以及配套恢复数据库的回滚演练 |
 | 5 | 阶段 8：反作弊与管理工具 | 4.0 发布 | 另编实施计划，在 4.x 交付 |
 
-2026-11-01：第 1 项的接口契约见 [account-api.md](account-api.md)，项目所有者已确认（#228）；契约第 7 章要求的业务补充已完成（#230）；账号 HTTP 路由处理已实现（#231）。项目所有者 2026-11-01 选定自写精简 SMTP 客户端（`server/smtp.ts`，不新增依赖；nodemailer 的 MIT-0 许可证不在 COD-070 名单内），验证码邮件按玩家的界面语言只用一种语言、显示 HTML 版式，版式经项目所有者 2026-11-01 定稿（`server/codeMail*.ts`）；账号功能已装配到联机程序，由开关 `YI_ACCOUNTS` 控制、默认关闭，密钥与发信凭据经 systemd 的 `LoadCredential=` 传入（项目所有者 2026-11-01 确认方案），打开步骤见 [运维规程](../procedures/ops.md) 第 8 章。下一步为批次 E：桌面安全存储（`electron/credentials.ts`）与账号接口的客户端（`src/online/accountApi.ts`、`account.ts`）已实现，登录界面的设计待项目所有者确认。
+2026-11-01：第 1 项的接口契约见 [account-api.md](account-api.md)，项目所有者已确认（#228）；契约第 7 章要求的业务补充已完成（#230）；账号 HTTP 路由处理已实现（#231）。项目所有者 2026-11-01 选定自写精简 SMTP 客户端（`server/smtp.ts`，不新增依赖；nodemailer 的 MIT-0 许可证不在 COD-070 名单内），验证码邮件按玩家的界面语言只用一种语言、显示 HTML 版式，版式经项目所有者 2026-11-01 定稿（`server/codeMail*.ts`）；账号功能已装配到联机程序，由开关 `YI_ACCOUNTS` 控制、默认关闭，密钥与发信凭据经 systemd 的 `LoadCredential=` 传入（项目所有者 2026-11-01 确认方案），打开步骤见 [运维规程](../procedures/ops.md) 第 8 章。下一步为批次 E：桌面安全存储（`electron/credentials.ts`）与账号接口的客户端（`src/online/accountApi.ts`、`account.ts`）已实现。登录界面的设计稿经项目所有者 2026-11-01 定稿，账号界面（多人游戏页的登录门槛、登录、注册三步、找回密码、账号资料、修改雅号与密码、协议补签）已实现：`src/ui/account*.tsx`、`src/app/account.ts`；协议第 4 版接通前入口默认关闭，开发时以地址参数 `?accounts` 打开，界面文字排版检查以账号接口替身（`scripts/account-stub.ts`）走遍各屏。
 
 ### 13.5 有期限的维护事项
 

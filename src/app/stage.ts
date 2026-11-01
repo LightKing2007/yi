@@ -55,7 +55,7 @@ export class Stage {
     winUpdate(L, now, dt);
     goEndUpdate(L, now, dt);
     updateParticles(now, dt);
-    view.onlineK = approach(view.onlineK, scr === Screen.Online ? 1 : 0, dt, 0.5);
+    view.onlineK = approach(view.onlineK, scr === Screen.Online || scr === Screen.Account ? 1 : 0, dt, 0.5); // 账号页从多人游戏进入，棋盘布置保持不变
     boardView.blowView = approach(boardView.blowView, boardView.review ? 0 : 1, dt, 0.75); // 查看 / 收起棋局
     view.bowlK = approach(view.bowlK, bowlsShown(scr) ? 1 : 0, dt, 1.2); // 棋罐缓缓移出 / 移回
     view.duskK += ((settings.value.light ? 1 : 0) - view.duskK) * (1 - Math.exp(-dt * 4));

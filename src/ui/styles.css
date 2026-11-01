@@ -810,3 +810,281 @@ canvas {
 :root.dark .plate {
   box-shadow: none;
 }
+
+/* ---------------- 账号（设计稿经项目所有者 2026-11-01 定稿：输入框与分段选择 38，主要按钮 46，次要按钮 44，验证码格 52） ---------------- */
+.field-label {
+  font-size: 14px;
+  color: var(--dim);
+  margin: 0 0 8px 2px;
+  height: 20px;
+}
+.gap {
+  height: 14px;
+}
+.field-wrap {
+  position: relative;
+}
+.field-wrap .field {
+  padding-right: 64px;
+}
+.field-toggle {
+  font: inherit;
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  height: 30px;
+  max-width: 60px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 15px;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+}
+.field-toggle:hover {
+  background: var(--hover);
+}
+.field-toggle:focus-visible,
+.text-link:focus-visible,
+.icon-btn:focus-visible,
+.doc-link:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--dim);
+}
+.field-row {
+  display: flex;
+  gap: 8px;
+}
+.field-row .btn.inline {
+  flex: none;
+  height: 38px;
+  min-width: 76px;
+  padding: 0 14px;
+}
+.form-note {
+  color: var(--faint);
+  margin-top: 8px;
+  line-height: 19px;
+}
+.form-error {
+  color: var(--seal);
+  min-height: 28px;
+  padding-top: 8px;
+  line-height: 20px;
+}
+.form-links {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+}
+.text-link {
+  font: inherit;
+  border: 0;
+  background: transparent;
+  padding: 0 4px;
+  color: var(--dim);
+  cursor: pointer;
+  min-width: 0;
+  border-radius: 6px;
+}
+.text-link:hover:not(:disabled) {
+  color: var(--text);
+}
+.text-link:disabled {
+  color: var(--faint);
+  cursor: default;
+}
+.steps {
+  display: flex;
+  gap: 6px;
+  margin: 2px 0 18px;
+}
+.steps i {
+  flex: 1 1 0;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--seg-bg);
+}
+.steps i.on {
+  background: var(--text);
+  opacity: 0.78;
+}
+/* 六格验证码 */
+.cells {
+  display: flex;
+  gap: 8px;
+}
+.cell {
+  font: inherit;
+  font-family: var(--serif);
+  font-size: 30px;
+  text-align: center;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 52px;
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  background: var(--seg-bg);
+  color: var(--text);
+  outline: none;
+  caret-color: transparent;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.cell::selection {
+  background: transparent;
+}
+.cell:focus {
+  box-shadow: inset 0 0 0 1.5px var(--dim);
+}
+/* 复选框：原生控件隐藏但保留键盘操作，外观由 .box 画出 */
+.check {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dim);
+  cursor: pointer;
+}
+.check input {
+  position: absolute;
+  opacity: 0;
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+}
+.check .box {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: 5px;
+  border: 1.5px solid var(--dim);
+}
+.check input:checked + .box {
+  border-color: transparent;
+  background: var(--text)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath d='M5 9.2l2.6 2.6L13 6.4' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / 18px no-repeat;
+}
+.dark .check input:checked + .box {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Cpath d='M5 9.2l2.6 2.6L13 6.4' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+.check input:focus-visible + .box {
+  box-shadow: 0 0 0 2px var(--dim);
+}
+.check-text {
+  min-width: 0;
+}
+.doc-link {
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-color: var(--hairline);
+  text-underline-offset: 3px;
+  border-radius: 3px;
+}
+/* 面板底部的提示条 */
+.toast {
+  align-self: center;
+  height: 34px;
+  max-width: 100%;
+  padding: 0 16px;
+  margin-bottom: 14px;
+  border-radius: 17px;
+  background: var(--text);
+  color: var(--primary-text);
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(6px);
+  transition:
+    opacity 0.2s,
+    transform 0.2s;
+  pointer-events: none;
+}
+.toast.show {
+  opacity: 1;
+  transform: none;
+}
+/* 账号资料 */
+.profile {
+  margin: 6px 0 22px;
+}
+.profile-name {
+  font-family: var(--serif);
+  font-weight: 900;
+  line-height: 1.2;
+}
+.profile-uid {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  margin-top: 6px;
+  font-size: 14px;
+  color: var(--dim);
+}
+.uid-text {
+  user-select: text;
+  -webkit-user-select: text;
+}
+.icon-btn {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.icon-btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  height: 40px;
+  border-bottom: 1px solid var(--hairline);
+}
+.kv .k {
+  color: var(--dim);
+  flex: none;
+  max-width: 40%;
+}
+.gate-head {
+  font-family: var(--serif);
+  font-weight: 900;
+}
+/* 大厅中的账号条：与主要按钮同高，雅号离左边 22 */
+.account-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 46px;
+  padding: 0 4px 0 22px;
+  margin-bottom: 16px;
+  border-radius: 23px;
+  background: var(--seg-bg);
+}
+.account-bar .btn {
+  flex: none;
+  height: 38px;
+  padding: 0 18px;
+  margin-left: auto;
+  background: var(--seg-sel);
+  border-color: transparent;
+}

@@ -159,6 +159,7 @@ export function handleKey(e: KeyboardEvent) {
   if (k === 'escape') {
     if (online.handleEscape(scr)) return;
     if (scr === Screen.Game && session.mode === 'online') online.askLeave();
+    else if (scr === Screen.Account) goScreen(Screen.Online);
     else if (scr !== Screen.Menu) goScreen(Screen.Menu);
     return;
   }
