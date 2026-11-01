@@ -156,6 +156,13 @@ describe('联机客户端', () => {
     expect(net.st.notice).toEqual([['服务器出现问题，请稍后再试']]);
     inject({ t: 'notice', code: 'server.maintenance' });
     expect(net.st.notice).toEqual([['服务器即将维护，暂不开始新的对局']]);
+    net.st.askIn = 'undo';
+    inject({ t: 'error', code: 'server.maintenance', level: 'E2' }); // 对局中的悔棋申请不受维护影响
+    expect(net.st.askIn).toBe('undo');
+    net.st.askIn = 'rematch';
+    net.st.askOut = 'rematch';
+    inject({ t: 'error', code: 'server.maintenance', level: 'E2' }); // 维护撤回了终局后的再来一局申请
+    expect([net.st.askIn, net.st.askOut]).toEqual([null, null]);
     expect(net.st.phase).toBe(net.Phase.Playing);
     advance(1, peer);
   });

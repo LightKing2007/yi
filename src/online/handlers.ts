@@ -291,8 +291,10 @@ const HANDLERS: { [K in S2C['t']]: Handler<K> } = {
     note([errorText(m.code, m.params)]);
     st.busy = false;
     // 对局中（含终局后）的请求被拒：申请没发出去；匹配、等确认、等好友时回到大厅
-    if (st.phase === Phase.Playing) st.askOut = null;
-    else if (st.phase >= Phase.Queue && st.phase < Phase.Playing) st.phase = Phase.Lobby;
+    if (st.phase === Phase.Playing) {
+      st.askOut = null;
+      if (m.code === 'server.maintenance' && st.askIn === 'rematch') st.askIn = null; // 维护开始时服务端撤回了再来一局的申请
+    } else if (st.phase >= Phase.Queue && st.phase < Phase.Playing) st.phase = Phase.Lobby;
   },
 };
 

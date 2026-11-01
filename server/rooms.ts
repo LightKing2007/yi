@@ -334,7 +334,11 @@ export class RoomServer {
     }
     this.matches.clear();
     for (const r of [...this.rooms.values()]) {
-      if (r.state === RoomState.Over && r.ask === 'rematch') r.ask = null;
+      if (r.state === RoomState.Over && r.ask === 'rematch') {
+        // 撤回待回应的再来一局申请：双方都收到 error，客户端据此清除“待回应”与“收到申请”
+        r.ask = null;
+        for (const p of r.who) if (p && p.room === r.id) cancelled.add(p);
+      }
       if (r.state !== RoomState.Wait) continue;
       const host = byId(this.ctx, r.host);
       if (host) {
