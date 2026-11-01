@@ -7,13 +7,14 @@ import type { WorkerLike } from '../session/seats';
 import { logError } from './native';
 import { settings } from './settings';
 
-/** 界面：开始菜单 → 单人对局 / 多人游戏 / 设置 / 更多 */
+/** 界面：开始菜单 → 单人对局 / 多人游戏 / 设置 / 更多；账号（登录、注册、资料）从多人游戏进入 */
 export enum Screen {
   Menu,
   Settings,
   Game,
   More,
   Online,
+  Account,
 }
 
 export const VERSION = __APP_VERSION__;

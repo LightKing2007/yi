@@ -18,6 +18,7 @@ import { Phase, netTick, ratingOf, st, tr } from '../online/client';
 import { seatPlates } from '../scene/online';
 import { RANKS, clipName, queueRules, rankAt, rankIndex, rankName, type AskKind, type Opponent } from '../shared/protocol';
 import { Row, UpdateNote } from './panels';
+import { AccountBar } from './account';
 import { Button, Field, Fit, Hair, Seg, StoneIcon } from './widgets';
 
 const typeName = (type: number) => T(type ? '围棋' : '五子棋');
@@ -237,9 +238,11 @@ function lobby(h: number) {
         {T('联机对战')}
       </h1>
       <UpdateNote style={{ marginTop: '-8px', marginBottom: '8px' }} />
-      <Row label={T('昵称')}>
-        <Field value={s.nick} maxLength={NICK_INPUT_MAX} placeholder={T('给自己取个名字')} onInput={v => setSettings({ nick: clipName(v) })} />
-      </Row>
+      {AccountBar() ?? (
+        <Row label={T('昵称')}>
+          <Field value={s.nick} maxLength={NICK_INPUT_MAX} placeholder={T('给自己取个名字')} onInput={v => setSettings({ nick: clipName(v) })} />
+        </Row>
+      )}
       <Seg items={[T('匹配'), T('排位'), T('好友')]} sel={u.tab} onChange={v => setUi({ tab: v })} />
       <div style={{ height: '20px' }} />
       <div key={u.tab} class="tab-body">

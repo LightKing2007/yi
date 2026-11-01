@@ -1,8 +1,12 @@
-/** 界面控件：按钮、分段选择（带回弹的滑块）、滑条、输入框、棋子小图标、自动缩放的文字 */
+/** 界面控件：按钮、分段选择（带回弹的滑块）、滑条、输入框与密码框、六格验证码、复选框、提示条、棋子小图标、按设计字号排版的文字 */
+import { signal } from '@preact/signals';
 import type { ComponentChildren } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
+import { PASSWORD_INPUT_MAX } from '../app/account';
 import { logWarn } from '../app/native';
 import { sfx } from '../audio';
+import { T, TF } from '../i18n';
+import { backspaceCells, fillCells, type CellsEdit } from './codeCells';
 
 /** 开发模式下已报告过的文字：同一处只报告一次 */
 const reported = new Set<string>();
@@ -171,29 +175,199 @@ export function Slider({ value, onChange, onRelease }: { value: number; onChange
   );
 }
 
+/** 输入框。onEnter 给出时按回车调用它（提交表单），否则回车与 Esc 都只是让输入框失去焦点 */
 export function Field({
   value,
   onInput,
   placeholder,
   maxLength = 20,
+  type = 'text',
+  autoComplete = 'off',
+  label,
+  onEnter,
+  trailing,
 }: {
   value: string;
   onInput: (v: string) => void;
   placeholder?: string;
   maxLength?: number;
+  type?: 'text' | 'email' | 'password';
+  autoComplete?: string;
+  /** 读屏软件读出的名称（输入框上方另有可见的标签时与之相同） */
+  label?: string;
+  onEnter?: () => void;
+  /** 输入框右端的小按钮（如“显示”密码） */
+  trailing?: ComponentChildren;
 }) {
-  return (
+  const input = (
     <input
       class="field"
+      type={type as 'text'} // preact 的无障碍类型按 type 区分可用的属性，三种取值的属性在此相同
       value={value}
       placeholder={placeholder}
       maxLength={maxLength}
       spellcheck={false}
+      autoComplete={autoComplete}
+      aria-label={label}
       onInput={e => onInput((e.target as HTMLInputElement).value)}
       onKeyDown={e => {
-        if (e.key === 'Enter' || e.key === 'Escape') (e.target as HTMLInputElement).blur();
+        if (e.key === 'Enter' && onEnter) onEnter();
+        else if (e.key === 'Enter' || e.key === 'Escape') (e.target as HTMLInputElement).blur();
         e.stopPropagation();
       }}
     />
+  );
+  return trailing ? (
+    <div class="field-wrap">
+      {input}
+      {trailing}
+    </div>
+  ) : (
+    input
+  );
+}
+
+/** 输入框上方的标签 */
+export const FieldLabel = ({ text }: { text: string }) => (
+  <div class="field-label">
+    <Fit size={14}>{text}</Fit>
+  </div>
+);
+
+/** 密码输入框：右端的“显示”切换明文 */
+export function PasswordField({
+  value,
+  onInput,
+  placeholder,
+  label,
+  autoComplete,
+  onEnter,
+}: {
+  value: string;
+  onInput: (v: string) => void;
+  placeholder?: string;
+  label: string;
+  autoComplete: 'current-password' | 'new-password';
+  onEnter?: () => void;
+}) {
+  const [shown, setShown] = useState(false);
+  const toggle = (
+    <button type="button" class="field-toggle" aria-pressed={shown} onClick={() => setShown(was => !was)}>
+      <Fit size={12.5}>{T(shown ? '隐藏' : '显示')}</Fit>
+    </button>
+  );
+  return (
+    <Field
+      value={value}
+      onInput={onInput}
+      placeholder={placeholder}
+      maxLength={PASSWORD_INPUT_MAX}
+      type={shown ? 'text' : 'password'}
+      autoComplete={autoComplete}
+      label={label}
+      onEnter={onEnter}
+      trailing={toggle}
+    />
+  );
+}
+
+/**
+ * 六格验证码（项目所有者 2026-11-01 定稿）：规则见 codeCells.ts。值为各格数字连起来的字符串，未填的格为空；
+ * 填满时调用 onComplete（如自动进入下一步）
+ */
+export function CodeCells({ value, onChange, onComplete }: { value: string; onChange: (code: string) => void; onComplete?: (code: string) => void }) {
+  const refs = useRef<(HTMLInputElement | null)[]>([]);
+  const cells = Array.from({ length: CODE_CELLS }, (_, i) => (value[i] ?? '').trim()); // 未填的格在值中以空格占位
+  const apply = (edit: CellsEdit) => {
+    const code = edit.cells
+      .map(cell => cell || ' ')
+      .join('')
+      .trimEnd();
+    onChange(code);
+    const el = refs.current[edit.focus];
+    el?.focus();
+    el?.select();
+    if (/^\d+$/.test(code) && code.length === CODE_CELLS) onComplete?.(code);
+  };
+  return (
+    <div class="cells" role="group" aria-label={T('验证码')}>
+      {cells.map((cell, i) => (
+        <input
+          key={i}
+          ref={el => {
+            refs.current[i] = el;
+          }}
+          class="cell"
+          value={cell}
+          inputMode="numeric"
+          autoComplete={i === 0 ? 'one-time-code' : 'off'}
+          aria-label={TF('第 %d 位，共 %d 位', i + 1, CODE_CELLS)}
+          onFocus={event => (event.target as HTMLInputElement).select()}
+          onPaste={event => {
+            event.preventDefault();
+            apply(fillCells(cells, i, event.clipboardData?.getData('text') ?? ''));
+          }}
+          onInput={event => {
+            const ev = event as InputEvent,
+              el = event.target as HTMLInputElement;
+            // 逐键输入时以新键入的一位覆盖本格；自动填充等一次插入多位时从本格起依次分配
+            const typed = ev.inputType === 'insertText' && ev.data?.length === 1 ? ev.data : el.value;
+            el.value = cell; // 先还原，结果由 apply 统一写回
+            apply(fillCells(cells, i, typed));
+          }}
+          onKeyDown={event => {
+            event.stopPropagation();
+            if (event.key === 'Backspace' || event.key === 'Delete') {
+              event.preventDefault();
+              apply(event.key === 'Delete' ? { cells: cells.map((other, j) => (j === i ? '' : other)), focus: i } : backspaceCells(cells, i));
+            } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+              event.preventDefault();
+              const to = refs.current[Math.max(0, Math.min(CODE_CELLS - 1, i + (event.key === 'ArrowLeft' ? -1 : 1)))];
+              to?.focus();
+            } else if (event.key === 'Escape') (event.target as HTMLInputElement).blur();
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+/** 验证码的位数 */
+const CODE_CELLS = 6;
+
+/** 复选框：label 中可以带链接（链接点击不切换勾选） */
+export function Check({ checked, onChange, children }: { checked: boolean; onChange: (checked: boolean) => void; children: ComponentChildren }) {
+  return (
+    <label class="check">
+      <input type="checkbox" checked={checked} onChange={event => onChange((event.target as HTMLInputElement).checked)} />
+      <span class="box" aria-hidden="true" />
+      <span class="check-text">{children}</span>
+    </label>
+  );
+}
+
+/** 面板底部的提示条（如“已复制到剪贴板”）：showToast 后出现，TOAST_MS 后淡出；连续调用时重新计时 */
+const toastState = signal({ text: '', at: -Infinity });
+/** 提示条停留的时长 */
+const TOAST_MS = 1600;
+
+/** 弹出提示条；text 为原文，显示时经 T() 换成当前语言 */
+export function showToast(text: string) {
+  toastState.value = { text, at: performance.now() };
+}
+
+/** 提示条本身，放在面板底部“返回”按钮之上 */
+export function Toast() {
+  const { text, at } = toastState.value;
+  const [, force] = useState(0);
+  const left = at + TOAST_MS - performance.now();
+  useEffect(() => {
+    if (left <= 0) return;
+    const id = setTimeout(() => force(count => count + 1), left);
+    return () => clearTimeout(id);
+  }, [at]);
+  return (
+    <div class={'toast' + (left > 0 ? ' show' : '')} role="status" aria-live="polite">
+      {left > 0 && text ? T(text) : ''}
+    </div>
   );
 }

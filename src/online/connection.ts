@@ -36,7 +36,8 @@ export const hasSocket = () => ws !== null;
 /** 是否已连上、可以发消息 */
 export const isOpen = () => ws !== null && ws.readyState === WebSocket.OPEN;
 
-function serverUrl() {
+/** 联机服务器的地址：开发时可以 ?server= 改为本机服务端；账号接口的地址也由它推出 */
+export function serverUrl() {
   const override = new URLSearchParams(location.search).get('server'); // 本机测试：?server=ws://127.0.0.1:8443
   return override || ONLINE_SERVER;
 }

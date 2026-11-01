@@ -1,18 +1,24 @@
 /**
  * 界面文字排版检查的页面部分（I18N-020、I18N-022，整改项 P1-15）：由 scripts/fit-check.cjs 在开发服务器的页面中以 import() 载入，
  * 以三种语言走遍开始菜单、单机对局、设置、更多、联机大厅与联机对局，联机对手由本模块另开一条连接扮演；
+ * 最后以账号接口替身（account-stub.ts）开启账号功能，走遍登录门槛、登录、找回密码、注册三步、账号资料、修改雅号与密码、协议补签；
  * 再把译文表中“更多”页面以外的全部文字放进联机提示条，检查两行内能否放下。
  * 放不下的文字由 Fit 在开发模式下经日志接口报告“[fit] 放不下”，提示条的检查也以同样的前缀报告，均由 fit-check.cjs 收集。
  */
+import { account, accounts } from '../src/app/account';
+import { goScreen } from '../src/app/controller';
 import { Lang, setSettings } from '../src/app/settings';
-import { game } from '../src/app/state';
+import { game, Screen } from '../src/app/state';
 import { GameType, WHITE } from '../src/core/types';
 import { T } from '../src/i18n';
 import { TABLE } from '../src/i18n/table';
 import * as net from '../src/online/client';
 import { isInvalid, parseS2C } from '../src/shared/parse';
 import type { C2S } from '../src/shared/protocol';
+import { typedEmail } from '../src/ui/accountNav';
 import { INFO_PAGES } from '../src/ui/info';
+import { startStub, stub } from './account-stub';
+import { runAccountRegressions } from './account-regression';
 
 /** 每一步之后的停留：长于 Fit 等布局稳定的 500 毫秒，否则界面切走后才量就漏报 */
 const STEP_MS = 900;
@@ -200,6 +206,66 @@ async function ranked(opp: Opponent) {
   await waitFor(() => net.st.phase === net.Phase.Lobby, '离开排位回到大厅');
 }
 
+/** 在当前面板的第 index 个输入框中填入 text */
+async function fill(index: number, text: string) {
+  const el = panel().querySelectorAll<HTMLInputElement>('input.field')[index];
+  if (!el) throw new Error(`找不到第 ${index + 1} 个输入框`);
+  el.value = text;
+  el.dispatchEvent(new InputEvent('input', { bubbles: true }));
+  await sleep(POLL_MS);
+}
+
+/** 在六格验证码中粘贴整串验证码 */
+async function pasteCode(code: string) {
+  const cell = panel().querySelector<HTMLInputElement>('.cell');
+  if (!cell) throw new Error('找不到验证码格');
+  const data = new DataTransfer();
+  data.setData('text/plain', code);
+  cell.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+  await sleep(STEP_MS);
+}
+
+/** 账号的各屏：未登录时的门槛、登录（含出错）、找回密码、注册三步（含两次密码不一致），登录后的账号条、资料、修改雅号与密码，以及协议补签 */
+async function sweepAccount() {
+  stub.stale = false;
+  if (accounts()?.session.signedIn) await accounts()?.session.logout();
+  goScreen(Screen.Online);
+  await sleep(STEP_MS);
+  await press('登录');
+  typedEmail.value = 'player@example.com';
+  await fill(1, 'wrong-password');
+  await press('登录');
+  await press('忘记密码');
+  await press('发送验证码');
+  await press('返回');
+  await press('没有账号？注册');
+  await press('发送验证码');
+  await pasteCode('962914');
+  await fill(1, 'password1');
+  await fill(2, 'password2');
+  await sleep(STEP_MS);
+  await press('返回');
+  await press('返回');
+  await press('返回');
+  await press('登录');
+  await fill(1, 'password1');
+  await press('登录');
+  await waitFor(() => account.value.user !== undefined, '登录后取得资料');
+  await press('账号');
+  panel().querySelector<HTMLElement>('.icon-btn')?.click();
+  await sleep(STEP_MS);
+  await press('修改雅号');
+  await press('返回');
+  await press('修改密码');
+  await press('返回');
+  await press('返回');
+  stub.stale = true;
+  await accounts()?.session.refresh();
+  await sleep(STEP_MS);
+  stub.stale = false;
+  await press('暂不同意');
+}
+
 /** 以文言、中文、英文依次走一遍；返回每种语言提示条检查的条数 */
 export async function runAll(serverUrl: string) {
   const opp = new Opponent(serverUrl);
@@ -215,6 +281,13 @@ export async function runAll(serverUrl: string) {
       await ranked(opp);
       await sleep(STEP_MS); // 状态先回到大厅，面板随后才切换
       await press('返回');
+    }
+    // 账号功能开启后多人游戏页先显示登录门槛，所以放在联机流程全部走完之后
+    await runAccountRegressions();
+    startStub();
+    for (const lang of [Lang.WY, Lang.ZH, Lang.EN]) {
+      setSettings({ lang });
+      await sweepAccount();
     }
   } finally {
     opp.close();
