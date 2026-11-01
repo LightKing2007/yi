@@ -133,6 +133,10 @@ canvas {
   zoom: var(--u);
   width: 320px; /* 与 src/render/layout.ts 的 PANEL_W 一致 */
   pointer-events: auto;
+  /* 小窗口与竖屏下保留字号、控件尺寸；超出面板的内容可滚动，键盘焦点也能自动带入视野。 */
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
 }
 .panel.entering {
   animation: panel-in 0.3s cubic-bezier(0.2, 0.7, 0.3, 1) both;
