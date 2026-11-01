@@ -19,6 +19,7 @@ import { typedEmail } from '../src/ui/accountNav';
 import { INFO_PAGES } from '../src/ui/info';
 import { startStub, stub } from './account-stub';
 import { runAccountRegressions } from './account-regression';
+import { runPanelScroll } from './panel-scroll';
 
 /** 每一步之后的停留：长于 Fit 等布局稳定的 500 毫秒，否则界面切走后才量就漏报 */
 const STEP_MS = 900;
@@ -268,6 +269,7 @@ async function sweepAccount() {
 
 /** 以文言、中文、英文依次走一遍；返回每种语言提示条检查的条数 */
 export async function runAll(serverUrl: string) {
+  await runPanelScroll();
   const opp = new Opponent(serverUrl);
   await opp.open();
   const probed: Record<string, number> = {};
