@@ -187,3 +187,77 @@ it('等待期间退出时，迟到的结果不再作用于当前登录', async (
   expect((await renaming).ok).toBe(true); // 改名本身成功，但结果不再作用于已退出的登录
   expect([session.signedIn, session.current.user]).toEqual([false, undefined]);
 });
+
+it('登录回应晚于退出或另一次登录到达时，不恢复登录、不覆盖新账号，也不留下保存的令牌', async () => {
+  const ctx = await world();
+  const gates: (() => void)[] = [];
+  let held = () => {};
+  /** 下一次登录回应被扣住时完成 */
+  const nextHeld = () => new Promise<void>(resolve => (held = resolve));
+  let hold = false;
+  const api = new AccountApi(ctx.base, async (url, init) => {
+    const response = await fetch(url, init);
+    if (hold && url.endsWith('/sessions') && init.method === 'POST') {
+      const gate = new Promise<void>(resolve => gates.push(resolve));
+      held();
+      await gate;
+    }
+    return response;
+  });
+  const store = memoryStore();
+  const session = new AccountSession(api, store);
+  hold = true;
+  let waiting = nextHeld();
+  const late = session.login('player@example.com', 'old-password');
+  await waiting;
+  await session.logout();
+  gates.shift()?.();
+  expect((await late).ok).toBe(false);
+  expect([session.signedIn, store.saved]).toEqual([false, undefined]);
+  waiting = nextHeld();
+  const older = session.login('player@example.com', 'old-password');
+  await waiting;
+  hold = false;
+  expect((await session.login('player@example.com', 'old-password')).ok).toBe(true);
+  const newer = store.saved?.token;
+  gates.shift()?.();
+  expect((await older).ok).toBe(false);
+  expect(store.saved?.token).toBe(newer);
+  expect(session.signedIn).toBe(true);
+});
+
+it('换账号时先删去此前保存的登录：新账号保存失败也不会在下次启动时恢复成旧账号', async () => {
+  const ctx = await world();
+  ctx.account('second@example.com');
+  const api = new AccountApi(ctx.base, (url, init) => fetch(url, init));
+  const store = memoryStore();
+  const first = new AccountSession(api, store);
+  await first.login('player@example.com', 'old-password');
+  expect(store.saved).toBeDefined();
+  store.save = async () => false; // 换账号时加密保存不可用
+  expect((await first.login('second@example.com', 'old-password')).ok).toBe(true);
+  expect([first.current.saved, store.saved]).toEqual([false, undefined]);
+});
+
+it('保存期间退出时删去刚保存的登录', async () => {
+  const ctx = await world();
+  const api = new AccountApi(ctx.base, (url, init) => fetch(url, init));
+  const store = memoryStore();
+  let release = () => {};
+  let started = () => {};
+  const saving = new Promise<void>(resolve => (release = resolve));
+  const savingStarted = new Promise<void>(resolve => (started = resolve));
+  const original = store.save;
+  store.save = async (token, expiresAt) => {
+    started();
+    await saving;
+    return original(token, expiresAt);
+  };
+  const session = new AccountSession(api, store);
+  const login = session.login('player@example.com', 'old-password');
+  await savingStarted;
+  const out = session.logout();
+  release();
+  await Promise.all([login, out]);
+  expect([session.signedIn, store.saved]).toEqual([false, undefined]);
+});

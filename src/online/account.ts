@@ -24,6 +24,8 @@ const SIGNED_OUT = 'auth.required';
 /** 当前登录 */
 export class AccountSession {
   private token?: string;
+  /** 登录世代：每次开始登录、注册或退出加一；回应到达时世代已变，说明已被后来的操作取代 */
+  private generation = 0;
   private state: LoginState = { saved: false };
   private readonly listeners = new Set<(state: LoginState) => void>();
 
@@ -67,12 +69,14 @@ export class AccountSession {
 
   /** 邮箱与密码登录 */
   async login(email: string, password: string): Promise<AccountResult<AccountUser>> {
-    return this.begin(await this.api.login(email, password));
+    const ticket = ++this.generation;
+    return this.begin(ticket, await this.api.login(email, password));
   }
 
   /** 注册并登录 */
   async register(form: RegisterForm): Promise<AccountResult<AccountUser>> {
-    return this.begin(await this.api.register(form));
+    const ticket = ++this.generation;
+    return this.begin(ticket, await this.api.register(form));
   }
 
   /** 退出：通知服务端撤销（失败也照样在本机退出），清除内存与保存的登录 */
@@ -106,13 +110,22 @@ export class AccountSession {
     );
   }
 
-  /** 开始一次登录：保存令牌（加密不可用时只在内存中） */
-  private async begin(result: AccountResult<SignedIn>): Promise<AccountResult<AccountUser>> {
+  /**
+   * 开始一次登录：已被后来的登录或退出取代时不改动内存与保存的登录；先删去此前保存的登录再保存新的，
+   * 保存失败（加密不可用时只在内存中）也不会在下次启动时恢复成另一个账号；保存期间被取代时删去刚保存的
+   */
+  private async begin(ticket: number, result: AccountResult<SignedIn>): Promise<AccountResult<AccountUser>> {
     if (!result.ok) return result;
+    if (ticket !== this.generation) return { ok: false, problem: signedOut() };
     const { token, expiresAt, user } = result.value;
     this.token = token;
     this.update({ user, saved: false });
-    const saved = (await this.saveSafely(token, expiresAt)) && this.token === token;
+    await this.clearSaved();
+    const saved = ticket === this.generation && (await this.saveSafely(token, expiresAt));
+    if (ticket !== this.generation) {
+      if (saved) await this.clearSaved();
+      return { ok: false, problem: signedOut() };
+    }
     if (saved) this.update({ ...this.state, saved: true });
     return { ok: true, value: user };
   }
@@ -130,8 +143,14 @@ export class AccountSession {
 
   /** 清除内存与保存的登录 */
   private async end(): Promise<void> {
+    this.generation++;
     this.token = undefined;
     this.update({ saved: false });
+    await this.clearSaved();
+  }
+
+  /** 删去保存的登录；出错时忽略 */
+  private async clearSaved(): Promise<void> {
     try {
       await this.store?.clear();
     } catch {
