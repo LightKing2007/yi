@@ -86,13 +86,12 @@ h3 { font: 900 var(--type-h3)/var(--leading-h3) var(--serif); }
   border-radius: 999px; font: 500 16px/1 var(--sans); letter-spacing: 0.08em; text-decoration: none; white-space: nowrap;
   background: var(--fg); color: var(--bg);
   transition: transform 0.5s var(--ease-spring), translate 0.5s var(--ease-spring), box-shadow 0.5s var(--ease); }
-.btn .ico { width: 38px; height: 38px; padding: 10px; border-radius: 50%; background: var(--bg); color: var(--fg); flex: none;
-  transition: transform 0.5s var(--ease); }
+.btn .ico { width: 38px; height: 38px; padding: 10px; border-radius: 50%; background: var(--bg); color: var(--fg); flex: none; }
 .btn::before { content: ""; position: absolute; z-index: -1; left: 10px; top: 50%; width: 38px; height: 38px; margin-top: -19px; border-radius: 50%;
   background: var(--kaya); transform: scale(0); transition: transform 0.7s var(--ease); }
 .btn:hover { transform: translateY(-2px); box-shadow: 0 18px 40px -18px rgb(0 0 0 / 0.55); color: var(--ink); }
 .btn:hover::before { transform: scale(14); }
-.btn:hover .ico { transform: translateY(2px); background: var(--ink); color: var(--kaya); }
+.btn:hover .ico { background: var(--ink); color: var(--kaya); }
 .btn:active { transform: translateY(0) scale(0.98); }
 .btn.ghost { background: transparent; color: var(--fg); box-shadow: inset 0 0 0 1px var(--line); padding: 0 26px; }
 .btn.ghost:hover { box-shadow: inset 0 0 0 1px var(--fg); color: var(--fg); transform: translateY(-2px); }
