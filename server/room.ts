@@ -47,9 +47,10 @@ export function broadcast(ctx: ServerContext, r: Room, msg: S2C) {
 type Advancing = Exclude<Extract<S2C, { sv: number }>, { t: 'start' | 'sync' }>;
 type AdvancingDraft = Advancing extends infer M ? (M extends Advancing ? Omit<M, 'sv'> : never) : never;
 
-/** 提交一次可观察的对局变更：状态版本加 1，带上新的版本发给对局双方 */
+/** 提交一次可观察的对局变更：状态版本加 1，带上新的版本发给对局双方；不是由 r.actor 的请求引起的，记为另一方（或双方）的外来变更 */
 export function advance(ctx: ServerContext, r: Room, msg: AdvancingDraft) {
   r.sv++;
+  for (const color of [BLACK, WHITE]) if (color !== r.actor) r.foreignSv[color] = r.sv;
   broadcast(ctx, r, { ...msg, sv: r.sv });
 }
 
@@ -73,6 +74,8 @@ export function newRoom(ctx: ServerContext, kind: GameKind, rules: RoomRules, se
     host: seat.host,
     gameId: 0,
     sv: 0,
+    foreignSv: [0, 0, 0],
+    actor: 0,
     pid: [0, 0, 0],
     who: [null, null, null],
     g: new Game(),
@@ -204,6 +207,7 @@ export function sendStart(ctx: ServerContext, r: Room, only?: Player) {
 export function newRoomGame(ctx: ServerContext, r: Room) {
   r.gameId = ctx.nextGame++;
   r.sv = 0;
+  r.foreignSv = [0, 0, 0];
   r.g = new Game();
   r.g.newGame(r.type === 0 ? GameType.Gomoku : GameType.Go, r.size, { renju: r.type === 0 && r.renju });
   r.acts = [];

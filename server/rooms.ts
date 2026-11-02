@@ -27,13 +27,13 @@ import {
   type Session,
 } from './roomTypes';
 import { typeKey } from './rating';
-import { afterGame, inGame, inOrder } from './play';
+import { inOrder, inRoom } from './play';
 import { errorMsg } from './errorMsg';
 import { lobby } from './lobby';
 import { evict, guard, kick, report, scrapMatch, scrapRoom } from './faults';
 import { PENDING_MAX, confirmToken, goOffline, hello, limited, rejectInvalid, revoke, tickPlayer } from './hub';
 import { tickMatch, unqueue } from './matchmaking';
-import { byId, colorOf, endAtLimit, freeRoom, newRoom, resync, seatPlayers, tickRoom } from './room';
+import { byId, colorOf, freeRoom, newRoom, resync, seatPlayers, tickRoom } from './room';
 
 // 共用的类型已移到 roomTypes.ts（整改项 P2-12）；对外的部分仍从这里导出，引用方不必改动
 export { MemoryStore, type AccountGate, type Conn, type Health, type RatingStore, type Revocation, type RoomServerOptions, type Session } from './roomTypes';
@@ -390,11 +390,10 @@ export class RoomServer {
     const r = this.rooms.get(p.room),
       me = r ? colorOf(r, p) : 0;
     if (!r || !me) return;
-    if (m.t === 'resync') resync(this.ctx, r, p);
-    else if (r.state === RoomState.Over) afterGame(this.ctx, { r, p, me }, m);
-    else if (r.state === RoomState.Play) {
-      inGame(this.ctx, { r, p, me }, m);
-      endAtLimit(this.ctx, r); // 落子、停一手、同意悔棋、标记死子、恢复对局之后都在此检查
+    if (m.t === 'resync') {
+      resync(this.ctx, r, p);
+      return;
     }
+    inRoom(this.ctx, { r, p, me }, m);
   }
 }

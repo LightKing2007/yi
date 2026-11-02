@@ -113,6 +113,7 @@ export const st = {
   askIn: null as AskKind | null, // 对方向我提出的申请
   askOut: null as AskKind | null, // 我提出、等对方回应的申请
   askInAt: 0,
+  replied: false, // 已回应 askIn，等服务端的 answer
   agreed: [false, false, false], // 点目时各方是否已确认
   // 状态版本与请求序号（protocol-v4.md 第 7 章）
   match: 0, // 局编号（start、sync 带来）

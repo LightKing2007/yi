@@ -305,6 +305,18 @@ describe('状态版本与重同步（protocol-v4.md 第 7 章）', () => {
 });
 
 describe('申请与回应发给对局双方（protocol-v4.md 第 7.1.1 条）', () => {
+  it('回应对方的申请后，收到 answer 之前不能落子；重复点回应只发一次', () => {
+    const peer = startGame();
+    exchange(peer, [7, 7], [8, 8]);
+    peer.send({ t: 'undo' });
+    net.reply(false);
+    net.reply(false);
+    expect([net.st.askIn, net.myTurn()]).toEqual(['undo', false]);
+    expect(lastSocket().sent.filter(frame => JSON.parse(frame).t === 'reply')).toHaveLength(1);
+    pump();
+    expect([net.st.askIn, net.myTurn()]).toEqual([null, true]);
+  });
+
   it('对方的申请无人回应而超时：双方都收到回应，“收到申请”随之清除', () => {
     const peer = startGame();
     exchange(peer, [7, 7], [8, 8]);

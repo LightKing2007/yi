@@ -1,6 +1,7 @@
 /** 联机服务端：状态版本、请求序号与完整同步（protocol-v4.md 第 7 章，API-052），以假时钟直接驱动 RoomServer */
 import { describe, expect, it } from 'vitest';
-import { Client, play, startGame, world } from './serverWorld';
+import { ASK_SECS } from '../src/shared/protocol';
+import { Client, play, startGame, startWithDeadStone, world } from './serverWorld';
 
 /** 开好友房间的一局：甲执黑、乙执白，双方的收件箱已清空 */
 function game() {
@@ -98,7 +99,61 @@ describe('过期的状态版本（第 7.3 条）', () => {
     jia.sendRaw({ t: 'move', x: 0, y: 0, seq: 4, sv: 2 });
     expect(yi.expect('moved')?.sv).toBe(3);
   });
+});
 
+describe('只有外来的变更使请求过期（第 7.3 条）', () => {
+  it('本方请求引起的变更不算过期：回应申请后紧接着落子被接受', () => {
+    const { jia, yi } = game();
+    play(jia, yi, [
+      [jia, 7, 7],
+      [yi, 8, 8],
+    ]);
+    yi.send({ t: 'undo' }); // 版本 3：对甲是外来的变更
+    jia.sendRaw({ t: 'reply', kind: 'undo', ok: false, seq: 2, sv: 3 }); // 版本 4 由甲引起
+    jia.sendRaw({ t: 'move', x: 0, y: 0, seq: 3, sv: 3 }); // 还没收到 answer
+    expect(yi.expect('moved')).toEqual({ t: 'moved', x: 0, y: 0, sv: 5 });
+    expect(jia.has('error')).toBe(false);
+  });
+
+  it('点目时接连标记死子：第二下发出时还没收到第一下的 marked，照常执行', () => {
+    const { srv } = world();
+    const jia = new Client(srv, '甲'),
+      yi = new Client(srv, '乙');
+    startWithDeadStone(jia, yi);
+    yi.send({ t: 'pass' });
+    jia.send({ t: 'pass' });
+    const sv = jia.sv;
+    jia.sendRaw({ t: 'mark', x: 7, y: 4, seq: jia.seq + 1, sv });
+    jia.sendRaw({ t: 'mark', x: 2, y: 0, seq: jia.seq + 2, sv });
+    expect(yi.inbox.filter(m => m.t === 'marked').map(m => m.sv)).toEqual([sv + 1, sv + 2]);
+    expect(jia.has('error')).toBe(false);
+  });
+
+  it('超时引起的变更对双方都是外来的：申请超时后，依据超时前版本的请求按过期处理', () => {
+    const { srv, idle } = world();
+    const jia = new Client(srv, '甲'),
+      yi = new Client(srv, '乙');
+    startGame(jia, yi);
+    play(jia, yi, [
+      [jia, 7, 7],
+      [yi, 8, 8],
+    ]);
+    jia.send({ t: 'undo' }); // 版本 3 由甲引起
+    idle(ASK_SECS + 1, jia, yi); // 无人回应：版本 4 由服务端引起
+    jia.drain();
+    jia.sendRaw({ t: 'move', x: 0, y: 0, seq: jia.seq + 1, sv: 3 });
+    expect(jia.expect('error')?.code).toBe('game.stale');
+  });
+
+  it('比当前还新的版本按过期处理', () => {
+    const { jia, yi } = game();
+    jia.sendRaw({ t: 'move', x: 7, y: 7, seq: 1, sv: 1 });
+    expect(jia.expect('error')?.code).toBe('game.stale');
+    expect(yi.inbox).toEqual([]);
+  });
+});
+
+describe('过期判断的例外（第 7.3 条）', () => {
   it('认输与离开不以局面为前提：版本过期也照常执行', () => {
     const { jia, yi } = game();
     play(jia, yi, [

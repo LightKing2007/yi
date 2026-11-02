@@ -237,6 +237,7 @@ const HANDLERS: { [K in S2C['t']]: Handler<K> } = {
     if (m.from === st.myColor) st.askOut = m.kind;
     else {
       st.askIn = m.kind;
+      st.replied = false;
       st.askInAt = time;
     }
     st.turnEnds = 0;

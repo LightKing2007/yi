@@ -103,11 +103,14 @@ export function rematch() {
   }
 }
 
-/** 回应对方的申请（悔棋 / 求和 / 再来一局） */
+/**
+ * 回应对方的申请（悔棋 / 求和 / 再来一局）。“收到申请”等服务端发来 answer 时才清除（protocol-v4.md 第 7.1.1 条）：
+ * 在此之前不能落子，免得回应引起的变更（同意悔棋时的退回）还没收到就在旧局面上落子
+ */
 export function reply(ok: boolean) {
   const k = st.askIn;
-  st.askIn = null;
-  if (k) send({ t: 'reply', kind: k, ok });
+  if (k && !st.replied) send({ t: 'reply', kind: k, ok });
+  st.replied = true;
   changed();
 }
 
