@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.6 |
+| 文件版本 | 1.1.7 |
 | 修订日期 | 2026-10-31 |
 | 规则前缀 | `TST` |
 
@@ -25,7 +25,7 @@
 
 | 编号 | 等级 | 规定 | 现状 |
 |---|---|---|---|
-| TST-010 | A | 行覆盖率与分支覆盖率底线统一如下，低于底线时 CI 阻断：`src/core` 行 ≥ 90%、分支 ≥ 85%；`src/shared` 行 ≥ 90%、分支 ≥ 85%；`server` 行 ≥ 85%、分支 ≥ 75%；`src/session` 行 ≥ 85%、分支 ≥ 75%；`src/online` 行 ≥ 75%、分支 ≥ 65%；全项目（不含 `render`、`fx`、`scene`、`ui`、`audio`）行 ≥ 75%。统计范围为 `src` 与 `server`；`electron` 不在单元测试范围内（本文件第 1.1 条），由平台验证覆盖。门槛定义在 `vite.config.ts` 的 `test.coverage.thresholds` | 满足（P1-02，#20：`vite.config.ts` 按本条设覆盖率门槛，CI 运行 `npm run test:coverage`；`src/online` 由 #46 提到要求值） |
+| TST-010 | A | 行覆盖率与分支覆盖率底线统一如下，低于底线时 CI 阻断：`src/core` 行 ≥ 90%、分支 ≥ 85%；`src/shared` 行 ≥ 90%、分支 ≥ 85%；`server` 行 ≥ 85%、分支 ≥ 75%；`src/session` 行 ≥ 85%、分支 ≥ 75%；`src/online` 行 ≥ 75%、分支 ≥ 65%；全项目（不含 `render`、`fx`、`scene`、`ui`、`audio`）行 ≥ 75%。统计范围为 `src` 与 `server`；页面入口 `src/main.tsx` 与场景脚本 `src/app/scenarios.ts` 只做装配，由界面文字排版检查与画面回归启动页面时运行，不计入；`electron` 不在单元测试范围内（本文件第 1.1 条），由平台验证覆盖。门槛定义在 `vite.config.ts` 的 `test.coverage.thresholds` | 满足（P1-02，#20：`vite.config.ts` 按本条设覆盖率门槛，CI 运行 `npm run test:coverage`；`src/online` 由 #46 提到要求值） |
 | TST-011 | A | PR 中新增与修改的可执行行的覆盖率 ≥ 80% | 满足（CI 运行 `scripts/diff-coverage.mjs`） |
 | TST-012 | B | `render`、`fx`、`scene`、`ui`、`audio` 不计入行覆盖率，以画面回归场景覆盖：每个特效至少 1 个场景，每个界面面板至少 1 张截图。开发用的场景脚本 `src/app/scenarios.ts` 同样不计入：它是画面回归的驱动，以画面回归完整运行验证 | 部分满足 |
 | TST-013 | A | 每个已修复的缺陷必须附带一个在修复前失败、修复后通过的回归测试，测试名称必须写明缺陷现象 | 满足 |
