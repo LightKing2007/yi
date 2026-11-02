@@ -39,6 +39,12 @@ export function startAccounts(deps: { server: string; fetcher: Fetcher; store?: 
   return true;
 }
 
+/** 启动时开启账号功能（协议第 4 版起联机须登录）：以全局的 fetch 访问账号接口，桌面版的登录存进加密存储（yi 为 yiNative） */
+export function bootAccounts(server: string, yi: YiNative | undefined): boolean {
+  const fetcher: Fetcher = (url, init) => fetch(url, init);
+  return startAccounts({ server, fetcher, store: loginStoreOf(yi) });
+}
+
 /** 账号接口与登录；未开启时为 undefined */
 export const accounts = () => wired;
 

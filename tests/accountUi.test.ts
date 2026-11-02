@@ -1,8 +1,9 @@
 /** 账号界面的逻辑部分：开关、开启后恢复登录、加密存储的转接、邮件语言、错误提示与输入检查（src/app/account.ts），以及六格验证码的输入规则（src/ui/codeCells.ts）。 */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   account,
   accounts,
+  bootAccounts,
   codeComplete,
   emailLooksValid,
   loginRejected,
@@ -82,6 +83,25 @@ describe('开关与开启', () => {
     release(); // 先前那次开启的资料这时才到
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(account.value.user?.name).toBe('替身');
+  });
+});
+
+describe('启动时开启', () => {
+  it('桌面版以加密存储中的登录、经全局 fetch 取资料', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      calls.push(`${url} ${(init.headers as Record<string, string>).Authorization}`);
+      return new Response(JSON.stringify(user), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    try {
+      const yi = { loadLogin: async () => ({ token, expiresAt: '2026-12-01T00:00:00.000Z' }) } as unknown as YiNative;
+      expect(bootAccounts('https://yi.example', yi)).toBe(false);
+      expect(bootAccounts('wss://yi.example', yi)).toBe(true);
+      await accounts()?.session.restore();
+      expect(calls.at(-1)).toBe(`https://yi.example/api/v1/me Bearer ${token}`);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 
