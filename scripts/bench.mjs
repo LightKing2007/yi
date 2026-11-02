@@ -10,6 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { build } from 'esbuild';
+import { rawText } from './raw-text.mjs';
 import { mailImage, pageAssets } from './page-assets.mjs';
 
 const root = path.join(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -46,6 +47,7 @@ async function main(argv) {
       format: 'esm',
       outfile,
       logLevel: 'error',
+      plugins: [rawText], // 账号迁移 SQL 与官网文书以 ?raw 导入
       define: {
         __APP_VERSION__: JSON.stringify(pkg.version),
         __APP_COMMIT__: JSON.stringify('bench'),
