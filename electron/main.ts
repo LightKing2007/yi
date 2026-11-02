@@ -8,6 +8,8 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { CredentialStore, encryptionUsable } from './credentials';
 import { devOrigin, isAppUrl, MIN_HEIGHT_PX, MIN_WIDTH_PX, pageLog, parseBounds, type Bounds } from './guard';
+import { isUpdateAction, type UpdateController } from './update';
+import { createUpdater } from './updateRuntime';
 
 const DIST = path.join(__dirname, '..', 'dist');
 /** 开发服务器的源：只有未打包时读取，开发时 YI_DEV_URL=http://localhost:5173 npm run app:dev（A-11） */
@@ -28,6 +30,7 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: t
 app.commandLine.appendSwitch('enable-unsafe-swiftshader');
 
 let win: BrowserWindow | null = null;
+let updater: UpdateController | undefined;
 
 // ---------------- 日志 ----------------
 
@@ -134,6 +137,12 @@ function createWindow() {
 /** 只处理游戏页面自己发来的 IPC 消息（A-10，Electron 安全清单第 17 条）：发送方的框架须是 app://yi/ 或开发服务器 */
 const fromApp = (event: Pick<IpcMainEvent, 'senderFrame'>) => isAppUrl(event.senderFrame?.url, DEV_ORIGIN);
 
+// 页面只选择有限操作，不能传入下载地址、文件路径或安装参数（SEC-032）。
+ipcMain.handle('app:update', (event, action: unknown) => {
+  if (!fromApp(event) || !isUpdateAction(action)) return undefined;
+  return updater?.run(action);
+});
+
 // ---------------- 登录状态 ----------------
 
 /** 加密保存的登录：userData/account.bin，只有本机当前系统用户能解密（阶段 6、7 设计第 5.4 条） */
@@ -204,6 +213,10 @@ app.whenReady().then(() => {
     return net.fetch(pathToFileURL(file).toString());
   });
   if (process.platform !== 'darwin') Menu.setApplicationMenu(null); // macOS 保留系统菜单（退出、编辑快捷键）
+  updater = createUpdater(
+    state => win?.webContents.send('app:update-state', state),
+    err => writeLog('warn', `更新失败：${String(err)}`),
+  );
   createWindow();
   app.on('activate', () => {
     if (!BrowserWindow.getAllWindows().length) createWindow();

@@ -1,4 +1,6 @@
 /** 桌面版主进程提供的少量系统功能（electron/preload.ts 暴露为 window.yiNative；在浏览器里调试时没有） */
+import type { UpdateAction } from '../../electron/update';
+/** 预加载向渲染页面提供的有限系统接口。 */
 export interface YiNative {
   platform: string;
   quit(): void;
@@ -11,6 +13,10 @@ export interface YiNative {
   saveLogin(token: string, expiresAt: string): Promise<boolean>;
   /** 删除保存的登录 */
   clearLogin(): Promise<void>;
+  /** 请求更新操作；返回值作为 IPC 外部输入由更新模块校验。 */
+  update(action: UpdateAction): Promise<unknown>;
+  /** 订阅更新状态，返回解除订阅的函数，不暴露 IPC 事件对象。 */
+  onUpdate(callback: (state: unknown) => void): () => void;
 }
 
 export const native = (): YiNative | undefined => (window as any).yiNative;

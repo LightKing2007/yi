@@ -278,6 +278,7 @@ async function sweepAccount() {
 export async function runAll(serverUrl: string, [mine, theirs]: string[]) {
   if (!mine || !theirs) throw new Error('缺少测试账号的登录令牌');
   await runPanelScroll();
+  await (await import('./updater-regression')).runUpdateRegressions();
   // 协议第 4 版的联机须登录：本页以替身登录，替身回应真实服务端认可的令牌（fit-check.cjs 注册的测试账号）
   startStub(mine);
   await accounts()?.session.login('player@example.com', 'fit-check-password');

@@ -21,6 +21,7 @@ export const SHIPPED = [
   { name: 'ws', withDeps: true },
   { name: 'age-encryption', withDeps: true }, // 打包进 dist-server/offsite.cjs，在服务器上运行（P1-13）
   { name: 'electron', withDeps: false },
+  { name: 'electron-updater', withDeps: true },
 ];
 /** 阻断合并的严重程度（SEC-061：--audit-level=high） */
 const BLOCKING = new Set(['high', 'critical']);

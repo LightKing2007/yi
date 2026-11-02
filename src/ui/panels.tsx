@@ -10,27 +10,13 @@ import { blowing } from '../fx/blow';
 import { T, TF } from '../i18n';
 import { INFO_PAGES, type InfoLine } from './info';
 import { native } from '../app/native';
-import { netTick, st as netSt } from '../online/client';
 import { Button, Fit, Hair, Seg, Slider, StoneIcon } from './widgets';
 
 export const isDesktop = () => !!native();
 
-/** 服务端告知有新版本时的提示；有下载地址时点一下用浏览器打开 */
-export function UpdateNote({ style }: { style?: Record<string, string> }) {
-  netTick.value;
-  const u = netSt.update;
-  if (!u) return null;
-  const go = () => {
-    if (/^https?:\/\//.test(u.url)) window.open(u.url);
-  };
-  return (
-    <div class={'update-note' + (u.url ? ' link' : '')} style={style} onClick={go}>
-      <Fit size={13} lines={2}>
-        {TF(u.url ? '有新版本 %s，点这里下载' : '有新版本 %s', u.version)}
-      </Fit>
-    </div>
-  );
-}
+/** 开始菜单和大厅共用同一个更新入口。 */
+export { UpdateNote } from './updateNote';
+import { UpdateNote } from './updateNote';
 
 // ---------------- 开始菜单 ----------------
 
