@@ -9,8 +9,7 @@ const DOWNLOAD_PAGE = 'https://yi.lightking.com.cn/download/';
 /** 返回要显示的提示及玩家点击后的操作，检查与下载期间不提供重复操作。 */
 function presentation() {
   const state = updateState.value;
-  if (state?.phase === 'idle') return null;
-  if (!state) {
+  if (!state || state.phase === 'idle') {
     const old = st.update;
     return old ? { text: TF('有新版本 %s，点这里下载', old.version), action: 'check' as const } : null;
   }

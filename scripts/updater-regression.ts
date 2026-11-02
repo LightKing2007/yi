@@ -31,9 +31,25 @@ async function probe(root: HTMLElement, state: UpdateState, disabled: boolean) {
   return button;
 }
 
-/** 由 text-fit 驱动，在真实 Chromium DOM 中检查更新入口及点击后发送的有限操作。 */
-export async function runUpdateRegressions() {
-  const previous = { native: native(), lang: settings.value.lang, screen: screen.value, phase: st.phase, busy: st.busy, update: updateState.value };
+async function probeLateNotice(root: HTMLElement, calls: UpdateAction[]) {
+  st.update = { version: '4.2.0', url: 'https://yi.lightking.com.cn/download/' };
+  const button = await probe(root, { ...READY, phase: 'idle', version: '' }, false);
+  assert(button.textContent?.includes('4.2.0'), '启动检查完成后，后来收到的联机更新提示仍须可见');
+  await act(() => button.click());
+  assert(calls.join(',') === 'download,install,check', '后来收到的更新提示必须重新检查原生更新源');
+}
+
+/** 隔离系统接口并保存真实页面状态，验证结束后统一恢复。 */
+function prepareProbe() {
+  const previous = {
+    native: native(),
+    lang: settings.value.lang,
+    screen: screen.value,
+    phase: st.phase,
+    busy: st.busy,
+    update: updateState.value,
+    note: st.update,
+  };
   const calls: UpdateAction[] = [];
   const root = document.createElement('div');
   root.style.cssText = `position:absolute;left:0;top:0;width:${WIDTH_PX}px`;
@@ -47,6 +63,12 @@ export async function runUpdateRegressions() {
       },
     },
   });
+  return { previous, calls, root };
+}
+
+/** 由 text-fit 驱动，在真实 Chromium DOM 中检查更新入口及点击后发送的有限操作。 */
+export async function runUpdateRegressions() {
+  const { previous, calls, root } = prepareProbe();
   try {
     await document.fonts.ready;
     screen.value = Screen.Menu;
@@ -73,6 +95,7 @@ export async function runUpdateRegressions() {
     assert(document.activeElement === install, '安装按钮必须可由键盘聚焦');
     await act(() => install.click());
     assert(calls.join(',') === 'download,install', '空闲时才允许明确请求安装');
+    await probeLateNotice(root, calls);
   } finally {
     await act(() => render(null, root));
     root.remove();
@@ -81,6 +104,7 @@ export async function runUpdateRegressions() {
     screen.value = previous.screen;
     st.phase = previous.phase;
     st.busy = previous.busy;
+    st.update = previous.note;
     updateState.value = previous.update;
   }
 }
