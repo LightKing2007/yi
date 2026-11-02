@@ -23,7 +23,6 @@ const ORDER = Object.keys(PLATFORMS);
 const RETRY_AFTER_SECS = 30;
 /** 资源的浏览器缓存时长：地址带版本参数，换版本即换地址 */
 const ASSET_MAX_AGE_SECS = 7 * 24 * 3600;
-
 /** 下载速率的下限（API-047）：每 stallMs 毫秒内送出的字节数低于 minBytesPerSec 对应的量时断开，免得慢速读取长期占住下载名额 */
 export interface StallLimit {
   stallMs: number;
@@ -40,6 +39,7 @@ const ASSET_TYPES: Record<string, string> = {
   'yi-serif-400.woff2': 'font/woff2',
   'icp.png': 'image/png',
   'support-search.js': 'text/javascript; charset=utf-8',
+  'site-enhance.js': 'text/javascript; charset=utf-8',
 };
 
 /** 所有响应都带的头（API-063） */
@@ -358,7 +358,7 @@ export function fileServer(dir: string, stall: StallLimit = STALL, staticRoot = 
     if (name === 'support') {
       // 无脚本提交搜索时由同源服务筛选；空查询直接使用包含渐进增强脚本的静态目录
       const body = search ? undefined : fixed?.pages.get('support');
-      sendPage(res, body ?? Buffer.from(supportPage(__APP_VERSION__, search)), { head, platform: false, script: Boolean(body) });
+      sendPage(res, body ?? Buffer.from(supportPage(__APP_VERSION__, search)), { head, platform: false });
       return true;
     }
     if (name === 'support/') {

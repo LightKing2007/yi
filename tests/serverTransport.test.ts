@@ -130,11 +130,14 @@ describe('网站页面', () => {
     try {
       for (const route of ['/', '/download/', '/download/?start']) {
         const page = await fetch(base + route);
-        expect(page.headers.get('content-security-policy'), route).toBe("default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; font-src 'self'");
+        expect(page.headers.get('content-security-policy'), route).toBe(
+          "default-src 'self'; style-src 'unsafe-inline'; img-src 'self'; font-src 'self'; script-src 'self'",
+        );
         expect(page.headers.get('x-content-type-options')).toBe('nosniff');
         expect(page.headers.get('referrer-policy')).toBe('no-referrer');
         const html = await page.text();
-        expect(html).not.toMatch(/<script/i);
+        expect(html).toContain('/assets/site-enhance.js');
+        expect(html).not.toContain('/assets/support-search.js');
         expect(html).toContain('/assets/title-yi.png');
         // 页脚展示 ICP 备案号并链接到工信部的备案管理系统（以域名对外提供网页的要求）
         expect(html).toMatch(

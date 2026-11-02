@@ -54,7 +54,8 @@ it('静态目录响应保留搜索地址、CSP、HEAD、404 状态以及动态�
     expect(html).toContain('id="support-empty" hidden');
     const fallback = await fetch(`${base}/support?q=WebGL2`);
     const fallbackHtml = await fallback.text();
-    expect(fallback.headers.get('content-security-policy')).not.toContain('script-src');
+    expect(fallback.headers.get('content-security-policy')).toContain("script-src 'self'");
+    expect(fallbackHtml).not.toContain('/assets/support-search.js');
     expect(fallbackHtml.match(/class="document-link"/g)).toHaveLength(1);
     expect(fallbackHtml).toContain('“WebGL2”的搜索结果');
     const head = await fetch(`${base}/support`, { method: 'HEAD' });
@@ -66,7 +67,8 @@ it('静态目录响应保留搜索地址、CSP、HEAD、404 状态以及动态�
     for (const route of ['/', '/download/']) {
       const dynamic = await fetch(base + route);
       expect(dynamic.status).toBe(200);
-      expect(dynamic.headers.get('content-security-policy')).not.toContain('script-src');
+      expect(dynamic.headers.get('content-security-policy')).toContain("script-src 'self'");
+      expect(await dynamic.text()).toContain('/assets/site-enhance.js');
     }
   } finally {
     await site.close();

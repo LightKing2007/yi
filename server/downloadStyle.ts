@@ -48,7 +48,8 @@ const hero = `
   background: linear-gradient(rgb(236 231 221 / 0.1) 1px, transparent 1px) 0 0 / var(--cell) var(--cell),
     linear-gradient(90deg, rgb(236 231 221 / 0.1) 1px, transparent 1px) 0 0 / var(--cell) var(--cell);
   -webkit-mask: radial-gradient(closest-side, #000 15%, transparent); mask: radial-gradient(closest-side, #000 15%, transparent); }
-.stone-btn { display: grid; justify-items: center; gap: 26px; text-decoration: none; color: var(--fg); }
+.stone-btn { display: grid; justify-items: center; gap: 26px; text-decoration: none; color: var(--fg);
+  transition: translate 0.5s var(--ease-spring); }
 .stone { position: relative; display: grid; place-items: center; width: var(--stone); aspect-ratio: 1; border-radius: 50%;
   color: var(--ink);
   background:
@@ -136,7 +137,7 @@ const rows = `
 .row-os { display: flex; align-items: baseline; gap: 12px; }
 .row-os b { font: 900 clamp(24px, 2.4vw, 32px)/1.1 var(--serif); }
 .row-os span { font-size: 13px; letter-spacing: 0.16em; color: var(--dim); }
-.row-os em { font-style: normal; font-size: 12px; padding: 2px 10px; border-radius: 999px; background: var(--kaya); color: var(--ink); letter-spacing: 0.16em; }
+.row-os .badge { flex: none; }
 .row-req, .row-meta { font-size: 14px; color: var(--dim); }
 .row .btn { height: 46px; }
 .row .row-sum { grid-column: 1 / -1; justify-self: start; }
@@ -164,7 +165,7 @@ const more = `
 .cmds { margin-top: 22px; display: grid; gap: 10px; }
 .cmds div { display: grid; gap: 4px; padding: 12px 14px; border-radius: 12px; background: var(--shell-2); }
 .cmds span { font-size: 12px; letter-spacing: 0.2em; color: var(--faint); }
-.cmds code { padding: 0; background: none; font-size: 13px; color: var(--fg); user-select: all; }
+.cmds .code-line { padding: 0; background: none; color: var(--fg); user-select: all; }
 .reqs { margin: 0; display: grid; gap: 0; }
 .reqs div { padding: 12px 0; border-bottom: 1px solid var(--line); }
 .reqs div:first-child { padding-top: 0; }

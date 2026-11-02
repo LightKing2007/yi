@@ -13,7 +13,8 @@ it('404 页面复用官网外壳与首页终章样式，提供明确的返回入
   expect(html).not.toContain('agreement-hero');
   expect(html).not.toContain('document-notice');
   for (const link of ['href="/"', 'href="/download/"', 'href="/support"']) expect(html).toContain(link);
-  expect(html).not.toContain('<script');
+  expect(html).toContain('/assets/site-enhance.js');
+  expect(html).not.toContain('/assets/support-search.js');
   expect(html).not.toContain('<form');
 });
 
@@ -25,7 +26,9 @@ it('未知页面及旧文书根地址返回同一份 404，HEAD 不带正文，�
     const html = await response.text();
     expect(response.status).toBe(404);
     expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8');
-    expect(response.headers.get('content-security-policy')).toBe("default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; font-src 'self'");
+    expect(response.headers.get('content-security-policy')).toBe(
+      "default-src 'self'; style-src 'unsafe-inline'; img-src 'self'; font-src 'self'; script-src 'self'",
+    );
     expect(response.headers.get('referrer-policy')).toBe('no-referrer');
     expect(response.headers.get('x-content-type-options')).toBe('nosniff');
     expect(response.headers.get('accept-ch')).toBeNull();

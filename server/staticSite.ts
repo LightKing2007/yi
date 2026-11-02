@@ -25,6 +25,13 @@ export function readStaticSite(root: string): StaticSite | null {
     visit(root);
     const script = path.join(root, 'assets/support-search.js');
     if (fs.statSync(script).isFile()) assets.set('support-search.js', fs.readFileSync(script));
+    /** 可选增强包：缺失不影响静态站完整性，无脚本时页面功能完整 */
+    try {
+      const enhance = path.join(root, 'assets/site-enhance.js');
+      if (fs.statSync(enhance).isFile()) assets.set('site-enhance.js', fs.readFileSync(enhance));
+    } catch {
+      /* 增强包不存在时忽略 */
+    }
   } catch {
     return null;
   }

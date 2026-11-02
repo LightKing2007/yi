@@ -8,7 +8,7 @@ import { ringStyle } from './ring';
 import { minify } from './pageStyle';
 
 /** 主页专有的样式 */
-export const homeStyle = () => minify(boardStyle + geometryStyle + ringStyle + hero + games + modes + tongues + finale + scroll + narrow);
+export const homeStyle = () => minify(boardStyle + geometryStyle + ringStyle + hero + games + modes + tongues + scroll + narrow);
 
 const hero = `
 .hero { position: relative; min-height: 100svh; overflow: clip; display: grid; align-items: end; background: var(--ink); }
@@ -85,8 +85,6 @@ const games = `
 .game-text { grid-area: text; align-self: end; }
 .game-text h3 small { margin-left: 12px; font: 400 14px/1 var(--sans); letter-spacing: 0.2em; color: var(--faint); }
 .game-text p { margin-top: 14px; color: var(--dim); }
-.facts { margin-top: 22px; display: flex; flex-wrap: wrap; gap: 8px; }
-.facts span { padding: 3px 12px; border: 1px solid var(--line); border-radius: 999px; font-size: 13px; color: var(--dim); }
 `;
 
 const modes = `
@@ -141,25 +139,6 @@ const tongues = `
 .phrases > div:not(.phrases-head):hover::before { transform: none; opacity: 1; }
 .phrases .phrases-head { padding-top: 14px; padding-bottom: 14px; }
 .phrases .phrases-head > span { font: 400 12px/1 var(--sans); letter-spacing: 0.4em; color: var(--faint); }
-.figures { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 clamp(20px, 3vw, 44px); margin-top: clamp(80px, 12vh, 140px); }
-.fig { padding-top: 22px; border-top: 1px solid var(--fg); }
-.fig b { display: flex; align-items: baseline; gap: 6px; font: 900 clamp(56px, 6.4vw, 104px)/1 var(--serif); letter-spacing: -0.02em; }
-.fig small { font: 400 18px/1 var(--serif); color: var(--dim); }
-.fig p { margin-top: 18px; font-size: 15px; color: var(--dim); }
-`;
-
-const finale = `
-.finale { position: relative; padding: clamp(140px, 22vh, 240px) var(--gut) clamp(110px, 16vh, 180px); text-align: center; overflow: clip;
-  background: radial-gradient(70% 60% at 50% 46%, #241c14 0, var(--ink) 70%); }
-.finale-in { max-width: 760px; margin: 0 auto; display: grid; justify-items: center; }
-.finale-title { margin-top: 18px; font: 900 clamp(120px, 21vw, 320px)/1 var(--serif); letter-spacing: 0.06em; padding-left: 0.06em;
-  background: repeating-linear-gradient(93deg, rgb(110 62 18 / 0.25) 0 2px, transparent 2px 9px), linear-gradient(175deg, #f1d7a4, #d3a660 45%, #9c6c2f);
-  -webkit-background-clip: text; background-clip: text; color: transparent; }
-.finale-lead { margin-top: 22px; max-width: 30em; color: var(--dim); }
-.finale .cta { justify-content: center; margin-top: 44px; }
-.finale .hint { justify-content: center; width: 100%; }
-.os-row { display: flex; margin-top: 64px; font-size: 13px; letter-spacing: 0.32em; color: var(--faint); }
-.os-row span + span::before { content: "·"; margin: 0 18px; }
 `;
 
 /** 随滚动推进的效果：只在支持 animation-timeline、且未要求减弱动态效果时启用 */
@@ -181,7 +160,7 @@ const scroll = `
     0% { opacity: 0; transform: translate(-50%, -50%) translateY(-30%) scale(1.35); } 12%, 70% { opacity: 1; transform: translate(-50%, -50%); }
     100% { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
   }
-  .fig { animation: rise linear both; animation-timeline: view(); animation-range: entry 10% entry 80%; }
+  .stat { animation: rise linear both; animation-timeline: view(); animation-range: entry 10% entry 80%; }
 }
 @media (prefers-reduced-motion: no-preference) and (min-width: 960px) {
   .modes { height: 380vh; view-timeline-name: --modes; }
@@ -214,7 +193,6 @@ const narrow = `
   .hero::after { background: linear-gradient(180deg, transparent 15%, rgb(11 10 9 / 0.55) 30%, rgb(11 10 9 / 0.55)); }
   .split { flex-direction: column; }
   .game + .game { border-left: 0; border-top: 1px solid var(--line); }
-  .figures { grid-template-columns: 1fr 1fr; row-gap: 36px; }
 }
 @media (max-width: 640px) {
   .cue { display: none; }
@@ -224,7 +202,6 @@ const narrow = `
   .track { grid-template-columns: 1fr; }
   .mode, .mode:nth-child(even) { padding: 32px 0 40px; border-left: 0; }
   .ways { grid-template-columns: 1fr 1fr; }
-  .figures { grid-template-columns: 1fr; }
   .phrases > div { padding-left: 0; gap: 10px; }
   .phrases > div::before { display: none; }
   .phrases > div > span { font-size: clamp(20px, 6vw, 28px); }

@@ -71,8 +71,12 @@ it('所有页面使用确认的导航内容和顺序，非主页顶栏没有主�
       const html = await response.text();
       const header = html.slice(html.indexOf('<header'), html.indexOf('</header>'));
       const nav = /<nav aria-label="页面导航">(.*?)<\/nav>/.exec(header)?.[1] ?? '';
-      const links = [...nav.matchAll(/<a href="([^"]+)">([^<]+)<\/a>/g)].map(match => [match[1], match[2]]);
+      const links = [...nav.matchAll(/<a href="([^"]+)"(?: aria-current="page")?>([^<]+)<\/a>/g)].map(match => [match[1], match[2]]);
       expect(links, route).toEqual(expected);
+      const mobileNav = /<nav class="nav-panel" aria-label="手机页面导航">(.*?)<\/nav>/.exec(header)?.[1] ?? '';
+      const mobileLinks = [...mobileNav.matchAll(/<a href="([^"]+)"(?: aria-current="page")?>([^<]+)<\/a>/g)].map(match => [match[1], match[2]]);
+      expect(mobileLinks, route).toEqual(expected);
+      expect(header, route).toContain('<details class="nav-menu"><summary aria-label="打开或关闭页面导航">');
       expect(header, route).toContain('<a class="logo" href="/"');
       if (route !== '/') {
         expect(nav, route).not.toContain('href="/"');

@@ -36,7 +36,7 @@ describe('独立官网', () => {
       ]) {
         const response = await fetch(base + route);
         expect(response.status).toBe(200);
-        expect(response.headers.get('content-security-policy')).toContain("default-src 'none'");
+        expect(response.headers.get('content-security-policy')).toContain("default-src 'self'");
         expect(await response.text()).toContain('隐私政策与服务条款');
       }
       const part = await fetch(base + '/Yi-3.1.0-win-x64-setup.exe', { headers: { Range: 'bytes=4-6' } });
