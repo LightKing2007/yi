@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.20 |
+| 文件版本 | 1.1.21 |
 | 修订日期 | 2026-11-01 |
 | 规则前缀 | `API` |
 
@@ -111,7 +111,7 @@
 |---|---|---|---|
 | API-050 | A | 客户端重连统一采用带完全抖动的指数退避：第 n 次重连前等待 `random(0, min(30, 1 × 2^n))` 秒；连接保持 60 秒以上后计数归零。处于对局保留期（`GRACE_SECS`）内时，上限改为 5 秒，保证保留期内至少尝试 12 次 | 满足（P1-06，#45：`src/online/retry.ts`） |
 | API-051 | A | 协议中的全部时限统一定义在 `protocol.ts`，客户端与服务端严禁另行写死：握手 10 秒、心跳间隔 `PING_SECS` 10 秒、客户端静默判定 `SILENT_SECS` 25 秒、服务端空闲判定 `IDLE_SECS` 35 秒、配对确认 `CONFIRM_SECS` 15 秒、申请回应 `ASK_SECS` 20 秒、掉线保留 `GRACE_SECS` 60 秒；三个心跳相关值必须满足 `PING_SECS × 2 < SILENT_SECS < IDLE_SECS` | 满足（P1-06：握手时限 `HELLO_SECS`、连接超时 `CONNECT_SECS` 均定义在 `protocol.ts`） |
-| API-052 | A | 协议 v4 起，所有改变对局状态的消息必须带序号 `seq`；服务端收到小于等于当前序号的消息时，视为重复，回复当前状态，不再执行；收到跳号消息时回复 `sync` | 不适用（v4 实施） |
+| API-052 | A | 协议 v4 起，所有改变对局状态的消息必须带序号 `seq`；服务端收到小于等于当前序号的消息时，视为重复，回复当前状态，不再执行；收到跳号消息时回复 `sync` | 满足（协议第 4 版：`server/play.ts` 的 `inOrder`；序号、状态版本与完整同步见 [联机协议第 4 版](../plan/protocol-v4.md) 第 7 章） |
 | API-053 | A | 对局计时以服务端单调时钟（`performance.now`）为准；客户端只显示服务端下发的剩余秒数，严禁以本机时钟判定超时 | 满足 |
 
 ## 7 HTTP 接口
@@ -152,6 +152,7 @@
 | `game.rematch-opponent-left` | E2 | 对方已离开，无法再来一局 | 同左 |
 | `game.limit-moves` | E2 | 本局已达到 1024 手的上限，按和棋结束 | 以 `info` 下发的同一说明（v4 为 `notice`，终局原因 `limit-moves`） |
 | `game.limit-acts` | E2 | 本局的动作记录已达到 4096 条的上限，按和棋结束 | 以 `info` 下发的同一说明（v4 为 `notice`，终局原因 `limit-acts`） |
+| `game.stale` | E1 | 棋局已更新，请重新操作 | 无（v4 起；请求所依据的状态版本已过期，随后发送完整同步） |
 | `match.declined` | E2 | 对方未接受 | `unmatched.reason` 的同一文本 |
 | `match.left` | E2 | 对方已离开 | `unmatched.reason` 的同一文本 |
 | `match.unconfirmed` | E2 | 对方未确认 | `unmatched.reason` 的同一文本（对方超时未确认） |

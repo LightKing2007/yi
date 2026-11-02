@@ -162,6 +162,9 @@ const COORD = need(intIn(0, MAXN - 1));
 const TYPE = need(oneOf([0, 1]));
 const SIZE = need(oneOf(SIZES));
 const OK = need(bool);
+/** 请求序号与状态版本（protocol-v4.md 第 7.2 条）：序号从 1 开始，版本从 0 开始 */
+const SEQ = need(intIn(1, Number.MAX_SAFE_INTEGER));
+const SV = need(intIn(0, Number.MAX_SAFE_INTEGER));
 const ASK_KINDS: Record<AskKind, true> = { undo: true, draw: true, rematch: true };
 const QUEUE_MODES: Record<QueueMode, true> = { match: true, ranked: true };
 
@@ -175,17 +178,18 @@ const C2S_SCHEMA: Schema<C2S, 't'> = {
   create: { type: TYPE, size: SIZE, hostColor: need(oneOf(HOST_COLORS)), renju: OK, moveTime: need(oneOf(MOVE_TIMES)) },
   close: {},
   join: { code: need(match(ROOM_CODE)) },
-  move: { x: COORD, y: COORD },
-  pass: {},
-  undo: {},
-  draw: {},
-  rematch: {},
-  reply: { kind: need(member(ASK_KINDS)), ok: OK },
-  resign: {},
-  mark: { x: COORD, y: COORD },
-  agree: {},
-  resume: {},
-  leave: {},
+  move: { x: COORD, y: COORD, seq: SEQ, sv: SV },
+  pass: { seq: SEQ, sv: SV },
+  undo: { seq: SEQ, sv: SV },
+  draw: { seq: SEQ, sv: SV },
+  rematch: { seq: SEQ, sv: SV },
+  reply: { kind: need(member(ASK_KINDS)), ok: OK, seq: SEQ, sv: SV },
+  resign: { seq: SEQ, sv: SV },
+  mark: { x: COORD, y: COORD, seq: SEQ, sv: SV },
+  agree: { seq: SEQ, sv: SV },
+  resume: { seq: SEQ, sv: SV },
+  leave: { seq: SEQ, sv: SV },
+  resync: {},
 };
 
 /**
@@ -230,6 +234,9 @@ const OVER_REASONS: Record<OverReason, true> = {
   'limit-acts': true,
 };
 const RATING = record({ points: need(count), win: need(count), loss: need(count), draw: need(count) });
+/** 局编号（从 1 开始）；完整同步中已处理的最大请求序号（还没有请求时为 0） */
+const MATCH = need(intIn(1, Number.MAX_SAFE_INTEGER));
+const SEQ_DONE = need(intIn(0, Number.MAX_SAFE_INTEGER));
 const OPPONENT = record({ name: need(text(NAME_RAW_MAX)), points: opt(count) });
 
 const ACT_SCHEMA: Schema<Act, 'k'> = { M: { x: COORD, y: COORD }, P: {}, U: { n: UNDO_PLIES }, K: { x: COORD, y: COORD }, R: {} };
@@ -266,22 +273,24 @@ const S2C_SCHEMA: Schema<S2C, 't'> = {
     moveTime: need(oneOf(MOVE_TIMES)),
     black: OPPONENT,
     white: OPPONENT,
+    match: MATCH,
+    sv: SV,
   },
-  moved: { x: COORD, y: COORD },
-  passed: {},
+  moved: { x: COORD, y: COORD, sv: SV },
+  passed: { sv: SV },
   // 负数表示不限时；服务端在超时判定之前算剩余时间时可能得到小于 -1 的值，按不限时显示
   turn: { color: COLOR, secs: need(intIn(-SECS_MAX, SECS_MAX)) },
-  ask: { kind: need(member(ASK_KINDS)) },
-  answer: { kind: need(member(ASK_KINDS)), ok: OK },
-  undone: { n: UNDO_PLIES },
-  marked: { x: COORD, y: COORD },
-  agreed: { color: COLOR },
-  resumed: {},
-  over: { winner: need(oneOf([1, 2, DRAWN])), reason: need(member(OVER_REASONS)) },
+  ask: { kind: need(member(ASK_KINDS)), from: COLOR, sv: SV },
+  answer: { kind: need(member(ASK_KINDS)), from: COLOR, ok: OK, sv: SV },
+  undone: { n: UNDO_PLIES, sv: SV },
+  marked: { x: COORD, y: COORD, sv: SV },
+  agreed: { color: COLOR, sv: SV },
+  resumed: { sv: SV },
+  over: { winner: need(oneOf([1, 2, DRAWN])), reason: need(member(OVER_REASONS)), sv: SV },
   rated: { type: TYPE, rating: RATING, delta: need(intIn(-Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER)) },
   peer: { online: OK, wait: opt(intIn(0, SECS_MAX)) },
   left: {},
-  sync: { acts: list(ACTS_MAX, ACT) },
+  sync: { acts: list(ACTS_MAX, ACT), match: MATCH, sv: SV, seq: SEQ_DONE },
   notice: { code: need(CODE) },
   error: {
     code: need(CODE),

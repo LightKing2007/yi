@@ -5,7 +5,7 @@
 import { now } from '../core/clock';
 import { GameType } from '../core/types';
 import { game, Screen } from '../app/state';
-import type { C2S, QueueMode } from '../shared/protocol';
+import type { C2SDraft, QueueMode } from '../shared/protocol';
 import { Phase, changed, goScreen, inGame, myTurn, st } from './state';
 import { hasSocket, isOpen, keepPending, send } from './connection';
 
@@ -40,7 +40,7 @@ export function confirm(ok: boolean) {
 }
 
 /** 开好友房间：棋类、路数、房主执子（0 黑 1 白 2 随机）、禁手、每步限时（秒，0 表示不限时），与协议的 create 消息同形 */
-export function createRoom({ type, size, hostColor, renju, moveTime }: Omit<Extract<C2S, { t: 'create' }>, 't'>) {
+export function createRoom({ type, size, hostColor, renju, moveTime }: Omit<Extract<C2SDraft, { t: 'create' }>, 't'>) {
   st.busy = true;
   send({ t: 'create', type, size, hostColor, renju, moveTime });
   changed();

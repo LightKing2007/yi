@@ -232,13 +232,20 @@ const HANDLERS: { [K in S2C['t']]: Handler<K> } = {
     st.toMove = m.color;
     st.turnEnds = m.secs >= 0 ? time + m.secs : 0;
   },
-  // 等回应时服务端暂停计时，回应后会重新发 turn
+  // 申请与回应都发给对局双方，from 为申请方（protocol-v4.md 第 7.1.1 条）；等回应时服务端暂停计时，回应后会重新发 turn
   ask: (m, time) => {
-    st.askIn = m.kind;
-    st.askInAt = time;
+    if (m.from === st.myColor) st.askOut = m.kind;
+    else {
+      st.askIn = m.kind;
+      st.askInAt = time;
+    }
     st.turnEnds = 0;
   },
   answer: m => {
+    if (m.from !== st.myColor) {
+      st.askIn = null;
+      return;
+    }
     st.askOut = null;
     note([ANSWER[m.kind][m.ok ? 0 : 1]]);
   },
@@ -298,8 +305,34 @@ const HANDLERS: { [K in S2C['t']]: Handler<K> } = {
   },
 };
 
-/** 按消息类型交给对应的处理函数 */
+/**
+ * 状态版本（protocol-v4.md 第 7.4 条）：start 与 sync 替换本地的局编号与版本（sync 还替换请求序号）；
+ * 其余带 sv 的消息版本应为本地加 1（随 sync 补发的为本地版本），照收并记下。版本跳号说明丢了下行消息：
+ * 丢弃这条，请求一次完整同步；比本地旧的丢弃。返回这条消息是否照常处理
+ */
+function current(m: S2C): boolean {
+  if (m.t === 'start' || m.t === 'sync') {
+    st.match = m.match;
+    st.sv = m.sv;
+    if (m.t === 'sync') st.seq = m.seq;
+    st.resyncing = false;
+    return true;
+  }
+  if (!('sv' in m) || m.sv === st.sv) return true;
+  if (m.sv === st.sv + 1) {
+    st.sv = m.sv;
+    return true;
+  }
+  if (m.sv > st.sv && !st.resyncing) {
+    st.resyncing = true;
+    send({ t: 'resync' });
+  }
+  return false;
+}
+
+/** 按消息类型交给对应的处理函数；状态版本不接续的丢弃 */
 export function handle(m: S2C) {
+  if (!current(m)) return;
   // 表中 m.t 一项的处理函数接收的正是 t 为 m.t 的消息；TypeScript 无法把这种对应关系表达为类型，故在此统一放宽
   const fn = HANDLERS[m.t] as (msg: S2C, time: number) => void;
   fn(m, now());

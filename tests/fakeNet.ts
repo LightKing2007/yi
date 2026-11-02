@@ -4,7 +4,7 @@
  */
 import { expect } from 'vitest';
 import { RoomServer, type Conn, type Session } from '../server/rooms';
-import { PROTO_VERSION, type C2S, type S2C } from '../src/shared/protocol';
+import { PROTO_VERSION, stampOf, type C2SDraft, type S2C } from '../src/shared/protocol';
 import { must } from './must';
 import { loginOf, testGate } from './serverWorld';
 
@@ -77,6 +77,7 @@ class FakeWS {
   readyState = 0;
   at = fake.now; // 发起这次连接的时刻
   dead = false; // 网络静默断开：两边的消息都到不了，也没有断开事件
+  sent: string[] = []; // 客户端在这条连接上发出的每一帧
   onopen: (() => void) | null = null;
   onmessage: ((ev: { data: unknown }) => void) | null = null;
   onclose: ((ev: { code: number }) => void) | null = null;
@@ -115,6 +116,7 @@ class FakeWS {
   }
   send(data: string) {
     if (this.dead || this.readyState !== OPEN) return;
+    this.sent.push(data);
     const m = JSON.parse(data);
     queue.push(() => {
       if (this.sess && this.conn) this.sess = this.srv.message(this.sess, m, this.conn);
@@ -150,9 +152,14 @@ let peerAccounts = 0;
 export class Peer {
   inbox: S2C[] = [];
   sess: Session;
+  /** 所知的状态版本与本连接上最近编出的请求序号（protocol-v4.md 第 7 章） */
+  sv = 0;
+  seq = 0;
   conn: Conn = {
     send: m => {
       this.inbox.push(m);
+      if ('sv' in m) this.sv = m.sv;
+      if (m.t === 'sync') this.seq = m.seq;
     },
     close: () => {},
   };
@@ -175,8 +182,12 @@ export class Peer {
   drop() {
     this.srv.disconnect(this.sess, this.conn);
   }
-  send(m: C2S) {
-    this.sess = this.srv.message(this.sess, m, this.conn);
+  send(m: C2SDraft) {
+    this.sess = this.srv.message(
+      this.sess,
+      stampOf(m, () => ({ seq: ++this.seq, sv: this.sv })),
+      this.conn,
+    );
     pump();
   }
 }

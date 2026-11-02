@@ -7,7 +7,7 @@ import { Repo } from '../server/db/repo';
 import type { LogEntry, LogLevel } from '../server/log';
 import { Metrics } from '../server/metrics';
 import { replay, type GameRecord } from '../src/core/record';
-import { MOVES_MAX, type C2S, type S2C } from '../src/shared/protocol';
+import { MOVES_MAX, type C2SDraft, type S2C } from '../src/shared/protocol';
 import { Client, matchUp, play, repoGate, startGame, startWithDeadStone, world } from './serverWorld';
 import { MemoryStore } from '../server/rooms';
 import type { GameEnd, GameStart, Settle } from '../server/roomTypes';
@@ -179,7 +179,7 @@ describe('结算与特殊的终局', () => {
     const { sa } = matchUp(jia, yi, 'ranked', 1);
     const [blk, wht] = sa.color === 1 ? [jia, yi] : [yi, jia];
     let sent = 0;
-    const send = (who: Client, m: C2S) => {
+    const send = (who: Client, m: C2SDraft) => {
       if (++sent % 20 === 0) advance(1); // 不触发每条连接的消息限速
       who.send(m);
     };

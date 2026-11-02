@@ -14,7 +14,7 @@ import { T } from '../src/i18n';
 import { TABLE } from '../src/i18n/table';
 import * as net from '../src/online/client';
 import { isInvalid, parseS2C } from '../src/shared/parse';
-import { PROTO_VERSION, type C2S } from '../src/shared/protocol';
+import { PROTO_VERSION, stampOf, type C2SDraft } from '../src/shared/protocol';
 import { typedEmail } from '../src/ui/accountNav';
 import { INFO_PAGES } from '../src/ui/info';
 import { startStub, stub } from './account-stub';
@@ -73,6 +73,9 @@ const pick = (zh: string) => click('.seg .opt', zh);
 class Opponent {
   autoPass = false;
   private color = 0;
+  /** 所知的状态版本与本连接上的请求序号（protocol-v4.md 第 7 章） */
+  private sv = 0;
+  private seq = 0;
   private ws: WebSocket;
 
   constructor(
@@ -89,8 +92,8 @@ class Opponent {
     this.send({ t: 'hello', v: PROTO_VERSION, auth: this.auth });
   }
 
-  send(m: C2S) {
-    this.ws.send(JSON.stringify(m));
+  send(m: C2SDraft) {
+    this.ws.send(JSON.stringify(stampOf(m, () => ({ seq: ++this.seq, sv: this.sv }))));
   }
 
   close() {
@@ -100,6 +103,7 @@ class Opponent {
   private receive(data: unknown) {
     const m = parseS2C(JSON.parse(String(data)));
     if (isInvalid(m)) throw new Error(`对手收到非法消息：${m.why}`);
+    if ('sv' in m) this.sv = m.sv;
     if (m.t === 'found') this.send({ t: 'confirm', ok: true });
     else if (m.t === 'start') this.color = m.color;
     else if (m.t === 'turn' && this.autoPass && m.color === this.color) this.send({ t: 'pass' });

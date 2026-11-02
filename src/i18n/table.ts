@@ -503,4 +503,5 @@ export const TABLE: [string, string, string][] = [
   ["第 %d 位，共 %d 位", "第%d位，凡%d位", "Digit %d of %d"],
   ["密码过长", "密语过长", "The password is too long"],
   ["账号已在别处登录", "籍已于他处入", "Your account has signed in elsewhere"],
+  ["棋局已更新，请重新操作", "局已易，请复为之", "The game has changed. Please try again"],
 ];

@@ -6,13 +6,13 @@ import { now } from '../core/clock';
 import { loginRejected, loginToken, onLoginChange } from '../app/account';
 import { logError, logWarn } from '../app/native';
 import { isInvalid, parseS2C } from '../shared/parse';
-import { CLOSE_CODE, CONNECT_SECS, PING_SECS, PROTO_VERSION, RETRY_RESET_SECS, type C2S, type S2C } from '../shared/protocol';
+import { CLOSE_CODE, CONNECT_SECS, PING_SECS, PROTO_VERSION, RETRY_RESET_SECS, stampOf, type C2S, type C2SDraft, type S2C } from '../shared/protocol';
 import { ONLINE_SERVER } from './config';
 import { isFaultClose, retryWaitSecs } from './retry';
 import { Phase, changed, note, st, type Msg } from './state';
 
 let ws: WebSocket | null = null;
-let pending: C2S[] = []; // 连上之后要发的消息
+let pending: C2SDraft[] = []; // 连上之后要发的消息（还没编请求序号）
 
 /** 校验通过的服务端消息交给谁处理：由 client.ts 登记，连接模块因此不必引用消息的处理（两者不互相引用） */
 let handler: (m: S2C) => void = () => {};
@@ -21,13 +21,13 @@ export function setMessageHandler(fn: (m: S2C) => void) {
   handler = fn;
 }
 /** 取出并清空连上之前存着的消息 */
-export function takePending(): C2S[] {
+export function takePending(): C2SDraft[] {
   const out = pending;
   pending = [];
   return out;
 }
 /** 只留下待发消息中满足 keep 的 */
-export function keepPending(keep: (m: C2S) => boolean) {
+export function keepPending(keep: (m: C2SDraft) => boolean) {
   pending = pending.filter(keep);
 }
 /** 是否有连接（已连上或正在连） */
@@ -44,9 +44,12 @@ export function serverUrl() {
 /** 毫秒与秒的换算 */
 const MS_PER_SEC = 1000;
 
-/** 发一条消息；还没连上就先存着，连上后发出 */
-export function send(m: C2S) {
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m));
+/**
+ * 发一条消息；还没连上就先存着，连上后发出。改变对局状态的消息真正发出时才编上请求序号与所知的状态版本
+ * （protocol-v4.md 第 7.2 条）：序号随连接从 1 开始，连上之前存着的消息不能先编
+ */
+export function send(m: C2SDraft) {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(stampOf(m, () => ({ seq: ++st.seq, sv: st.sv }))));
   else {
     pending.push(m);
     connect();
@@ -120,6 +123,7 @@ export function connect() {
       return;
     }
     socketAuth = auth;
+    st.seq = 0; // 新连接上的请求序号从 1 重新开始
     sock.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, auth, resume: st.reconnecting && st.token ? st.token : undefined } satisfies C2S));
     st.pingAt = now() + PING_SECS;
   };

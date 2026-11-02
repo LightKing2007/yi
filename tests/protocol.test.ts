@@ -1,10 +1,10 @@
 /**
- * 联机协议：服务端入站消息的集中校验 parseC2S（API-010 至 API-015）、客户端入站消息的集中校验 parseS2C（API-016），
- * 昵称清洗 cleanName 与按字素截断 clipName（API-014、I18N-030）
+ * 联机协议：服务端入站消息的集中校验 parseC2S（API-010 至 API-015）、客户端入站消息的集中校验 parseS2C（API-016）。
+ * 昵称清洗见 names.test.ts
  */
 import { describe, expect, it } from 'vitest';
 import { isInvalid, parseC2S, parseS2C } from '../src/shared/parse';
-import { ACTS_MAX, NAME_MAX, PROTO_VERSION, clipName, cleanName, type Act, type C2S, type S2C } from '../src/shared/protocol';
+import { ACTS_MAX, PROTO_VERSION, type Act, type C2S, type S2C } from '../src/shared/protocol';
 
 const UID = 'test-device-00000001';
 /** 重连令牌的格式样例（32 位小写十六进制），不是真实令牌；已在 .gitleaks.toml 中登记为密钥扫描的例外 */
@@ -22,17 +22,18 @@ const LEGAL: C2S[] = [
   { t: 'create', type: 1, size: 13, hostColor: 2, renju: false, moveTime: 120 },
   { t: 'close' },
   { t: 'join', code: '0427' },
-  { t: 'move', x: 0, y: 18 },
-  { t: 'pass' },
-  { t: 'undo' },
-  { t: 'draw' },
-  { t: 'rematch' },
-  { t: 'reply', kind: 'rematch', ok: true },
-  { t: 'resign' },
-  { t: 'mark', x: 3, y: 3 },
-  { t: 'agree' },
-  { t: 'resume' },
-  { t: 'leave' },
+  { t: 'move', x: 0, y: 18, seq: 1, sv: 0 },
+  { t: 'pass', seq: 2, sv: 1 },
+  { t: 'undo', seq: 3, sv: 2 },
+  { t: 'draw', seq: 4, sv: 3 },
+  { t: 'rematch', seq: 5, sv: 4 },
+  { t: 'reply', kind: 'rematch', ok: true, seq: 6, sv: 5 },
+  { t: 'resign', seq: 7, sv: 6 },
+  { t: 'mark', x: 3, y: 3, seq: 8, sv: 7 },
+  { t: 'agree', seq: 9, sv: 8 },
+  { t: 'resume', seq: 10, sv: 9 },
+  { t: 'leave', seq: Number.MAX_SAFE_INTEGER, sv: Number.MAX_SAFE_INTEGER },
+  { t: 'resync' },
 ];
 
 /** 期望校验不通过，返回失败的种类 */
@@ -47,9 +48,9 @@ describe('入站消息校验', () => {
   });
 
   it('经 JSON 传输后同样通过，未知字段被丢弃', () => {
-    const r = parseC2S(JSON.parse('{"t":"move","x":7,"y":7,"extra":1,"__proto__":{"t":"leave"}}'));
-    expect(r).toEqual({ t: 'move', x: 7, y: 7 });
-    expect(Object.keys(r)).toEqual(['t', 'x', 'y']);
+    const r = parseC2S(JSON.parse('{"t":"move","x":7,"y":7,"seq":1,"sv":0,"extra":1,"__proto__":{"t":"leave"}}'));
+    expect(r).toEqual({ t: 'move', x: 7, y: 7, seq: 1, sv: 0 });
+    expect(Object.keys(r)).toEqual(['t', 'x', 'y', 'seq', 'sv']);
   });
 
   it('顶层不是对象、类型未知或缺少类型时不通过', () => {
@@ -60,8 +61,8 @@ describe('入站消息校验', () => {
 
   it('数值为字符串、小数、负零、NaN、Infinity 或超出范围时不通过，严禁改成默认值', () => {
     for (const x of ['7', 1.5, -0, NaN, Infinity, -1, 19, null, true]) {
-      expect(kind({ t: 'move', x, y: 0 }), String(x)).toBe('format');
-      expect(kind({ t: 'mark', x: 0, y: x }), String(x)).toBe('format');
+      expect(kind({ t: 'move', x, y: 0, seq: 1, sv: 0 }), String(x)).toBe('format');
+      expect(kind({ t: 'mark', x: 0, y: x, seq: 1, sv: 0 }), String(x)).toBe('format');
     }
   });
 
@@ -76,8 +77,8 @@ describe('入站消息校验', () => {
       { t: 'create', type: 0, size: 15, hostColor: 0, renju: 1, moveTime: 0 },
       { t: 'create', type: 0, size: 15, hostColor: 0, renju: true, moveTime: 45 },
       { t: 'confirm', ok: 'yes' },
-      { t: 'reply', kind: 'resign', ok: true },
-      { t: 'reply', kind: 'undo' },
+      { t: 'reply', kind: 'resign', ok: true, seq: 1, sv: 0 },
+      { t: 'reply', kind: 'undo', seq: 1, sv: 0 },
     ];
     for (const m of bad) expect(kind(m), JSON.stringify(m)).toBe('format');
   });
@@ -118,24 +119,42 @@ const LEGAL_S2C: S2C[] = [
   { t: 'unmatched', requeued: false },
   { t: 'created', code: '0427' },
   { t: 'joinNo', code: 'room.not-found' },
-  { t: 'start', kind: 'friend', color: 2, type: 1, size: 9, renju: false, moveTime: 120, black: { name: '甲' }, white: { name: '乙' } },
-  { t: 'moved', x: 18, y: 0 },
-  { t: 'passed' },
+  {
+    t: 'start',
+    kind: 'friend',
+    color: 2,
+    type: 1,
+    size: 9,
+    renju: false,
+    moveTime: 120,
+    black: { name: '甲' },
+    white: { name: '乙' },
+    match: 1,
+    sv: 0,
+  },
+  { t: 'moved', x: 18, y: 0, sv: 1 },
+  { t: 'passed', sv: 2 },
   { t: 'turn', color: 1, secs: 30 },
   { t: 'turn', color: 2, secs: -1 },
-  { t: 'ask', kind: 'undo' },
-  { t: 'answer', kind: 'draw', ok: false },
-  { t: 'undone', n: 2 },
-  { t: 'marked', x: 3, y: 15 },
-  { t: 'agreed', color: 1 },
-  { t: 'resumed' },
-  { t: 'over', winner: 3, reason: 'draw' },
-  { t: 'over', winner: 3, reason: 'limit-moves' },
+  { t: 'ask', kind: 'undo', from: 1, sv: 3 },
+  { t: 'answer', kind: 'draw', from: 2, ok: false, sv: 4 },
+  { t: 'undone', n: 2, sv: 5 },
+  { t: 'marked', x: 3, y: 15, sv: 6 },
+  { t: 'agreed', color: 1, sv: 7 },
+  { t: 'resumed', sv: 8 },
+  { t: 'over', winner: 3, reason: 'draw', sv: 9 },
+  { t: 'over', winner: 3, reason: 'limit-moves', sv: 10 },
   { t: 'rated', type: 0, rating: RATING, delta: -16 },
   { t: 'peer', online: false, wait: 60 },
   { t: 'peer', online: true },
   { t: 'left' },
-  { t: 'sync', acts: [{ k: 'M', x: 3, y: 3 }, { k: 'P' }, { k: 'U', n: 1 }, { k: 'K', x: 3, y: 3 }, { k: 'R' }] },
+  {
+    t: 'sync',
+    acts: [{ k: 'M', x: 3, y: 3 }, { k: 'P' }, { k: 'U', n: 1 }, { k: 'K', x: 3, y: 3 }, { k: 'R' }],
+    match: Number.MAX_SAFE_INTEGER,
+    sv: 11,
+    seq: 0,
+  },
   { t: 'notice', code: 'server.maintenance' },
   { t: 'error', code: 'game.not-your-turn', level: 'E1' },
   { t: 'error', code: 'game.illegal-move', level: 'E1', params: { reject: 'ko' } },
@@ -144,6 +163,9 @@ const LEGAL_S2C: S2C[] = [
   { t: 'error', code: 'server.internal', level: 'E5', errorId: '0b6f1c52-9d4e-4f3a-8c21-5e7d9a0b1c2d' },
   { t: 'error', code: 'future.unknown-code', level: 'E2' },
 ];
+
+/** 完整同步中除动作以外的字段（局编号、状态版本、已处理的请求序号） */
+const SYNC = { match: 1, sv: 0, seq: 0 };
 
 /** 期望服务端消息校验不通过，返回失败的种类 */
 const kindS2C = (raw: unknown) => {
@@ -175,8 +197,8 @@ describe('服务端消息校验：结构', () => {
     const go = isInvalid(r) || r.t !== 'welcome' ? undefined : r.ratings.go;
     expect(Object.keys(go ?? {})).toEqual(['points', 'win', 'loss', 'draw']);
     expect(Object.getPrototypeOf(go)).toBe(Object.prototype);
-    const sync = parseS2C(JSON.parse('{"t":"sync","acts":[{"k":"M","x":1,"y":2,"extra":true}]}'));
-    expect(sync).toEqual({ t: 'sync', acts: [{ k: 'M', x: 1, y: 2 }] });
+    const sync = parseS2C(JSON.parse('{"t":"sync","acts":[{"k":"M","x":1,"y":2,"extra":true}],"match":1,"sv":0,"seq":0}'));
+    expect(sync).toEqual({ t: 'sync', acts: [{ k: 'M', x: 1, y: 2 }], ...SYNC });
   });
 
   it('错误消息：级别须为 E1 至 E5，错误码须为两段式，附加参数有个数与取值的限制', () => {
@@ -212,8 +234,8 @@ describe('服务端消息校验：结构', () => {
 describe('服务端消息校验：次数、路数、坐标、秒数与数组长度都有上限（A-05）', () => {
   it('伪造的悔棋次数不通过：一次最多退两手，客户端不会因此循环十亿次（A-05）', () => {
     for (const n of [3, 1e9, -1, 1.5, NaN, '1', null]) {
-      expect(kindS2C({ t: 'undone', n }), String(n)).toBe('format');
-      expect(kindS2C({ t: 'sync', acts: [{ k: 'U', n }] }), String(n)).toBe('format');
+      expect(kindS2C({ t: 'undone', n, sv: 1 }), String(n)).toBe('format');
+      expect(kindS2C({ t: 'sync', acts: [{ k: 'U', n }], ...SYNC }), String(n)).toBe('format');
     }
   });
 
@@ -222,20 +244,20 @@ describe('服务端消息校验：次数、路数、坐标、秒数与数组长�
     for (const size of [0, 8, 14, 20, 25, 99, -19]) expect(kindS2C({ ...start, size }), String(size)).toBe('format');
     for (const t of ['moved', 'marked']) {
       for (const x of [19, -1, 1e9, 2.5, -0]) {
-        expect(kindS2C({ t, x, y: 0 }), `${t} ${x}`).toBe('format');
-        expect(kindS2C({ t, x: 0, y: x }), `${t} ${x}`).toBe('format');
+        expect(kindS2C({ t, x, y: 0, sv: 1 }), `${t} ${x}`).toBe('format');
+        expect(kindS2C({ t, x: 0, y: x, sv: 1 }), `${t} ${x}`).toBe('format');
       }
     }
-    expect(kindS2C({ t: 'sync', acts: [{ k: 'M', x: 19, y: 0 }] })).toBe('format');
-    expect(kindS2C({ t: 'sync', acts: [{ k: 'K', x: 0, y: -1 }] })).toBe('format');
+    expect(kindS2C({ t: 'sync', acts: [{ k: 'M', x: 19, y: 0 }], ...SYNC })).toBe('format');
+    expect(kindS2C({ t: 'sync', acts: [{ k: 'K', x: 0, y: -1 }], ...SYNC })).toBe('format');
   });
 
   it('回放的动作超过上限、类型未知或不是数组时不通过（A-05）', () => {
     const passes = (n: number): Act[] => Array.from({ length: n }, () => ({ k: 'P' }));
-    expect(kindS2C({ t: 'sync', acts: passes(ACTS_MAX) })).toBe('ok');
-    expect(kindS2C({ t: 'sync', acts: passes(ACTS_MAX + 1) })).toBe('format');
+    expect(kindS2C({ t: 'sync', acts: passes(ACTS_MAX), ...SYNC })).toBe('ok');
+    expect(kindS2C({ t: 'sync', acts: passes(ACTS_MAX + 1), ...SYNC })).toBe('format');
     for (const acts of [{ length: 1, 0: { k: 'P' } }, 'P', null, [{ k: 'X' }], [{ k: 'toString' }], [null], [[{ k: 'P' }]]]) {
-      expect(kindS2C({ t: 'sync', acts }), JSON.stringify(acts)).toBe('format');
+      expect(kindS2C({ t: 'sync', acts, ...SYNC }), JSON.stringify(acts)).toBe('format');
     }
   });
 
@@ -262,12 +284,14 @@ describe('服务端消息校验：枚举、文字与下载地址', () => {
       { ...start, black: { name: 7 } },
       { ...start, white: { name: '乙', points: -1 } },
       { ...start, white: undefined },
-      { t: 'over', winner: 0, reason: 'five' },
-      { t: 'over', winner: 4, reason: 'five' },
-      { t: 'over', winner: 1, reason: 'boom' },
-      { t: 'over', winner: 1, reason: 'toString' },
-      { t: 'ask', kind: 'resign' },
-      { t: 'agreed', color: 3 },
+      { t: 'over', winner: 0, reason: 'five', sv: 1 },
+      { t: 'over', winner: 4, reason: 'five', sv: 1 },
+      { t: 'over', winner: 1, reason: 'boom', sv: 1 },
+      { t: 'over', winner: 1, reason: 'toString', sv: 1 },
+      { t: 'ask', kind: 'resign', from: 1, sv: 1 },
+      { t: 'ask', kind: 'undo', from: 0, sv: 1 },
+      { t: 'answer', kind: 'undo', from: 3, ok: true, sv: 1 },
+      { t: 'agreed', color: 3, sv: 1 },
       { t: 'queued', mode: 'casual', type: 0, size: 15 },
       { t: 'rated', type: 0, rating: { ...RATING, points: 1.5 }, delta: 0 },
       { t: 'rated', type: 0, rating: { ...RATING, win: undefined }, delta: 0 },
@@ -279,41 +303,23 @@ describe('服务端消息校验：枚举、文字与下载地址', () => {
     ];
     for (const m of bad) expect(kindS2C(m), JSON.stringify(m)).toBe('format');
   });
-});
 
-describe('昵称清洗', () => {
-  it('删除双向控制符、零宽字符与控制字符，合并空白（API-014）', () => {
-    expect(cleanName('abc‮gpj.exe', '棋手')).toBe('abcgpj.exe');
-    expect(cleanName('甲​乙‍丙﻿', '棋手')).toBe('甲乙丙');
-    expect(cleanName('\n\t张 　  三 ', '棋手')).toBe('张 三');
-    expect(cleanName('私用\uD800', '棋手')).toBe('私用');
-  });
-
-  it('先做 NFC 规范化：组合写法与预组写法得到同一个昵称', () => {
-    expect(cleanName('Amélie', '棋手')).toBe('Amélie');
-    expect(cleanName('Amélie', '棋手')).toBe(cleanName('Amélie', '棋手'));
-  });
-
-  it('按字素截到 16 个：带肤色的表情、国旗与组合字符不被拆开（I18N-030）', () => {
-    const thumb = '👍🏽',
-      flag = '🇨🇳',
-      e = 'é̂'; // e 加两个组合附加符号：一个字素
-    expect(cleanName((thumb + flag + e).repeat(10), '棋手')).toBe((thumb + flag + e.normalize('NFC')).repeat(5) + thumb);
-    expect(cleanName('一二三四五六七八九十一二三四五六七八', '棋手')).toBe('一二三四五六七八九十一二三四五六');
-  });
-
-  it('零宽连接符按 API-014 删除：以它连成的组合表情拆为各自的表情，再按字素计数', () => {
-    expect(cleanName('👨‍👩‍👧', '棋手')).toBe('👨👩👧');
-    expect(cleanName('👨‍👩‍👧'.repeat(6), '棋手')).toBe('👨👩👧'.repeat(5) + '👨');
-  });
-
-  it('不是字符串，或清洗后为空时使用默认昵称', () => {
-    for (const s of [undefined, null, 7, {}, '', '   ', '​‮\n']) expect(cleanName(s, '棋手')).toBe('棋手');
-  });
-
-  it('输入框按字素截断时保留空白，便于继续输入', () => {
-    expect(clipName('张 ')).toBe('张 ');
-    expect(clipName('🇨🇳'.repeat(20))).toBe('🇨🇳'.repeat(NAME_MAX));
+  it('局编号、状态版本与请求序号须为范围内的整数；推进版本的消息缺少版本时不通过（protocol-v4.md 第 7 章）', () => {
+    const start = LEGAL_S2C.find(m => m.t === 'start');
+    for (const bad of [-1, 1.5, '1', null, Number.MAX_SAFE_INTEGER + 2]) {
+      expect(kindS2C({ ...start, sv: bad }), `start.sv ${String(bad)}`).toBe('format');
+      expect(kindS2C({ t: 'moved', x: 0, y: 0, sv: bad }), `moved.sv ${String(bad)}`).toBe('format');
+      expect(kindS2C({ t: 'sync', acts: [], ...SYNC, seq: bad }), `sync.seq ${String(bad)}`).toBe('format');
+      expect(kind({ t: 'pass', seq: 1, sv: bad }), `pass.sv ${String(bad)}`).toBe('format');
+      expect(kind({ t: 'pass', seq: bad, sv: 0 }), `pass.seq ${String(bad)}`).toBe('format');
+    }
+    expect(kindS2C({ ...start, match: 0 })).toBe('format');
+    expect(kindS2C({ t: 'sync', acts: [], ...SYNC, match: 0 })).toBe('format');
+    expect(kind({ t: 'pass', seq: 0, sv: 0 })).toBe('format'); // 请求序号从 1 开始
+    /** 去掉一个字段的副本 */
+    const without = (m: object, key: string) => Object.fromEntries(Object.entries(m).filter(([field]) => field !== key));
+    for (const m of LEGAL_S2C.filter(msg => 'sv' in msg)) expect(kindS2C(without(m, 'sv')), `${m.t} 缺少 sv`).toBe('format');
+    for (const m of LEGAL.filter(msg => 'seq' in msg)) expect(kind(without(m, 'seq')), `${m.t} 缺少 seq`).toBe('format');
   });
 });
 

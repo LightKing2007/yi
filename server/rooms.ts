@@ -9,7 +9,7 @@ import { isInvalid, parseC2S } from '../src/shared/parse';
 import type { Log } from './log';
 import type { Metrics } from './metrics';
 import { ConnLimits, IpCounter, JOIN_FAIL_WINDOW_SECS, JOIN_FAILS_PER_IP } from './ratelimit';
-import { CLOSE_CODE, newRating, type C2S, type QueueMode, type S2C } from '../src/shared/protocol';
+import { CLOSE_CODE, isOrdered, newRating, type C2S, type QueueMode, type S2C } from '../src/shared/protocol';
 import {
   MemoryStore,
   RoomState,
@@ -27,13 +27,13 @@ import {
   type Session,
 } from './roomTypes';
 import { typeKey } from './rating';
-import { afterGame, inGame } from './play';
+import { afterGame, inGame, inOrder } from './play';
 import { errorMsg } from './errorMsg';
 import { lobby } from './lobby';
 import { evict, guard, kick, report, scrapMatch, scrapRoom } from './faults';
 import { PENDING_MAX, confirmToken, goOffline, hello, limited, rejectInvalid, revoke, tickPlayer } from './hub';
 import { tickMatch, unqueue } from './matchmaking';
-import { byId, colorOf, endAtLimit, freeRoom, newRoom, seatPlayers, tickRoom } from './room';
+import { byId, colorOf, endAtLimit, freeRoom, newRoom, resync, seatPlayers, tickRoom } from './room';
 
 // 共用的类型已移到 roomTypes.ts（整改项 P2-12）；对外的部分仍从这里导出，引用方不必改动
 export { MemoryStore, type AccountGate, type Conn, type Health, type RatingStore, type Revocation, type RoomServerOptions, type Session } from './roomTypes';
@@ -173,6 +173,7 @@ export class RoomServer {
       match: null,
       joinFails: [],
       invalid: 0,
+      seq: 0,
       since: now,
       limits: new ConnLimits(now),
     };
@@ -378,14 +379,19 @@ export class RoomServer {
     // 服务端只下发错误码表中的错误码（errorMsg），标签的取值有界（OPS-072）
     if (msg.t === 'error' || msg.t === 'joinNo') this.metrics?.inc('yi_errors_total', { code: msg.code });
   }
-  /** 握手之后的消息：先看是不是不在对局中也能发的，再按房间的状态交给对局中或终局后的处理 */
+  /**
+   * 握手之后的消息：改变对局状态的先查请求序号与状态版本，再看是不是不在对局中也能发的，
+   * 最后按房间的状态交给对局中或终局后的处理；请求完整同步的回放所在的对局
+   */
   private handle(p: Player, m: C2S) {
     p.lastSeen = this.now();
+    if (isOrdered(m) && !inOrder(this.ctx, p, m)) return;
     if (lobby(this.ctx, p, m)) return;
     const r = this.rooms.get(p.room),
       me = r ? colorOf(r, p) : 0;
     if (!r || !me) return;
-    if (r.state === RoomState.Over) afterGame(this.ctx, { r, p, me }, m);
+    if (m.t === 'resync') resync(this.ctx, r, p);
+    else if (r.state === RoomState.Over) afterGame(this.ctx, { r, p, me }, m);
     else if (r.state === RoomState.Play) {
       inGame(this.ctx, { r, p, me }, m);
       endAtLimit(this.ctx, r); // 落子、停一手、同意悔棋、标记死子、恢复对局之后都在此检查
