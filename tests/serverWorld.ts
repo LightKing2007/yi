@@ -99,7 +99,7 @@ export class Client {
         if (this.closed) return;
         this.inbox.push(m);
         if ('sv' in m) this.sv = m.sv;
-        if (m.t === 'sync') this.seq = m.seq;
+        if (m.t === 'sync') this.seq = Math.max(this.seq, m.seq);
       },
       close: code => {
         this.closed = true;

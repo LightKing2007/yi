@@ -4,7 +4,7 @@
  */
 import { Game } from '../src/core/game';
 import { BLACK, GameType, WHITE, other } from '../src/core/types';
-import { ACTS_MAX, DRAWN, MOVES_MAX, type Act, type GameKind, type Opponent, type OverReason, type S2C } from '../src/shared/protocol';
+import { ACTS_MAX, DRAWN, GRACE_SECS, MOVES_MAX, type Act, type GameKind, type Opponent, type OverReason, type S2C } from '../src/shared/protocol';
 import { oppInfo } from './matchmaking';
 import { markTurn, recordEnd, recordStart } from './record';
 import { RoomState, type Player, type Room, type RoomRules, type RoomSeat, type ServerContext } from './roomTypes';
@@ -272,6 +272,21 @@ export function resolveAsk(ctx: ServerContext, r: Room, ok: boolean) {
 }
 
 /**
+ * 补发对方的在场情况（start 使客户端以为对方在线）：对方已离开房间时发 left；对方掉线、还在等待重连时发 peer 与剩余的等待秒数
+ */
+function sendPresence(ctx: ServerContext, r: Room, p: Player) {
+  const oppColor = other(colorOf(r, p));
+  if (!r.pid[oppColor]) {
+    ctx.send(p, { t: 'left' });
+    return;
+  }
+  const opp = seat(ctx, r, oppColor);
+  if (opp && !opp.conn) {
+    ctx.send(p, { t: 'peer', online: false, wait: Math.max(0, Math.round(GRACE_SECS - (ctx.now() - opp.offAt))) });
+  }
+}
+
+/**
  * 完整同步（重连时，或请求重复、跳号、过期时，protocol-v4.md 第 7.4 条）：把整局动作连同局编号、状态版本与已处理的请求序号回放给客户端，
  * 再以当前版本补上点目确认、终局结果与排位结算、待回应的申请与计时
  */
@@ -287,6 +302,7 @@ export function resync(ctx: ServerContext, r: Room, p: Player) {
     if (rt) ctx.send(p, { t: 'rated', ...rt });
   }
   if (r.ask) ctx.send(p, { t: 'ask', kind: r.ask, from: r.askFrom, sv });
+  sendPresence(ctx, r, p);
   if (r.state === RoomState.Over) return;
   ctx.send(p, { t: 'turn', color: r.g.cur.toMove, secs: r.deadline ? Math.round(r.deadline - ctx.now()) : -1 });
 }

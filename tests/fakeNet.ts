@@ -159,7 +159,7 @@ export class Peer {
     send: m => {
       this.inbox.push(m);
       if ('sv' in m) this.sv = m.sv;
-      if (m.t === 'sync') this.seq = m.seq;
+      if (m.t === 'sync') this.seq = Math.max(this.seq, m.seq);
     },
     close: () => {},
   };

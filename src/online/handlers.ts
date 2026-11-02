@@ -315,7 +315,7 @@ function current(m: S2C): boolean {
   if (m.t === 'start' || m.t === 'sync') {
     st.match = m.match;
     st.sv = m.sv;
-    if (m.t === 'sync') st.seq = m.seq;
+    if (m.t === 'sync') st.seq = Math.max(st.seq, m.seq); // 已发出、服务端还没处理的请求的序号不能倒退
     st.resyncing = false;
     return true;
   }

@@ -287,6 +287,22 @@ describe('状态版本与重同步（protocol-v4.md 第 7 章）', () => {
     expect([net.st.match, net.st.sv, net.st.seq]).toEqual([9, 4, 7]);
     net.move(7, 7);
     expect(JSON.parse(must(lastSocket().sent.at(-1), '发出的落子'))).toEqual({ t: 'move', x: 7, y: 7, seq: 8, sv: 4 });
+    inject({ t: 'sync', acts: [], match: 9, sv: 4, seq: 3 }); // 服务端处理到 3 时发出的同步：已发出的 8 不能倒退
+    expect(net.st.seq).toBe(8);
+  });
+
+  it('重连时对方仍在掉线：同步之后照旧显示对方掉线与等待时间', () => {
+    const peer = startGame();
+    net.move(7, 7);
+    pump();
+    peer.drop();
+    pump();
+    advance(5);
+    lastSocket().cut();
+    pump();
+    advance(3);
+    expect([net.st.reconnecting, net.st.peerOnline]).toEqual([false, false]);
+    expect(net.st.peerBackBy).toBeGreaterThan(fake.now);
   });
 
   it('请求带序号与所知的版本；重连后序号从 1 重新开始，第一手照常被接受', () => {

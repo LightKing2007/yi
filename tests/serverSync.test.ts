@@ -1,6 +1,6 @@
 /** 联机服务端：状态版本、请求序号与完整同步（protocol-v4.md 第 7 章，API-052），以假时钟直接驱动 RoomServer */
 import { describe, expect, it } from 'vitest';
-import { ASK_SECS } from '../src/shared/protocol';
+import { ASK_SECS, GRACE_SECS } from '../src/shared/protocol';
 import { Client, play, startGame, startWithDeadStone, world } from './serverWorld';
 
 /** 开好友房间的一局：甲执黑、乙执白，双方的收件箱已清空 */
@@ -228,6 +228,24 @@ describe('完整同步（第 7.4 条）', () => {
     expect(yi.inbox.map(m => m.t)).toEqual(['start', 'sync', 'over', 'ask']);
     expect(yi.expect('over')).toEqual({ t: 'over', winner: 2, reason: 'resign', sv: 2 });
     expect(yi.expect('ask')).toEqual({ t: 'ask', kind: 'rematch', from: 1, sv: 2 });
+  });
+
+  it('同步补发对方的在场情况：掉线等待中发 peer 与剩余秒数，已离开房间发 left', () => {
+    const { srv, advance } = world();
+    const jia = new Client(srv, '甲'),
+      yi = new Client(srv, '乙');
+    startGame(jia, yi);
+    yi.drop();
+    advance(10);
+    jia.drain();
+    jia.send({ t: 'resync' });
+    expect(jia.expect('peer')).toEqual({ t: 'peer', online: false, wait: GRACE_SECS - 10 });
+    const yi2 = new Client(srv, '乙', yi.token, yi.uid);
+    yi2.send({ t: 'resign' });
+    yi2.send({ t: 'leave' });
+    jia.drain();
+    jia.send({ t: 'resync' });
+    expect(jia.inbox.map(m => m.t)).toEqual(['start', 'sync', 'over', 'left']);
   });
 
   it('不在对局中的 resync 什么也不回', () => {
