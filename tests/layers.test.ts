@@ -46,7 +46,7 @@ const PACKAGES: Record<string, string[]> = {
   ui: ['preact', '@preact/signals'],
   main: ['preact'],
   server: ['ws', 'node:*'],
-  electron: ['electron', 'node:*'],
+  electron: ['electron', 'electron-updater', 'node:*'],
 };
 
 /** 文件所在的层：src 下的第一级目录（src/main.tsx 算 main），server/ 与 electron/ 各算一层；其他位置没有层 */

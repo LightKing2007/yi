@@ -44,5 +44,5 @@
 | [0010](0010-account-storage.md) | 账号密码采用加盐 scrypt，邮箱与公开名称分级保存 | 接受（存储方向） | 2026-10-30 |
 | [0011](0011-public-id-and-account-retention.md) | 八位公开 UID、绑定邮箱保留与短验证码凭据 | 接受 | 2026-10-30 |
 | [0012](0012-auth-node24.md) | 账号会话事务的最低 Node.js 版本调整为 24 | 提议 | 2026-10-31 |
-
 | [0013](0013-independent-website.md) | 官网独立运行、目录与发布 | 接受 | 2026-10-31 |
+| [0014](0014-in-app-updates.md) | 启动检查版本，Windows、Linux 游戏内更新，macOS 暂保留官网下载 | 接受 | 2026-11-02 |
