@@ -143,7 +143,7 @@ type Handler<K extends S2C['t']> = (m: ServerMsg<K>, time: number) => void;
 
 /** 连上（或重连上）服务器：记下令牌与段位，发出连上之前存着的消息 */
 function onWelcome(m: ServerMsg<'welcome'>, time: number) {
-  st.token = m.token;
+  st.token = m.resume;
   st.ratings = m.ratings;
   saveUpdate(m.latest, m.url);
   if (st.reconnecting) {

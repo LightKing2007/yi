@@ -53,7 +53,7 @@ describe('入站消息校验', () => {
     const { srv } = world(new MemoryStore(), { log: (_level, event, entry) => logs.push({ event, entry }) });
     const inbox: S2C[] = [];
     const sess = must(srv.connect({ send: m => inbox.push(expectClientAccepts(m)), close: () => {} }) ?? undefined, '服务端接受的连接');
-    for (const m of [undefined, null, [], { t: 'hello', v: PROTO_VERSION, name: '甲', uid: 'bad uid' }]) srv.message(sess, m);
+    for (const m of [undefined, null, [], { t: 'hello', v: PROTO_VERSION, auth: 'bad token' }]) srv.message(sess, m);
     expect(inbox).toEqual(Array(4).fill({ t: 'error', code: 'proto.invalid-message', level: 'E4' }));
     expect(logs.filter(row => row.event === 'proto.invalid')).toEqual([{ event: 'proto.invalid', entry: expect.objectContaining({ reason: '消息不是对象' }) }]);
   });
@@ -194,7 +194,7 @@ describe('断线', () => {
       advance(10);
     } // 掉线期间暂停计时，不会超时
     expect(jia.has('over')).toBe(false);
-    const bing2 = new Client(srv, '丙', bing.token);
+    const bing2 = new Client(srv, '丙', bing.token, bing.uid);
     expect(bing2.id).toBe(bing.id);
     expect(bing2.expect('start')?.color).toBe(2);
     expect(bing2.expect('sync')?.acts).toEqual([

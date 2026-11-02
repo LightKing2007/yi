@@ -31,10 +31,30 @@ export interface Conn {
   readonly ip?: string;
 }
 
-/** 对局的一方：设备散列与昵称 */
+/** 对局的一方：账号的内部编号（users.id）与开局时的雅号 */
 export interface GameSide {
-  key: string;
+  userId: number;
   name: string;
+}
+
+/**
+ * 联机握手时核验登录令牌的结果（protocol-v4.md 第 3.1.1 条）：有效时为账号的内部编号、会话编号、雅号与公开 UID；
+ * 令牌无效、过期或已撤销为 auth.invalid，邮箱未验证或未同意当前必需版本的协议为 consent.outdated
+ */
+export type OnlineIdentity =
+  { ok: true; userId: number; sessionId: number; name: string; publicId: string } | { ok: false; code: 'auth.invalid' | 'consent.outdated' };
+
+/** 账号的核验：联机程序以认证业务装配；账号功能未开启时没有，握手一律以 server.maintenance 拒绝 */
+export interface AccountGate {
+  identify(token: string): OnlineIdentity;
+  /** 账号当前的雅号（开局时取用，使改过的雅号从下一局起生效）；账号不存在或已注销时为 undefined */
+  nameOf(userId: number): string | undefined;
+}
+
+/** 登录被撤销的通知（认证业务提交后发出）：带 sessionId 时只撤销这一个会话（退出），否则撤销该账号的全部会话（改密、重置） */
+export interface Revocation {
+  userId: number;
+  sessionId?: number;
 }
 
 /** 开局时写入对局记录的信息 */
@@ -75,12 +95,10 @@ export interface RatedPair {
 /** 排位结算：由结算前（存放处中重新读取的）双方段位算出结算结果 */
 export type Settle = (black: Rating, white: Rating) => RatedPair;
 
-/** 段位与对局记录的存放处（独立服务端存到数据库，测试里放内存） */
+/** 段位与对局记录的存放处（独立服务端存到数据库，测试里放内存），按账号的内部编号（users.id）读写 */
 export interface RatingStore {
-  get(key: string): Ratings | undefined;
-  set(key: string, r: Ratings, name: string): void;
-  /** 玩家完成握手时调用，记下这台设备与昵称 */
-  seen(key: string, name: string): void;
+  /** 账号两种棋的段位；从未排位时为 undefined */
+  get(userId: number): Ratings | undefined;
   /** 开局：写入对局记录，返回存放处中的对局编号 */
   startGame(start: GameStart): number;
   /** 终局：在一个事务内写入棋谱与结果；给出 settle 时重新读取双方段位、结算并写入段位与变化明细，返回结算结果（DAT-040） */
@@ -91,15 +109,15 @@ export interface RatingStore {
 
 /** 放在内存中的段位存放处：测试使用，进程退出即丢失；对局记录只保留双方，用于结算 */
 export class MemoryStore implements RatingStore {
-  private m = new Map<string, Ratings>();
+  private m = new Map<number, Ratings>();
   private games = new Map<number, GameStart>();
-  get(key: string) {
-    return this.m.get(key);
+  get(userId: number) {
+    return this.m.get(userId);
   }
-  set(key: string, r: Ratings) {
-    this.m.set(key, r);
+  /** 测试用：直接写入一个账号的段位 */
+  set(userId: number, r: Ratings) {
+    this.m.set(userId, r);
   }
-  seen() {} // 内存中不记录设备与昵称
   startGame(start: GameStart) {
     this.games.set(this.games.size + 1, start);
     return this.games.size;
@@ -107,12 +125,12 @@ export class MemoryStore implements RatingStore {
   finishGame(id: number, _end: GameEnd, settle?: Settle) {
     const game = this.games.get(id);
     if (!game || !settle) return undefined;
-    const ratingsOf = (side: GameSide) => this.m.get(side.key) ?? { gomoku: newRating(), go: newRating() };
+    const ratingsOf = (side: GameSide) => this.m.get(side.userId) ?? { gomoku: newRating(), go: newRating() };
     const black = ratingsOf(game.black),
       white = ratingsOf(game.white);
     const rated = settle(black[game.type], white[game.type]);
-    this.m.set(game.black.key, { ...black, [game.type]: rated.black.rating });
-    this.m.set(game.white.key, { ...white, [game.type]: rated.white.rating });
+    this.m.set(game.black.userId, { ...black, [game.type]: rated.black.rating });
+    this.m.set(game.white.userId, { ...white, [game.type]: rated.white.rating });
     return rated;
   }
   abortGame() {} // 内存中不保留终局
@@ -153,7 +171,9 @@ export interface Player {
   name: string;
   tokenHash: string; // 当前重连令牌的散列；服务端不保存令牌原文（SEC-022）
   prevTokenHash: string; // 重连后、对方还没确认收到新令牌时仍然有效的上一枚令牌的散列；没有时为空串
-  key: string; // 段位的归属（由客户端的匿名 uid 散列而来）
+  userId: number; // 账号的内部编号（users.id），段位与对局的归属；0 表示还没握手
+  sessionId: number; // 握手所用的登录会话编号：退出只撤销这一个会话时据此找到连接（protocol-v4.md 第 4.3 条）
+  publicId: string; // 公开 UID，随 welcome 下发
   ratings: Ratings;
   lastSeen: number;
   offAt: number;
@@ -214,6 +234,7 @@ export interface RoomServerOptions {
   latest?: string; // 最新的客户端版本号，随 welcome 发给客户端
   download?: string; // 新版本的下载地址
   metrics?: Metrics; // 监控指标（07-operations.md 第 9 节）：不设时不统计
+  gate?: AccountGate; // 账号的核验（protocol-v4.md 第 3 章）：不设时握手一律以 server.maintenance 拒绝
 }
 
 /** 健康检查（/healthz，API-061）中由 RoomServer 提供的部分 */
@@ -256,8 +277,12 @@ export interface ServerContext {
   nextPlayer: number;
   /** 令牌散列 → 玩家：重连时按令牌查找（SEC-022）。只含已握手的玩家 */
   readonly byToken: Map<string, Player>;
-  /** 因累计违规被断开的匿名身份（散列）→ 解除的时刻（API-045） */
-  readonly banned: Map<string, number>;
+  /** 因累计违规被断开的账号（内部编号）→ 解除的时刻（API-045） */
+  readonly banned: Map<number, number>;
+  /** 账号的内部编号 → 在线（含掉线保留中）的玩家：一个账号只有一名玩家（protocol-v4.md 第 4 章） */
+  readonly byUser: Map<number, Player>;
+  /** 账号的核验；账号功能未开启时没有 */
+  readonly gate: AccountGate | undefined;
   /** 按 IP 统计的加入房间失败次数（API-044、原问题 A6）：与每条连接的计数并存，重新连接不清零 */
   readonly joinFailsByIp: IpCounter;
   /** 随 welcome 下发的最新版本号与下载地址；服务端没有配置时为空对象 */

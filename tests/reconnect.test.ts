@@ -4,7 +4,22 @@
  */
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { CLOSE_CODE, GRACE_SECS } from '../src/shared/protocol';
-import { advance, fake, inject, lastSocket, loadClient, logs, pump, resetNet, sockets, startGame, type Peer, type Client, type State } from './fakeNet';
+import {
+  advance,
+  fake,
+  inject,
+  lastSocket,
+  loadClient,
+  logs,
+  newServer,
+  pump,
+  resetNet,
+  sockets,
+  startGame,
+  type Peer,
+  type Client,
+  type State,
+} from './fakeNet';
 import { must } from './must';
 
 let net: Client, state: State;
@@ -125,7 +140,9 @@ describe('断线重连：按关闭码决定是否重连、多久后重连（04-a
     expect(net.st.phase).toBe(net.Phase.Off);
     expect(net.st.error).toEqual(['服务器出现问题，请稍后再试']);
   });
+});
 
+describe('断线重连：不再重连的关闭码（04-api.md 第 4.2 条）', () => {
   it('正常关闭、非法 UTF-8、消息过大时不再重连；后两种说明本端有缺陷，写 error 日志', () => {
     for (const code of [CLOSE_CODE.normal, CLOSE_CODE.badUtf8, CLOSE_CODE.tooBig]) {
       const peer = startGame(0); // 不限时：推进时间时不会因超时结束对局
@@ -135,6 +152,7 @@ describe('断线重连：按关闭码决定是否重连、多久后重连（04-a
       expect(secsToNextConnect(peer, 10), String(code)).toBe(-1);
       expect(net.st.phase, String(code)).toBe(net.Phase.Off);
       net.disconnect();
+      fake.server = newServer(); // 同一账号回来会回到保留中的这一局：下一轮换一个服务端，从新的一局开始
     }
     expect(logs.filter(([level]) => level === 'error').map(([, text]) => text)).toEqual([
       '联机: 连接被服务端以关闭码 1007 关闭，不再重连',

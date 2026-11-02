@@ -3,7 +3,8 @@
  * 以三种语言走遍各界面与联机流程（scripts/fit-driver.ts），再跑单机的终局与点目场景；Fit 在开发模式下报告的“[fit] 放不下”
  * 一条即失败。只在 CI 上运行（.github/workflows/ci.yml 的 text-fit 任务；Linux 上须在虚拟显示器中运行）：
  *   xvfb-run -a npm run fit-check
- * 自己起开发服务器与本机联机服务端（须先 npm run build:node），段位存档与浏览器数据放在临时目录，跑完一并删除。
+ * 自己起开发服务器与本机联机服务端（须先 npm run build:node）；协议第 4 版的联机须登录，服务端打开账号功能，用临时生成的密钥，
+ * 测试账号由 scripts/test-accounts.mjs 直接注册（不发邮件）。数据库、密钥与浏览器数据放在临时目录，跑完一并删除。
  */
 const { app, BrowserWindow } = require('electron');
 const { spawn } = require('node:child_process');
@@ -19,6 +20,8 @@ const SCENARIOS = ['gomoku-win', 'gomoku-forfeit', 'go-score'];
 const LANGS = [0, 1, 2];
 /** 联机服务端启动的等待上限 */
 const SERVER_START_MS = 10000;
+/** 测试账号的雅号：己方与扮演对手的一方 */
+const ACCOUNT_NAMES = ['Player', 'Opponent'];
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-fit-'));
 app.setPath('userData', path.join(tmp, 'userdata'));
@@ -36,9 +39,9 @@ function freePort() {
 }
 
 /** 启动打包好的联机服务端，等到它报告“已启动” */
-async function startGameServer(port) {
+async function startGameServer(port, accounts) {
   const child = spawn('node', [path.join(ROOT, 'dist-server/server.cjs'), String(port)], {
-    env: { ...process.env, YI_DB: path.join(tmp, 'yi.db') },
+    env: { ...process.env, YI_DB: path.join(tmp, 'yi.db'), ...accounts },
     stdio: ['ignore', 'pipe', 'inherit'],
   });
   await new Promise((resolve, reject) => {
@@ -71,10 +74,12 @@ function openWindow(problems) {
 }
 
 /** 联机与静态界面：页面载入后运行 fit-driver.ts 的 runAll */
-async function runOnline(win, base, gamePort) {
+async function runOnline(win, base, gamePort, tokens) {
   const server = `ws://127.0.0.1:${gamePort}`;
   await win.loadURL(`${base}/?server=${encodeURIComponent(server)}`);
-  const probed = await win.webContents.executeJavaScript(`import('/scripts/fit-driver.ts').then(m => m.runAll(${JSON.stringify(server)}))`);
+  const probed = await win.webContents.executeJavaScript(
+    `import('/scripts/fit-driver.ts').then(m => m.runAll(${JSON.stringify(server)}, ${JSON.stringify(tokens)}))`,
+  );
   console.log(`联机与静态界面已走完；提示条检查的条数：${JSON.stringify(probed)}`);
 }
 
@@ -99,9 +104,11 @@ app.whenReady().then(async () => {
     await vite.listen();
     const base = `http://localhost:${vite.httpServer.address().port}`;
     const gamePort = await freePort();
-    game = await startGameServer(gamePort);
+    const { prepareAccounts } = await import('./test-accounts.mjs');
+    const { env, tokens } = await prepareAccounts({ tmp, dbFile: path.join(tmp, 'yi.db'), names: ACCOUNT_NAMES });
+    game = await startGameServer(gamePort, env);
     const win = openWindow(problems);
-    await runOnline(win, base, gamePort);
+    await runOnline(win, base, gamePort, tokens);
     await runScenarios(win, base);
     win.destroy();
   } catch (err) {

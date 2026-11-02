@@ -7,7 +7,7 @@ import { GameType } from '../core/types';
 import { game, Screen } from '../app/state';
 import type { C2S, QueueMode } from '../shared/protocol';
 import { Phase, changed, goScreen, inGame, myTurn, st } from './state';
-import { hasSocket, isOpen, keepPending, nick, send } from './connection';
+import { hasSocket, isOpen, keepPending, send } from './connection';
 
 /** 开始匹配 / 排位（没连上时先显示“正在寻找”，连上后自动进入队列） */
 export function queue(mode: QueueMode, type: number, size: number) {
@@ -15,14 +15,13 @@ export function queue(mode: QueueMode, type: number, size: number) {
   st.qType = type;
   st.qSize = size;
   st.qSince = now();
-  send({ t: 'name', name: nick() });
   send({ t: 'queue', mode, type, size });
   st.phase = Phase.Queue;
   changed();
 }
 
 export function unqueue() {
-  keepPending(m => m.t !== 'queue' && m.t !== 'name');
+  keepPending(m => m.t !== 'queue');
   if (isOpen()) send({ t: 'unqueue' });
   st.phase = hasSocket() ? Phase.Lobby : Phase.Off;
   changed();
@@ -43,7 +42,6 @@ export function confirm(ok: boolean) {
 /** 开好友房间：棋类、路数、房主执子（0 黑 1 白 2 随机）、禁手、每步限时（秒，0 表示不限时），与协议的 create 消息同形 */
 export function createRoom({ type, size, hostColor, renju, moveTime }: Omit<Extract<C2S, { t: 'create' }>, 't'>) {
   st.busy = true;
-  send({ t: 'name', name: nick() });
   send({ t: 'create', type, size, hostColor, renju, moveTime });
   changed();
 }
@@ -57,7 +55,6 @@ export function closeRoom() {
 
 export function joinRoom(code: string) {
   st.busy = true;
-  send({ t: 'name', name: nick() });
   send({ t: 'join', code });
   changed();
 }

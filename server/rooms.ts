@@ -4,6 +4,7 @@
  * 对局规则直接复用 src/core/game.ts：每个房间一份 Game，客户端发来的每一手都在这里校验，
  * 所以服务端与客户端的判定完全一致。协议见 src/shared/protocol.ts。
  */
+import { randomUUID } from 'node:crypto';
 import { isInvalid, parseC2S } from '../src/shared/parse';
 import type { Log } from './log';
 import type { Metrics } from './metrics';
@@ -12,12 +13,14 @@ import { CLOSE_CODE, newRating, type C2S, type QueueMode, type S2C } from '../sr
 import {
   MemoryStore,
   RoomState,
+  type AccountGate,
   type Conn,
   type Health,
   type Match,
   type Player,
   type QEntry,
   type RatingStore,
+  type Revocation,
   type Room,
   type RoomServerOptions,
   type ServerContext,
@@ -28,12 +31,12 @@ import { afterGame, inGame } from './play';
 import { errorMsg } from './errorMsg';
 import { lobby } from './lobby';
 import { evict, guard, kick, report, scrapMatch, scrapRoom } from './faults';
-import { PENDING_MAX, confirmToken, goOffline, hello, limited, rejectInvalid, tickPlayer } from './hub';
+import { PENDING_MAX, confirmToken, goOffline, hello, limited, rejectInvalid, revoke, tickPlayer } from './hub';
 import { tickMatch, unqueue } from './matchmaking';
 import { byId, colorOf, endAtLimit, freeRoom, newRoom, seatPlayers, tickRoom } from './room';
 
 // 共用的类型已移到 roomTypes.ts（整改项 P2-12）；对外的部分仍从这里导出，引用方不必改动
-export { MemoryStore, type Conn, type Health, type RatingStore, type RoomServerOptions, type Session } from './roomTypes';
+export { MemoryStore, type AccountGate, type Conn, type Health, type RatingStore, type Revocation, type RoomServerOptions, type Session } from './roomTypes';
 export { PENDING_MAX } from './hub';
 
 export class RoomServer {
@@ -43,8 +46,12 @@ export class RoomServer {
   private rooms = new Map<number, Room>();
   private queue: QEntry[] = [];
   private matches = new Set<Match>();
-  /** 因累计违规被断开的匿名身份（散列）→ 解除的时刻（API-045） */
-  private banned = new Map<string, number>();
+  /** 因累计违规被断开的账号（内部编号）→ 解除的时刻（API-045） */
+  private banned = new Map<number, number>();
+  /** 账号的内部编号 → 玩家（protocol-v4.md 第 4 章：一个账号一名玩家） */
+  private byUser = new Map<number, Player>();
+  /** 账号的核验；账号功能未开启时没有 */
+  private gate: AccountGate | undefined;
   private joinFailsByIp = new IpCounter(JOIN_FAIL_WINDOW_SECS, JOIN_FAILS_PER_IP);
   private nextPlayer = 1;
   private nextRoom = 1;
@@ -67,6 +74,7 @@ export class RoomServer {
     this.store = opt.store ?? new MemoryStore();
     this.latest = opt.latest ? { latest: opt.latest, url: opt.download } : {};
     this.metrics = opt.metrics;
+    this.gate = opt.gate;
     this.ctx = RoomServer.context(this);
   }
 
@@ -94,6 +102,8 @@ export class RoomServer {
       },
       byToken: server.byToken,
       banned: server.banned,
+      byUser: server.byUser,
+      gate: server.gate,
       joinFailsByIp: server.joinFailsByIp,
       latest: server.latest,
       get nextPlayer() {
@@ -126,6 +136,16 @@ export class RoomServer {
 
   // ---------------- 对外接口 ----------------
 
+  /** 登录被撤销（认证业务提交后通知）：按范围断开该账号的联机连接（protocol-v4.md 第 4.3 条）；处理出错时只写日志与错误编号 */
+  revoke(event: Revocation) {
+    try {
+      revoke(this.ctx, event);
+    } catch (err) {
+      // 撤销本身已在数据库中生效：连接断不开时，下次握手仍会被拒
+      this.log('error', 'internal.error', { msg: '撤销登录时出错', errorId: randomUUID(), err });
+    }
+  }
+
   /**
    * 新连接；尚未握手的连接已达 PENDING_MAX 时告知“服务器繁忙”后返回 null，调用方应以 CLOSE_CODE.overload 关闭连接（API-046）。
    * 玩家数上限在握手时检查（hello）
@@ -142,7 +162,9 @@ export class RoomServer {
       name: '',
       tokenHash: '',
       prevTokenHash: '',
-      key: '',
+      userId: 0,
+      sessionId: 0,
+      publicId: '',
       ratings: { gomoku: newRating(), go: newRating() },
       lastSeen: now,
       offAt: 0,

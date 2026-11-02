@@ -49,7 +49,7 @@ function writeFailed(ctx: ServerContext, r: Room, op: string, err: unknown) {
 }
 
 /** 一方在存放处中的身份 */
-const sideOf = (r: Room, color: number): GameSide => ({ key: r.who[color]?.key ?? '', name: r.who[color]?.name ?? '' });
+const sideOf = (r: Room, color: number): GameSide => ({ userId: r.who[color]?.userId ?? 0, name: r.who[color]?.name ?? '' });
 
 /** 开局：写入对局记录；失败时这一局没有记录（recordId 为 0），对局照常 */
 export function recordStart(ctx: ServerContext, r: Room) {

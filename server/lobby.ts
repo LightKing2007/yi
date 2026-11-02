@@ -4,9 +4,9 @@
  */
 import { errorMsg } from './errorMsg';
 import { BLACK, WHITE } from '../src/core/types';
-import { cleanName, queueRules, type C2S } from '../src/shared/protocol';
+import { queueRules, type C2S } from '../src/shared/protocol';
 import { allow, violate } from './hub';
-import { confirm, enqueue, rankedElsewhere, unqueue } from './matchmaking';
+import { confirm, enqueue, unqueue } from './matchmaking';
 import { byId, freeRoom, leaveRoom, newRoom, roomCode, seatPlayers } from './room';
 import { RoomState, type Player, type QEntry, type ServerContext } from './roomTypes';
 
@@ -28,9 +28,6 @@ export function lobby(ctx: ServerContext, p: Player, m: C2S): boolean {
       return true;
     case 'leave':
       leaveRoom(ctx, p);
-      return true;
-    case 'name':
-      rename(ctx, p, m.name);
       return true;
     case 'queue':
       if (allow(ctx, p, 'queue')) queueFor(ctx, p, { mode: m.mode, type: m.type, size: m.size });
@@ -55,17 +52,7 @@ export function lobby(ctx: ServerContext, p: Player, m: C2S): boolean {
   }
 }
 
-/**
- * 改名（不在房间里时）。客户端每次匹配、开房、加入前都会先发一次 name，与当前昵称相同的不算改名，
- * 不计入频率；真正改名的每 10 秒至多 1 次（API-044）
- */
-export function rename(ctx: ServerContext, p: Player, raw: string) {
-  if (busy(p)) return;
-  const name = cleanName(raw, p.name);
-  if (name !== p.name && allow(ctx, p, 'name')) p.name = name;
-}
-
-/** 进入匹配或排位：维护模式中、已在房间里、同一台设备已在排位时拒绝；否则重新排队 */
+/** 进入匹配或排位：维护模式中、已在房间里时拒绝；否则重新排队（一个账号只有一名玩家，不再按设备互斥排位） */
 export function queueFor(ctx: ServerContext, p: Player, { mode, type, size }: Pick<QEntry, 'mode' | 'type' | 'size'>) {
   if (ctx.maintenance) {
     ctx.send(p, errorMsg('server.maintenance'));
@@ -73,10 +60,6 @@ export function queueFor(ctx: ServerContext, p: Player, { mode, type, size }: Pi
   }
   if (busy(p)) {
     ctx.send(p, errorMsg('room.already-in'));
-    return;
-  }
-  if (mode === 'ranked' && rankedElsewhere(ctx, p)) {
-    ctx.send(p, errorMsg('queue.ranked-elsewhere'));
     return;
   }
   unqueue(ctx, p);

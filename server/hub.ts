@@ -1,16 +1,17 @@
 /**
- * 连接与玩家（整改项 P2-12 自 rooms.ts 拆出）：握手与匿名身份、玩家数与未握手连接的上限、重连令牌的签发与查找、
- * 带令牌重连回到原来的对局、断线与玩家时限，以及限流与违规累计（API-042 至 API-046、SEC-020、SEC-022）。
+ * 连接与玩家（整改项 P2-12 自 rooms.ts 拆出）：以账号的登录令牌握手、一个账号一名玩家与接管、登录撤销时断开、
+ * 玩家数与未握手连接的上限、重连令牌的签发与查找、回到原来的对局、断线与玩家时限，以及限流与违规累计
+ * （protocol-v4.md 第 3、4 章，API-042 至 API-046、SEC-020、SEC-022）。
  */
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { other } from '../src/core/types';
 import type { Invalid } from '../src/shared/parse';
-import { CLOSE_CODE, GRACE_SECS, HELLO_SECS, IDLE_SECS, LEGACY_PROTO_VERSION, cleanName, newRating, type C2S } from '../src/shared/protocol';
+import { CLOSE_CODE, GRACE_SECS, HELLO_SECS, IDLE_SECS, LEGACY_PROTO_VERSION, newRating, type C2S } from '../src/shared/protocol';
 import { errorMsg } from './errorMsg';
 import { dropMatch, unqueue } from './matchmaking';
 import { BAN_SECS, type LimitedOp } from './ratelimit';
 import { bothOnline, colorOf, finish, leaveRoom, resync, seat } from './room';
-import { RoomState, type Conn, type Player, type Room, type ServerContext } from './roomTypes';
+import { RoomState, type Conn, type OnlineIdentity, type Player, type Revocation, type Room, type ServerContext } from './roomTypes';
 
 const MAX_PLAYERS = 2048;
 /**
@@ -21,8 +22,6 @@ const MAX_PLAYERS = 2048;
 export const PENDING_MAX = MAX_PLAYERS;
 /** 重连令牌的随机字节数：16 字节，即 32 位十六进制（API-013、SEC-020） */
 const TOKEN_BYTES = 16;
-/** 匿名身份散列保留的十六进制位数（DAT-075） */
-const UID_HASH_CHARS = 32;
 /** 第 3 版客户端的更新提示（protocol-v4.md 第 8 章）：以它能显示的文本下发 */
 const LEGACY_UPDATE_TEXT = '客户端版本与服务器不一致，请更新游戏';
 /** 令牌的散列（十六进制）：按令牌查找时以它为键（SEC-022） */
@@ -98,12 +97,12 @@ export function limited(ctx: ServerContext, p: Player) {
 }
 
 /**
- * 累计一次违规（E3、E4）；60 秒内达到 10 次时以 1008 断开，并在 5 分钟内拒绝同一匿名身份再连上（API-045）。
+ * 累计一次违规（E3、E4）；60 秒内达到 10 次时以 1008 断开，并在 5 分钟内拒绝同一账号再连上（API-045）。
  * 断开后对局照常保留席位，但被拒期间无法重连，到时按掉线判负
  */
 export function violate(ctx: ServerContext, p: Player) {
   if (!p.conn || !p.limits.violate(ctx.now())) return;
-  if (p.key) ctx.banned.set(p.key, ctx.now() + BAN_SECS);
+  if (p.userId) ctx.banned.set(p.userId, ctx.now() + BAN_SECS);
   ctx.log('warn', 'conn.kicked', { msg: `${p.id ? p.name : '未握手的连接'} 累计违规过多，已断开`, playerId: p.id || undefined, code: CLOSE_CODE.policy });
   drop(ctx, p, CLOSE_CODE.policy);
 }
@@ -146,67 +145,94 @@ export function outdated(ctx: ServerContext, p: Player, version: number | undefi
   drop(ctx, p, CLOSE_CODE.version);
 }
 
-/** 握手（hello）：校验匿名身份是否被暂时拒绝；带有效令牌时回到原来的会话，否则在玩家数上限内作为新玩家上线 */
+/** 握手被拒：下发错误码后以 code 关闭，玩家不上线 */
+function refuse(ctx: ServerContext, p: Player, error: Parameters<typeof errorMsg>[0], code: number): Player {
+  ctx.send(p, errorMsg(error));
+  drop(ctx, p, code);
+  return p;
+}
+
+/**
+ * 握手（hello，protocol-v4.md 第 3.1 条）：核验登录令牌与联机资格，不降级为游客；账号被暂时拒绝时断开；
+ * 同一账号已有玩家（在线或掉线保留中）时由这条连接接管，否则在玩家数上限内作为新玩家上线
+ */
 export function hello(ctx: ServerContext, p: Player, m: C2S): Player {
   if (m.t !== 'hello') {
     ctx.send(p, errorMsg('proto.not-hello'));
     violate(ctx, p);
     return p;
   }
-  // 匿名身份：只存散列，存档里看不出原来的 uid（DAT-075）
-  const key = createHash('sha256')
-    .update('yi:' + m.uid)
-    .digest('hex')
-    .slice(0, UID_HASH_CHARS);
-  if ((ctx.banned.get(key) ?? 0) > ctx.now()) {
-    // 刚因累计违规被断开（API-045）
-    ctx.send(p, errorMsg('rate.limited'));
-    drop(ctx, p, CLOSE_CODE.policy);
-    return p;
-  }
+  if (!ctx.gate) return refuse(ctx, p, 'server.maintenance', CLOSE_CODE.restart); // 账号功能未开启：第 4 版的联机无从核验身份
+  const who = ctx.gate.identify(m.auth);
+  if (!who.ok) return refuse(ctx, p, who.code, CLOSE_CODE.authFailed);
+  if ((ctx.banned.get(who.userId) ?? 0) > ctx.now()) return refuse(ctx, p, 'rate.limited', CLOSE_CODE.policy); // 刚因累计违规被断开（API-045）
   p.lastSeen = ctx.now();
-  const found = m.token === undefined ? null : findByToken(ctx, m.token);
-  if (found) return resume(ctx, p, found.player, found.hash); // p 还没握手，不会是 found.player
-  if (ctx.players.size - ctx.pending() >= MAX_PLAYERS) {
-    // 满员（API-046）：只拒绝新来的玩家；带令牌重连的已在上一行回到原来的会话，不占新的名额
-    ctx.send(p, errorMsg('server.full'));
-    drop(ctx, p, CLOSE_CODE.overload);
-    return p;
-  }
-  p.name = cleanName(m.name, '棋手');
+  const back = ctx.byUser.get(who.userId);
+  if (back) return takeOver(ctx, p, back, { who, resume: m.resume });
+  // 满员（API-046）：只拒绝新来的账号；接管与重连回到原来的玩家，不占新的名额
+  if (ctx.players.size - ctx.pending() >= MAX_PLAYERS) return refuse(ctx, p, 'server.full', CLOSE_CODE.overload);
   p.id = ctx.nextPlayer++;
-  const token = issueToken(ctx, p);
-  p.key = key;
-  ctx.store.seen(p.key, p.name); // 找到或新建游客用户（roadmap.md 第 5.4 节）
-  const saved = ctx.store.get(p.key);
+  p.userId = who.userId;
+  p.sessionId = who.sessionId;
+  p.publicId = who.publicId;
+  p.name = who.name;
+  ctx.byUser.set(p.userId, p);
+  const saved = ctx.store.get(p.userId);
   p.ratings = { gomoku: { ...newRating(), ...saved?.gomoku }, go: { ...newRating(), ...saved?.go } };
-  ctx.send(p, { t: 'welcome', id: p.id, token, ratings: p.ratings, ...ctx.latest });
-  if (m.token !== undefined) ctx.send(p, { t: 'resumeFailed' }); // 原来的对局已经不在了（服务器重启过，或掉线太久）
+  ctx.send(p, welcome(ctx, p, issueToken(ctx, p)));
+  if (m.resume !== undefined) ctx.send(p, { t: 'resumeFailed' }); // 原来的对局已经不在了（服务器重启过，或掉线太久）
   if (ctx.maintenance) ctx.send(p, { t: 'notice', code: 'server.maintenance' });
   ctx.log('info', 'player.online', { msg: `${p.name} 上线`, playerId: p.id });
   return p;
 }
 
+/** welcome：玩家号、新的重连令牌、账号的公开资料、段位与最新版本 */
+const welcome = (ctx: ServerContext, p: Player, resume: string) =>
+  ({ t: 'welcome', id: p.id, resume, user: { publicId: p.publicId, name: p.name }, ratings: p.ratings, ...ctx.latest }) as const;
+
 /**
- * 带令牌重连，找回掉线的玩家 back：由新连接（p 的连接）接管，并换发新令牌（SEC-020）。usedHash 为这次所用令牌的散列，
- * 在收到新连接上的下一条消息之前仍然有效：新令牌若随连接再次中断而没送到，客户端仍可用原来的令牌回来
+ * 同一账号的新连接接管已有的玩家 back（protocol-v4.md 第 4.1、4.2 条）：先使旧连接失效（此后它的消息与关闭事件都不再影响 back），
+ * 再告知旧连接“账号已在别处登录”并以 4002 关闭；对局、匹配与房间随 back 转到新连接，换发新的重连令牌（SEC-020）。
+ * 带的是 back 的重连令牌时，这枚令牌在新连接上的下一条消息之前仍然有效：新令牌若随连接再次中断而没送到，客户端仍可用它回来
  */
-export function resume(ctx: ServerContext, p: Player, back: Player, usedHash: string): Player {
+export function takeOver(
+  ctx: ServerContext,
+  p: Player,
+  back: Player,
+  { who, resume }: { who: Extract<OnlineIdentity, { ok: true }>; resume?: string },
+): Player {
+  const found = resume === undefined ? null : findByToken(ctx, resume);
+  const usedHash = found?.player === back ? found.hash : '';
   const old = back.conn;
-  if (old) {
-    // 旧连接其实已经断了，只是还没被发现：由新连接接管
-    back.conn = null;
-    old.close();
-  }
   back.conn = p.conn;
+  if (old) {
+    old.send(errorMsg('auth.replaced'));
+    old.close(CLOSE_CODE.replaced);
+  }
+  back.sessionId = who.sessionId;
+  if (!back.room) back.name = who.name; // 不在房间里时取最新的雅号；对局中保持开局时的名字（protocol-v4.md 第 5.3 条）
   back.lastSeen = ctx.now();
   ctx.players.delete(p); // p 还没握手，没有令牌
   p.conn = null;
-  ctx.send(back, { t: 'welcome', id: back.id, token: issueToken(ctx, back, usedHash), ratings: back.ratings, ...ctx.latest });
+  ctx.send(back, welcome(ctx, back, issueToken(ctx, back, usedHash)));
   const r = ctx.rooms.get(back.room);
-  if (r && r.state !== RoomState.Wait) resumeRoom(ctx, r, back);
-  ctx.log('info', 'player.resumed', { msg: `${back.name} 重新连上`, playerId: back.id, roomId: back.room || undefined });
+  // 掉线后回来：恢复计时并告诉对方；从在线的连接接管：对方看来一直在线，只给新连接回放
+  if (r && r.state !== RoomState.Wait) {
+    if (old) resync(ctx, r, back);
+    else resumeRoom(ctx, r, back);
+  }
+  const event = old ? 'player.replaced' : 'player.resumed';
+  ctx.log('info', event, { msg: `${back.name} ${old ? '在别处连上，已接管' : '重新连上'}`, playerId: back.id, roomId: back.room || undefined });
   return back;
+}
+
+/** 登录被撤销（protocol-v4.md 第 4.3 条）：退出只关闭以该会话握手的连接，改密、重置关闭该账号的连接；对局中的席位按掉线保留 */
+export function revoke(ctx: ServerContext, { userId, sessionId }: Revocation) {
+  const p = ctx.byUser.get(userId);
+  if (!p?.conn || (sessionId !== undefined && p.sessionId !== sessionId)) return;
+  ctx.send(p, errorMsg('auth.invalid'));
+  ctx.log('info', 'player.revoked', { msg: `${p.name} 的登录已撤销，断开联机`, playerId: p.id });
+  drop(ctx, p, CLOSE_CODE.authFailed);
 }
 
 /** 重连的玩家回到房间：回放整局；双方都在线时恢复计时，并告诉对方 */
@@ -247,8 +273,9 @@ export function confirmToken(ctx: ServerContext, p: Player) {
   p.prevTokenHash = '';
 }
 
-/** 移除玩家，连同他的令牌 */
+/** 移除玩家，连同他的令牌与账号索引 */
 export function forget(ctx: ServerContext, p: Player) {
   ctx.players.delete(p);
+  if (ctx.byUser.get(p.userId) === p) ctx.byUser.delete(p.userId);
   for (const hash of [p.tokenHash, p.prevTokenHash]) if (hash) ctx.byToken.delete(hash);
 }

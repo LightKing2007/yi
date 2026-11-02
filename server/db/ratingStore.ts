@@ -1,7 +1,7 @@
 /** 数据库中的段位与对局记录：联机服务端经 RatingStore 接口读写 */
 import type { Ratings } from '../../src/shared/protocol';
 import type { GameEnd, GameStart, RatedPair, RatingStore, Settle } from '../roomTypes';
-import { GAME_TYPES, type Repo } from './repo';
+import type { Repo } from './repo';
 
 /** 棋谱 JSON 的版本（DAT-024、VER-012：棋谱单独编号） */
 export const RECORD_VERSION = 1;
@@ -14,31 +14,16 @@ export interface DbRatingStoreOptions {
   now: () => number;
 }
 
-/** 以设备散列为键的段位存放处，段位与对局记录在数据库中 */
+/** 以账号的内部编号（users.id）为键的段位存放处，段位与对局记录在数据库中（protocol-v4.md 第 5 章） */
 export class DbRatingStore implements RatingStore {
   constructor(
     private readonly repo: Repo,
     private readonly opt: DbRatingStoreOptions,
   ) {}
 
-  /** 这台设备的段位；还没有用户时为 undefined */
-  get(key: string): Ratings | undefined {
-    const userId = this.repo.userOf(key);
-    return userId === undefined ? undefined : this.repo.ratingsOf(userId);
-  }
-
-  /** 玩家完成握手：找到或新建游客用户，记下昵称与时刻（roadmap.md 第 5.4 节） */
-  seen(key: string, name: string) {
-    this.repo.touch(key, name, this.opt.now());
-  }
-
-  /** 写入这台设备两种棋的段位，在一个事务内 */
-  set(key: string, ratings: Ratings, name: string) {
-    const now = this.opt.now();
-    this.repo.transaction(() => {
-      const userId = this.repo.touch(key, name, now);
-      for (const type of GAME_TYPES) this.repo.saveRating(userId, type, ratings[type], now);
-    });
+  /** 账号两种棋的段位；没有段位记录的棋种为起始段位 */
+  get(userId: number): Ratings | undefined {
+    return this.repo.ratingsOf(userId);
   }
 
   /** 开局：写入对局记录（双方、种类、棋类、路数），返回对局编号 */
@@ -50,8 +35,8 @@ export class DbRatingStore implements RatingStore {
           kind: start.kind,
           type: start.type,
           size: start.size,
-          blackUserId: this.repo.ensure(start.black.key, start.black.name, now),
-          whiteUserId: this.repo.ensure(start.white.key, start.white.name, now),
+          blackUserId: start.black.userId,
+          whiteUserId: start.white.userId,
         },
         now,
       ),

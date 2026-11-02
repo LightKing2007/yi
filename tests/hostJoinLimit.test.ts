@@ -3,11 +3,11 @@ import { describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { startHost } from '../server/host';
 import { PROTO_VERSION } from '../src/shared/protocol';
-import { newUid } from './serverWorld';
+import { newUid, loginOf, testGate } from './serverWorld';
 
 describe('按 IP 的加入失败次数（API-044，原问题 A6）', () => {
   it('经代理来的连接按 X-Forwarded-For 中的真实地址合计，重新连接不清零', async () => {
-    const host = await startHost(0, { host: '127.0.0.1' });
+    const host = await startHost(0, { host: '127.0.0.1', gate: testGate() });
     /** 以 ip 经“代理”连上并握手，发 n 次错误的房号，返回最后一次的回应 */
     const tryJoin = async (ip: string, n: number) => {
       const ws = new WebSocket(`ws://127.0.0.1:${host.port}`, { headers: { 'x-forwarded-for': ip } });
@@ -25,7 +25,7 @@ describe('按 IP 的加入失败次数（API-044，原问题 A6）', () => {
         }
       };
       await new Promise(res => ws.on('open', res));
-      ws.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, name: '试', uid: newUid() }));
+      ws.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, auth: loginOf(newUid(), '试') }));
       await next('welcome');
       let last;
       for (let i = 0; i < n; i++) {

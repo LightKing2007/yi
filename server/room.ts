@@ -92,6 +92,7 @@ export function seatPlayers(ctx: ServerContext, r: Room, [first, second]: [Playe
   r.who[firstColor] = first;
   r.who[secondColor] = second;
   first.room = second.room = r.id;
+  for (const p of [first, second]) p.name = ctx.gate?.nameOf(p.userId) ?? p.name; // 改过的雅号从下一局起生效（账号接口契约第 3.10 条）
   newRoomGame(ctx, r);
   recordStart(ctx, r);
   sendStart(ctx, r);

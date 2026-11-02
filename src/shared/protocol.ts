@@ -65,6 +65,8 @@ export const CLOSE_CODE = {
   internal: 1011, // 服务端内部错误
   overload: 1013, // 服务端满员，或同一 IP 的连接过多、新建过频（API-040、API-041）
   version: 4000, // 协议版本不支持
+  authFailed: 4001, // 登录无效或已撤销、未满足联机条件（protocol-v4.md 第 3、4 章），不重连，回到登录
+  replaced: 4002, // 同一账号在别处连上联机，这条连接被接管（protocol-v4.md 第 4.1 条），不重连
   helloTimeout: 4008, // 握手超时（API-042）
   idle: 4009, // 空闲超时
 } as const;
@@ -132,9 +134,8 @@ export type Act = { k: 'M'; x: number; y: number } | { k: 'P' } | { k: 'U'; n: n
 
 /** 客户端 → 服务端 */
 export type C2S =
-  | { t: 'hello'; v: number; name: string; uid: string; token?: string } // uid：本机的匿名身份（段位跟着它）；token：断线重连
+  | { t: 'hello'; v: number; auth: string; resume?: string } // auth：账号的登录令牌；resume：上次 welcome 下发的重连令牌（protocol-v4.md 第 3.1 条）
   | { t: 'ping' }
-  | { t: 'name'; name: string } // 改名（不在对局中时）
   | { t: 'queue'; mode: QueueMode; type: number; size: number } // 开始匹配 / 排位
   | { t: 'unqueue' } // 取消匹配
   | { t: 'confirm'; ok: boolean } // 找到对手后接受 / 拒绝
@@ -153,6 +154,12 @@ export type C2S =
   | { t: 'resume' }
   | { t: 'leave' }; // 离开房间（对局中离开即认输）
 
+/** 账号的公开资料：公开 UID 的规范值与雅号 */
+export interface PublicUser {
+  publicId: string;
+  name: string;
+}
+
 /** 对手的名字；排位时带上段位分 */
 export interface Opponent {
   name: string;
@@ -161,8 +168,8 @@ export interface Opponent {
 
 /** 服务端 → 客户端 */
 export type S2C =
-  // token：重连令牌，每次重连成功都换发新的一枚（SEC-020），以最近收到的为准；latest / url：最新版本号与下载地址（服务端配置了才有）
-  | { t: 'welcome'; id: number; token: string; ratings: Ratings; latest?: string; url?: string }
+  // resume：重连令牌，每次重连成功都换发新的一枚（SEC-020），以最近收到的为准；user：账号的公开 UID 与雅号；latest / url：最新版本号与下载地址（服务端配置了才有）
+  | { t: 'welcome'; id: number; resume: string; user: PublicUser; ratings: Ratings; latest?: string; url?: string }
   | { t: 'resumeFailed' } // 带令牌重连，但原来的对局已经不在了（服务器重启或掉线太久）
   | { t: 'pong' }
   | { t: 'queued'; mode: QueueMode; type: number; size: number } // 已进入队列

@@ -160,12 +160,10 @@ describe('每条连接的限额', () => {
     expect(Array.from({ length: MSG_RATE_PER_SEC + 1 }, () => l.message(1)).filter(Boolean)).toHaveLength(MSG_RATE_PER_SEC);
   });
 
-  it('进入、退出匹配队列合计每 10 秒至多 10 次；改名每 10 秒至多 1 次，两者分开计（API-044）', () => {
+  it('进入、退出匹配队列合计每 10 秒至多 10 次，时间窗过后恢复（API-044）', () => {
     const l = new ConnLimits(0);
     expect(Array.from({ length: QUEUE_OPS_MAX + 1 }, () => l.allow('queue', 0)).filter(Boolean)).toHaveLength(QUEUE_OPS_MAX);
-    expect(l.allow('name', 0)).toBe(true);
-    expect(l.allow('name', 9.9)).toBe(false);
-    expect(l.allow('name', 10)).toBe(true);
+    expect(l.allow('queue', 9.9)).toBe(false);
     expect(l.allow('queue', 10)).toBe(true);
   });
 

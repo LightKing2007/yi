@@ -12,10 +12,9 @@ const TOKEN = '0123456789abcdef0123456789abcdef';
 
 /** 每种消息一条合法的例子 */
 const LEGAL: C2S[] = [
-  { t: 'hello', v: PROTO_VERSION, name: '甲', uid: UID },
-  { t: 'hello', v: PROTO_VERSION, name: '', uid: UID, token: TOKEN },
+  { t: 'hello', v: PROTO_VERSION, auth: TOKEN },
+  { t: 'hello', v: PROTO_VERSION, auth: TOKEN, resume: TOKEN },
   { t: 'ping' },
-  { t: 'name', name: '乙' },
   { t: 'queue', mode: 'match', type: 1, size: 9 },
   { t: 'queue', mode: 'ranked', type: 0, size: 19 },
   { t: 'unqueue' },
@@ -83,30 +82,6 @@ describe('入站消息校验', () => {
     for (const m of bad) expect(kind(m), JSON.stringify(m)).toBe('format');
   });
 
-  it('房号、uid、令牌不合格式，或昵称原文过长时不通过（API-013）', () => {
-    const hello = { t: 'hello', v: PROTO_VERSION, name: '甲', uid: UID };
-    const bad: unknown[] = [
-      { t: 'join', code: '12a4' },
-      { t: 'join', code: '123' },
-      { t: 'join', code: '12345' },
-      { t: 'join', code: 1234 },
-      { ...hello, uid: '' },
-      { ...hello, uid: 'short' },
-      { ...hello, uid: 'x'.repeat(65) },
-      { ...hello, uid: 'has space in it!!' },
-      { ...hello, token: '' },
-      { ...hello, token: TOKEN.toUpperCase() },
-      { ...hello, token: TOKEN + '0' },
-      { ...hello, name: 7 },
-      { ...hello, name: '名'.repeat(257) },
-      { t: 'name', name: null },
-      { ...hello, v: 0 },
-      { ...hello, v: 100 },
-      { ...hello, v: '3' },
-    ];
-    for (const m of bad) expect(kind(m), JSON.stringify(m)).toBe('format');
-  });
-
   it('hello 的协议版本不同时报告版本不符，不再挑剔其余字段（旧版客户端的字段可能不同）', () => {
     expect(kind({ t: 'hello', v: PROTO_VERSION - 1 })).toBe('version');
     expect(kind({ t: 'hello', v: PROTO_VERSION + 1, name: 1, uid: '' })).toBe('version');
@@ -123,8 +98,16 @@ describe('入站消息校验', () => {
 const RATING = { points: 1260, win: 3, loss: 1, draw: 0 };
 /** 服务端每种消息一条合法的例子 */
 const LEGAL_S2C: S2C[] = [
-  { t: 'welcome', id: 7, token: TOKEN, ratings: { gomoku: RATING, go: RATING } },
-  { t: 'welcome', id: 8, token: TOKEN, ratings: { gomoku: RATING, go: RATING }, latest: '3.0.0', url: 'https://yi.lightking.com.cn/' },
+  { t: 'welcome', id: 7, resume: TOKEN, user: { publicId: '7KM4P9D2', name: '甲' }, ratings: { gomoku: RATING, go: RATING } },
+  {
+    t: 'welcome',
+    id: 8,
+    resume: TOKEN,
+    user: { publicId: '00000001', name: '乙' },
+    ratings: { gomoku: RATING, go: RATING },
+    latest: '3.0.0',
+    url: 'https://yi.lightking.com.cn/',
+  },
   { t: 'resumeFailed' },
   { t: 'pong' },
   { t: 'queued', mode: 'ranked', type: 1, size: 19 },
@@ -176,15 +159,17 @@ describe('服务端消息校验：结构', () => {
   it('嵌套的对象与数组同样重建，未知字段被丢弃', () => {
     const r = parseS2C(
       JSON.parse(
-        '{"t":"welcome","id":1,"token":"' +
+        '{"t":"welcome","id":1,"resume":"' +
           TOKEN +
-          '","ratings":{"gomoku":{"points":1,"win":0,"loss":0,"draw":0,"x":1},"go":{"points":2,"win":0,"loss":0,"draw":0,"__proto__":{"points":9}}}}',
+          '","user":{"publicId":"7KM4P9D2","name":"甲","extra":1},' +
+          '"ratings":{"gomoku":{"points":1,"win":0,"loss":0,"draw":0,"x":1},"go":{"points":2,"win":0,"loss":0,"draw":0,"__proto__":{"points":9}}}}',
       ),
     );
     expect(r).toEqual({
       t: 'welcome',
       id: 1,
-      token: TOKEN,
+      resume: TOKEN,
+      user: { publicId: '7KM4P9D2', name: '甲' },
       ratings: { gomoku: { points: 1, win: 0, loss: 0, draw: 0 }, go: { points: 2, win: 0, loss: 0, draw: 0 } },
     });
     const go = isInvalid(r) || r.t !== 'welcome' ? undefined : r.ratings.go;
@@ -294,32 +279,6 @@ describe('服务端消息校验：枚举、文字与下载地址', () => {
     ];
     for (const m of bad) expect(kindS2C(m), JSON.stringify(m)).toBe('format');
   });
-
-  it('提示文字、昵称、版本号、下载地址与错误编号过长或格式不对时不通过：下载地址只接受 http(s)，错误编号只接受小写的 UUID v4', () => {
-    const welcome = LEGAL_S2C[0];
-    const long = '字'.repeat(10000);
-    const bad: unknown[] = [
-      { t: 'info', text: long },
-      { t: 'error', text: long },
-      { t: 'joinNo', reason: long },
-      { t: 'unmatched', requeued: true, reason: long },
-      { t: 'found', opp: { name: long }, secs: 15 },
-      { t: 'info', text: 7 },
-      { ...welcome, url: 'javascript:alert(1)' },
-      { ...welcome, url: 'file:///etc/passwd' },
-      { ...welcome, url: 'http://a b' },
-      { ...welcome, url: 'https://' },
-      { ...welcome, url: 'https://x/' + 'a'.repeat(4096) },
-      { ...welcome, latest: '<b>9.9.9</b>' },
-      { ...welcome, latest: '9'.repeat(33) },
-      { ...welcome, latest: 3 },
-      { t: 'error', text: '服务器出现问题，请稍后再试', errorId: '0B6F1C52-9D4E-4F3A-8C21-5E7D9A0B1C2D' },
-      { t: 'error', text: '服务器出现问题，请稍后再试', errorId: '0b6f1c52-9d4e-1f3a-8c21-5e7d9a0b1c2d' },
-      { t: 'error', text: '服务器出现问题，请稍后再试', errorId: '<script>' },
-    ];
-    for (const m of bad) expect(kindS2C(m), JSON.stringify(m).slice(0, 80)).toBe('format');
-    expect(kindS2C({ ...welcome, url: 'https://yi.lightking.com.cn/' })).toBe('ok');
-  });
 });
 
 describe('昵称清洗', () => {
@@ -355,5 +314,64 @@ describe('昵称清洗', () => {
   it('输入框按字素截断时保留空白，便于继续输入', () => {
     expect(clipName('张 ')).toBe('张 ');
     expect(clipName('🇨🇳'.repeat(20))).toBe('🇨🇳'.repeat(NAME_MAX));
+  });
+});
+
+describe('入站消息校验：握手与房号（API-013）', () => {
+  it('房号、登录令牌、重连令牌不合格式时不通过；第 4 版不再接受昵称、uid 与改名（API-013，protocol-v4.md 第 3.1 条）', () => {
+    const hello = { t: 'hello', v: PROTO_VERSION, auth: TOKEN };
+    const bad: unknown[] = [
+      { t: 'join', code: '12a4' },
+      { t: 'join', code: '123' },
+      { t: 'join', code: '12345' },
+      { t: 'join', code: 1234 },
+      { t: 'hello', v: PROTO_VERSION },
+      { t: 'hello', v: PROTO_VERSION, name: '甲', uid: UID },
+      { ...hello, auth: '' },
+      { ...hello, auth: TOKEN.toUpperCase() },
+      { ...hello, auth: TOKEN + '0' },
+      { ...hello, resume: '' },
+      { ...hello, resume: TOKEN.toUpperCase() },
+      { ...hello, resume: TOKEN + '0' },
+      { t: 'name', name: '乙' },
+      { ...hello, v: 0 },
+      { ...hello, v: 100 },
+      { ...hello, v: '3' },
+    ];
+    for (const m of bad) expect(kind(m), JSON.stringify(m)).toBe('format');
+  });
+});
+
+describe('服务端消息校验：文字、名字、版本号与下载地址', () => {
+  it('提示文字、昵称、版本号、下载地址与错误编号过长或格式不对时不通过：下载地址只接受 http(s)，错误编号只接受小写的 UUID v4', () => {
+    const welcome = LEGAL_S2C[0];
+    const long = '字'.repeat(10000);
+    const bad: unknown[] = [
+      { t: 'info', text: long },
+      { t: 'error', text: long },
+      { t: 'joinNo', reason: long },
+      { t: 'unmatched', requeued: true, reason: long },
+      { t: 'found', opp: { name: long }, secs: 15 },
+      { t: 'info', text: 7 },
+      { ...welcome, url: 'javascript:alert(1)' },
+      { ...welcome, url: 'file:///etc/passwd' },
+      { ...welcome, url: 'http://a b' },
+      { ...welcome, url: 'https://' },
+      { ...welcome, url: 'https://x/' + 'a'.repeat(4096) },
+      { ...welcome, latest: '<b>9.9.9</b>' },
+      { ...welcome, latest: '9'.repeat(33) },
+      { ...welcome, latest: 3 },
+      { ...welcome, user: { publicId: '7km4p9d2', name: '甲' } },
+      { ...welcome, user: { publicId: '7KM4P9DI', name: '甲' } },
+      { ...welcome, user: { publicId: '7KM4P9D', name: '甲' } },
+      { ...welcome, user: { publicId: '7KM4P9D2', name: long } },
+      { ...welcome, user: { publicId: '7KM4P9D2' } },
+      { ...welcome, token: TOKEN, resume: undefined },
+      { t: 'error', text: '服务器出现问题，请稍后再试', errorId: '0B6F1C52-9D4E-4F3A-8C21-5E7D9A0B1C2D' },
+      { t: 'error', text: '服务器出现问题，请稍后再试', errorId: '0b6f1c52-9d4e-1f3a-8c21-5e7d9a0b1c2d' },
+      { t: 'error', text: '服务器出现问题，请稍后再试', errorId: '<script>' },
+    ];
+    for (const m of bad) expect(kindS2C(m), JSON.stringify(m).slice(0, 80)).toBe('format');
+    expect(kindS2C({ ...welcome, url: 'https://yi.lightking.com.cn/' })).toBe('ok');
   });
 });

@@ -19,7 +19,7 @@
     "ESLint id-length": 705,
     "ESLint max-depth": 19,
     "ESLint max-lines": 5,
-    "ESLint max-lines-per-function": 17,
+    "ESLint max-lines-per-function": 16,
     "ESLint max-params": 42,
     "ESLint no-console": 3,
     "ESLint no-control-regex": 1,

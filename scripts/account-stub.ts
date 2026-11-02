@@ -13,7 +13,8 @@ export const stub = { name: '黑白', stale: false, signedIn: false };
 /** 用到的 HTTP 状态码 */
 const HTTP = { ok: 200, created: 201, accepted: 202, noContent: 204, unauthorized: 401, notFound: 404, conflict: 409, unprocessable: 422 } as const;
 const TOKEN_REPEAT = 16;
-const TOKEN = 'a1'.repeat(TOKEN_REPEAT);
+/** 登录与注册回应中的令牌：默认为固定的假令牌，排版检查中换成真实服务端认可的令牌（startStub 的参数） */
+let token = 'a1'.repeat(TOKEN_REPEAT);
 const CHALLENGE = 'c0'.repeat(TOKEN_REPEAT);
 /** 验证码的有效期与重发间隔、登录的有效期，与服务端默认值一致 */
 const CODE_TTL_MS = 600_000;
@@ -31,7 +32,7 @@ const reply = (status: number, body?: unknown) =>
 const problem = (status: number, code: string) => reply(status, { code, level: 'E2' });
 const signedIn = () => {
   stub.signedIn = true;
-  return reply(HTTP.created, { token: TOKEN, expiresAt: new Date(Date.now() + LOGIN_TTL_MS).toISOString(), user: user() });
+  return reply(HTTP.created, { token, expiresAt: new Date(Date.now() + LOGIN_TTL_MS).toISOString(), user: user() });
 };
 
 type Handler = (body: Body) => Response;
@@ -106,7 +107,8 @@ const stubFetch: Fetcher = async (url, init) => {
   return stub.signedIn ? authed(body) : problem(HTTP.unauthorized, 'auth.required');
 };
 
-/** 以替身开启账号功能（页面中只需调用一次） */
-export function startStub() {
+/** 以替身开启账号功能；loginToken 给出时，登录与注册回应这枚令牌（使联机握手能通过真实服务端的核验） */
+export function startStub(loginToken?: string) {
+  if (loginToken) token = loginToken;
   return startAccounts({ server: 'ws://127.0.0.1:1', fetcher: stubFetch });
 }

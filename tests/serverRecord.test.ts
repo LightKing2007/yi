@@ -1,5 +1,4 @@
 /** 对局记录（server/record.ts、server/db/ratingStore.ts，roadmap.md 第 5.4 节）：开局与终局写入、每手用时、事务内结算、结算前重新读取段位、上限与放弃、写入失败 */
-import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { MEMORY, openDatabase } from '../server/db';
@@ -9,7 +8,7 @@ import type { LogEntry, LogLevel } from '../server/log';
 import { Metrics } from '../server/metrics';
 import { replay, type GameRecord } from '../src/core/record';
 import { MOVES_MAX, type C2S, type S2C } from '../src/shared/protocol';
-import { Client, matchUp, play, startGame, startWithDeadStone, world } from './serverWorld';
+import { Client, matchUp, play, repoGate, startGame, startWithDeadStone, world } from './serverWorld';
 import { MemoryStore } from '../server/rooms';
 import type { GameEnd, GameStart, Settle } from '../server/roomTypes';
 
@@ -21,7 +20,8 @@ function dbWorld() {
   opened.push(db);
   const repo = new Repo(db);
   const logs: { level: LogLevel; event: string; entry: LogEntry }[] = [];
-  const env = world(new DbRatingStore(repo, { now: () => 5000 }), { log: (level, event, entry = {}) => logs.push({ level, event, entry }) });
+  const gate = repoGate(repo);
+  const env = world(new DbRatingStore(repo, { now: () => 5000 }), { gate, log: (level, event, entry = {}) => logs.push({ level, event, entry }) });
   const games = () =>
     db
       .prepare(
@@ -35,7 +35,9 @@ function dbWorld() {
       .prepare('SELECT game_id, user_id, game_type, points_before, points_after, cause FROM rating_changes ORDER BY id')
       .all()
       .map(row => ({ ...row }));
-  return { ...env, db, repo, logs, games, record, changes };
+  /** 客户端的账号在数据库中的用户编号 */
+  const userOf = (client: Client) => gate.idOf(client.uid, client.name);
+  return { ...env, db, repo, logs, games, record, changes, userOf };
 }
 
 afterEach(() => {
@@ -44,12 +46,12 @@ afterEach(() => {
 
 describe('对局记录', () => {
   it('排位一局：开局写入双方与规则，终局在同一事务中写入棋谱、结果、双方段位与两条变化明细；棋谱可回放到终局局面', () => {
-    const { srv, games, record, changes, repo } = dbWorld();
+    const { srv, games, record, changes, userOf } = dbWorld();
     const jia = new Client(srv, '甲'),
       yi = new Client(srv, '乙');
     const { sa } = matchUp(jia, yi, 'ranked');
     const [blk, wht] = sa.color === 1 ? [jia, yi] : [yi, jia];
-    const blackUser = repo.userOf(uidHashOf(blk)) ?? 0;
+    const blackUser = userOf(blk);
     expect(games()).toEqual([
       expect.objectContaining({ id: 1, kind: 'ranked', game_type: 'gomoku', board_size: 15, black_user_id: blackUser, ended_at: null }),
     ]);
@@ -146,14 +148,14 @@ describe('对局记录的种类与终局', () => {
 
 describe('结算与特殊的终局', () => {
   it('结算前重新读取双方段位，不用握手时缓存的（原问题 A8）', () => {
-    const { srv, repo } = dbWorld();
+    const { srv, repo, userOf } = dbWorld();
     const jia = new Client(srv, '甲'),
       yi = new Client(srv, '乙');
     const { sa } = matchUp(jia, yi, 'ranked');
     const [blk, wht] = sa.color === 1 ? [jia, yi] : [yi, jia];
-    // 开局之后，双方的设备都在别处结算过：数据库中黑方 1300、白方 1500 分，在线玩家缓存的仍是 1200
-    repo.saveRating(repo.userOf(uidHashOf(blk)) ?? 0, 'gomoku', { points: 1300, win: 0, loss: 0, draw: 0 }, 1);
-    repo.saveRating(repo.userOf(uidHashOf(wht)) ?? 0, 'gomoku', { points: 1500, win: 0, loss: 0, draw: 0 }, 1);
+    // 开局之后，数据库中的段位被别处改过：黑方 1300、白方 1500 分，在线玩家缓存的仍是 1200
+    repo.saveRating(userOf(blk), 'gomoku', { points: 1300, win: 0, loss: 0, draw: 0 }, 1);
+    repo.saveRating(userOf(wht), 'gomoku', { points: 1500, win: 0, loss: 0, draw: 0 }, 1);
     blk.send({ t: 'resign' });
     expect(blk.expect('rated')).toEqual({ t: 'rated', type: 0, rating: { points: 1292, win: 0, loss: 1, draw: 0 }, delta: -8 });
     expect(wht.expect('rated')).toEqual({ t: 'rated', type: 0, rating: { points: 1508, win: 1, loss: 0, draw: 0 }, delta: 8 });
@@ -296,11 +298,3 @@ describe('对局记录写入失败（10-edge-cases.md 第 4 节）', () => {
     expect(blk.expect('error')).toMatchObject({ code: 'server.internal' });
   });
 });
-
-/** 客户端在服务端的设备散列 */
-function uidHashOf(client: Client) {
-  return createHash('sha256')
-    .update('yi:' + client.uid)
-    .digest('hex')
-    .slice(0, 32);
-}

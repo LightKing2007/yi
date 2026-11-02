@@ -41,6 +41,7 @@ export const ERRORS = {
   'auth.invalid': { level: 'E4', text: '登录已失效，请重新登录' },
   'auth.credentials-invalid': { level: 'E2', text: '邮箱或密码不正确' },
   'auth.busy': { level: 'E3', text: '登录人数较多，请稍后再试' },
+  'auth.replaced': { level: 'E2', text: '账号已在别处登录' },
   'account.restricted': { level: 'E2', text: '账号暂时不能进行排位' },
   'account.email-taken': { level: 'E2', text: '该邮箱已注册' },
   'code.invalid': { level: 'E2', text: '验证码不正确或已失效' },

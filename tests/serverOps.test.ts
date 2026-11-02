@@ -8,7 +8,7 @@ import { withHealth } from '../server/health';
 import { Metrics } from '../server/metrics';
 import type { Log, LogEntry, LogLevel } from '../server/log';
 import { CLOSE_CODE, CONFIRM_SECS, PROTO_VERSION, type C2S } from '../src/shared/protocol';
-import { newUid, Client, world, play, startGame, matchUp } from './serverWorld';
+import { newUid, Client, world, play, startGame, matchUp, loginOf, testGate } from './serverWorld';
 
 /** 带日志的服务端：logs 依次记下每一行的级别、事件码与内容 */
 const logged = () => {
@@ -67,7 +67,7 @@ describe('服务端日志的事件：连接（07-operations.md 第 8 节）', ()
       bing = new Client(srv, '丙');
     startGame(jia, bing);
     srv.disconnect(bing.sess, bing.conn, 1006);
-    new Client(srv, '丙', bing.token);
+    new Client(srv, '丙', bing.token, bing.uid);
     expect(events('player.offline', 'player.resumed').map(row => [row.event, row.entry])).toEqual([
       ['player.offline', expect.objectContaining({ playerId: bing.id, code: 1006 })],
       ['player.resumed', expect.objectContaining({ playerId: bing.id, roomId: 1 })],
@@ -91,11 +91,11 @@ describe('服务端日志的事件：连接（07-operations.md 第 8 节）', ()
     const log: Log = (_level, event, entry) => {
       if (event === 'player.offline') offline(entry?.code);
     };
-    const host = await startHost(0, { host: '127.0.0.1', log });
+    const host = await startHost(0, { host: '127.0.0.1', log, gate: testGate() });
     try {
       const ws = new WebSocket(`ws://127.0.0.1:${host.port}`);
       await new Promise(res => ws.on('open', res));
-      ws.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, name: '甲', uid: newUid() }));
+      ws.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, auth: loginOf(newUid(), '甲') }));
       await new Promise(res => ws.once('message', res));
       ws.close(4100);
       expect(await offlineCode).toBe(4100);
@@ -218,7 +218,7 @@ describe('健康检查（API-061）', () => {
   const build = { version: '9.8.7', commit: 'abc1234' };
 
   it('本机的 GET /healthz 返回版本号、提交号、协议版本、在线玩家、对局数与维护状态', async () => {
-    const host = await startHost(0, { host: '127.0.0.1', build });
+    const host = await startHost(0, { host: '127.0.0.1', build, gate: testGate() });
     try {
       const url = `http://127.0.0.1:${host.port}/healthz`;
       const res = await fetch(url);
@@ -268,7 +268,7 @@ describe('健康检查（API-061）', () => {
 
 describe('关闭（OPS-052）', () => {
   it('关闭时以 1001 断开全部连接，含尚未握手的', async () => {
-    const host = await startHost(0, { host: '127.0.0.1' });
+    const host = await startHost(0, { host: '127.0.0.1', gate: testGate() });
     const url = `ws://127.0.0.1:${host.port}`;
     /** 连上（hello 为 true 时完成握手）；closed 为这条连接被关闭时的关闭码 */
     const connect = async (hello: boolean) => {
@@ -276,7 +276,7 @@ describe('关闭（OPS-052）', () => {
       const closed = new Promise<number>(res => ws.on('close', code => res(code)));
       await new Promise(res => ws.on('open', res));
       if (hello) {
-        ws.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, name: '甲', uid: newUid() }));
+        ws.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, auth: loginOf(newUid(), '甲') }));
         await new Promise(res => ws.once('message', res));
       }
       return { closed };
@@ -355,12 +355,12 @@ describe('/metrics（API-061、OPS-071）', () => {
   it('本机的 GET /metrics 返回 Prometheus 文本：连接数、在线玩家、处理耗时按注入的时钟计；未设指标时 404', async () => {
     const metrics = new Metrics({ version: '1.0.0', commit: 'c' });
     let clock = 100;
-    const host = await startHost(0, { host: '127.0.0.1', metrics, now: () => (clock += 0.002), eventLoopLag: () => 0.25 });
-    const plain = await startHost(0, { host: '127.0.0.1' });
+    const host = await startHost(0, { host: '127.0.0.1', metrics, now: () => (clock += 0.002), eventLoopLag: () => 0.25, gate: testGate() });
+    const plain = await startHost(0, { host: '127.0.0.1', gate: testGate() });
     try {
       const ws = new WebSocket(`ws://127.0.0.1:${host.port}`);
       await new Promise(res => ws.on('open', res));
-      ws.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, name: '甲', uid: newUid() }));
+      ws.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, auth: loginOf(newUid(), '甲') }));
       await new Promise(res => ws.once('message', res));
       const res = await fetch(`http://127.0.0.1:${host.port}/metrics`);
       expect(res.headers.get('content-type')).toBe('text/plain; version=0.0.4; charset=utf-8');

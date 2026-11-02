@@ -3,10 +3,28 @@
  * 模拟网络静默断开（服务端还没发现）、服务器重启、网络完全不通、断线期间对局结束等情况，
  * 以及冒充服务端发来的非法消息（API-016）。断线重连的退避与关闭码见 reconnect.test.ts
  */
+import { testGate } from './serverWorld';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { RoomServer } from '../server/rooms';
-import { CONFIRM_SECS } from '../src/shared/protocol';
-import { Peer, advance, fake, inject, lastSocket, loadClient, newServer, pump, resetNet, startGame, storage, warns, type Client, type State } from './fakeNet';
+import { CLOSE_CODE, CONFIRM_SECS } from '../src/shared/protocol';
+import {
+  Peer,
+  accountCalls,
+  advance,
+  fake,
+  inject,
+  lastSocket,
+  loadClient,
+  newServer,
+  pump,
+  resetNet,
+  sockets,
+  startGame,
+  storage,
+  warns,
+  type Client,
+  type State,
+} from './fakeNet';
 
 let net: Client, state: State;
 beforeAll(async () => ({ net, state } = await loadClient()));
@@ -24,7 +42,7 @@ describe('联机客户端', () => {
     advance(6, peer); // 25 秒没有任何消息：主动断开并重连
     expect(net.st.reconnecting).toBe(false);
     expect(net.st.phase).toBe(net.Phase.Playing);
-    expect(peer.inbox.some(m => m.t === 'peer' && m.online)).toBe(true);
+    expect(peer.inbox.some(m => m.t === 'peer')).toBe(false); // 服务端没发现过掉线：同一账号的新连接接管，对方看来一直在线
     expect(state.game.cur.moves).toBe(1);
     peer.send({ t: 'move', x: 8, y: 8 });
     expect(state.game.cur.moves).toBe(2);
@@ -180,6 +198,38 @@ describe('联机客户端', () => {
     expect(net.st.notice).toEqual([['这是你自己的房间']]);
   });
 
+  it('未登录时不连联机，提示先登录；服务端以 4001 断开（登录失效）时不重连，提示重新登录', async () => {
+    const account = await import('../src/app/account');
+    await account.accounts()?.session.logout();
+    net.connect();
+    pump();
+    expect([net.st.phase, net.st.error, sockets.length]).toEqual([net.Phase.Off, ['请先登录'], 0]);
+    await account.accounts()?.session.restore(); // 重新登录
+    net.connect();
+    pump();
+    expect(net.st.phase).toBe(net.Phase.Lobby);
+    const calls = accountCalls.count;
+    lastSocket().cut(CLOSE_CODE.authFailed);
+    pump();
+    advance(30);
+    expect([net.st.phase, net.st.error, sockets.length]).toEqual([net.Phase.Off, ['登录已失效，请重新登录'], 1]);
+    expect(accountCalls.count).toBe(calls + 1); // 向账号接口重新取资料，令牌确已失效时回到未登录
+  });
+
+  it('对局中被同一账号在别处接管（4002）或登录失效（4001）时不重连', () => {
+    for (const code of [CLOSE_CODE.replaced, CLOSE_CODE.authFailed]) {
+      const peer = startGame(0);
+      advance(1, peer);
+      const before = sockets.length;
+      lastSocket().cut(code);
+      pump();
+      advance(30, peer);
+      expect([sockets.length, net.st.phase], String(code)).toEqual([before, net.Phase.Off]);
+      net.disconnect();
+      fake.server = newServer(); // 同一账号回来会回到保留中的这一局：下一轮换一个服务端
+    }
+  });
+
   it('协议版本不符：提示更新，并按附带的版本号与下载地址显示下载提示；不合格式的地址不采用', () => {
     net.connect();
     pump();
@@ -193,13 +243,13 @@ describe('联机客户端', () => {
   });
 
   it('服务端告知新版本：比本机新才提示，并记在本地', () => {
-    fake.server = new RoomServer({ now: () => fake.now, latest: '99.0.0', download: 'https://example.com/yi' });
+    fake.server = new RoomServer({ now: () => fake.now, latest: '99.0.0', download: 'https://example.com/yi', gate: testGate() });
     net.connect();
     pump();
     expect(net.st.update).toEqual({ version: '99.0.0', url: 'https://example.com/yi' });
     expect(JSON.parse(storage.get('yi.update') ?? 'null')?.version).toBe('99.0.0');
     net.disconnect();
-    fake.server = new RoomServer({ now: () => fake.now, latest: '0.0.1' });
+    fake.server = new RoomServer({ now: () => fake.now, latest: '0.0.1', gate: testGate() });
     net.connect();
     pump();
     expect(net.st.update).toBeNull();

@@ -38,6 +38,15 @@ export function startAccounts(deps: { server: string; fetcher: Fetcher; store?: 
 /** 账号接口与登录；未开启时为 undefined */
 export const accounts = () => wired;
 
+/** 联机握手用的登录令牌；账号功能未开启或未登录时为 undefined */
+export const loginToken = () => wired?.session.loginToken;
+
+/** 联机被服务端以“登录已失效”断开：向账号接口重新取资料，令牌确已失效时随之回到未登录（界面显示登录门槛） */
+export function loginRejected() {
+  // 结果经 onChange 反映到界面；接口调用不抛出异常
+  if (wired) void wired.session.refresh();
+}
+
 /** 桌面版的加密存储；浏览器中没有，登录只在本次运行中有效 */
 export function loginStoreOf(yi: YiNative | undefined): LoginStore | undefined {
   if (!yi) return undefined;

@@ -6,7 +6,9 @@ import {
   accountsWanted,
   codeComplete,
   emailLooksValid,
+  loginRejected,
   loginStoreOf,
+  loginToken,
   mailLanguage,
   newPasswordProblem,
   PASSWORD_INPUT_MAX,
@@ -157,5 +159,30 @@ describe('六格验证码', () => {
     fillCells(cells, 1, '6');
     backspaceCells(cells, 0);
     expect(cells).toEqual(['9', '', '', '', '', '']);
+  });
+});
+
+describe('联机握手的登录令牌（protocol-v4.md 第 3 章）', () => {
+  it('联机握手取用登录令牌；联机以“登录已失效”断开时向账号接口重新取资料，令牌确已失效则回到未登录', async () => {
+    let valid = true;
+    const fetcher: Fetcher = async () =>
+      valid
+        ? new Response(JSON.stringify(user), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        : new Response(JSON.stringify({ code: 'auth.required', level: 'E2' }), { status: 401, headers: { 'Content-Type': 'application/problem+json' } });
+    const store = { load: async () => ({ token, expiresAt: '2026-12-01T00:00:00.000Z' }), save: async () => true, clear: async () => undefined };
+    startAccounts({ server: 'ws://127.0.0.1:8443', fetcher, store });
+    await accounts()?.session.restore();
+    expect(loginToken()).toBe(token);
+    valid = false;
+    const signedOut = new Promise<void>(resolve => {
+      const stop = account.subscribe(state => {
+        if (state.user) return;
+        resolve();
+        queueMicrotask(stop);
+      });
+    });
+    loginRejected();
+    await signedOut;
+    expect(loginToken()).toBeUndefined();
   });
 });

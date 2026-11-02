@@ -1,4 +1,5 @@
 /** 注册、登录、重置与改密的认证组合业务；派生在事务外，凭据消费与账号变更原子提交。 */
+import type { OnlineIdentity } from './roomTypes';
 import type { DatabaseSync } from 'node:sqlite';
 import { accountName, accountPassword } from './accountInput';
 import { LOGIN_IP_ATTEMPTS, LOGIN_IP_WINDOW_MS, SESSION_LIFETIME_MS } from './authPolicy';
@@ -12,6 +13,9 @@ import { EmailCodes } from './emailCodes';
 import { EmailProtection } from './emailProtection';
 import { LoginSessions, type SessionRevocation } from './loginSessions';
 import { PasswordHasher } from './passwords';
+
+/** 登录撤销的通知（联机程序据此断开连接） */
+export type { SessionRevocation } from './loginSessions';
 
 const HASH_LENGTH = 64;
 const HASH_FORMAT = /^[0-9a-f]{64}$/;
@@ -192,6 +196,23 @@ export class Authentication {
   online(token: unknown) {
     const identity = this.current(token, true);
     return identity && this.profile(identity.account).onlineAllowed ? identity.session : undefined;
+  }
+
+  /**
+   * 联机握手的核验（protocol-v4.md 第 3.1.1 条）：令牌无效、过期或已撤销为 auth.invalid；邮箱未验证或未同意当前必需版本的协议为
+   * consent.outdated；有效时更新会话的活动时间，返回账号的内部编号、会话编号、雅号与公开 UID
+   */
+  identify(token: unknown): OnlineIdentity {
+    const identity = this.current(token, true);
+    if (!identity) return { ok: false, code: 'auth.invalid' };
+    const profile = this.profile(identity.account);
+    if (!profile.onlineAllowed) return { ok: false, code: 'consent.outdated' };
+    return { ok: true, userId: identity.account.userId, sessionId: identity.session.id, name: profile.name, publicId: profile.publicId };
+  }
+
+  /** 账号当前的雅号；账号不存在或已注销时为 undefined */
+  nameOf(userId: number): string | undefined {
+    return this.accounts.byUserId(userId)?.name;
   }
 
   /** 修改雅号不改变公开 UID；写入与鉴权同一事务，并更新会话活动时间。 */

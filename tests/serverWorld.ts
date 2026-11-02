@@ -1,6 +1,7 @@
-/** 联机服务端测试（tests/server*.test.ts）的公共部分：假连接的客户端、以假时钟驱动的服务端与开局的步骤 */
+/** 联机服务端测试（tests/server*.test.ts）的公共部分：假连接的客户端、假的账号核验、以假时钟驱动的服务端与开局的步骤 */
+import { createHash } from 'node:crypto';
 import { expect } from 'vitest';
-import { MemoryStore, RoomServer, type Conn, type RatingStore, type RoomServerOptions, type Session } from '../server/rooms';
+import { MemoryStore, RoomServer, type AccountGate, type Conn, type RatingStore, type RoomServerOptions, type Session } from '../server/rooms';
 import { PROTO_VERSION, type C2S, type S2C } from '../src/shared/protocol';
 import { parseS2C } from '../src/shared/parse';
 import { must } from './must';
@@ -15,7 +16,60 @@ export function expectClientAccepts(m: S2C) {
 }
 
 let uidSeq = 0;
-export const newUid = () => 'test-device-' + String(++uidSeq).padStart(8, '0');
+/** 一个新的测试账号：同一 uid 的客户端是同一个账号（protocol-v4.md 第 4 章） */
+export const newUid = () => 'test-account-' + String(++uidSeq).padStart(8, '0');
+
+/** 测试账号的登录令牌 → 账号（uid）与当前的雅号：客户端握手前登记，假的账号核验据此认出账号 */
+/** 假的会话编号：账号编号与第几次登录合成，各不相同 */
+export const sessionOf = (userId: number, session = 1) => userId * 100 + session;
+
+const logins = new Map<string, { uid: string; name: string; session: number }>();
+/** uid 第 session 次登录的令牌（32 位十六进制，与真实令牌同格式），并登记最新的雅号 */
+export function loginOf(uid: string, name: string, session = 1) {
+  const token = createHash('sha256').update(`login:${uid}:${session}`).digest('hex').slice(0, 32);
+  logins.set(token, { uid, name, session });
+  return token;
+}
+
+/**
+ * 假的账号核验：认得 loginOf 签发的令牌，账号的内部编号由 allocate 按 uid 分配（默认依次为 1、2、3…；数据库测试中由仓储建用户）。
+ * revoked 中的令牌视为已撤销；consentPending 中的账号视为未同意当前协议
+ */
+export function testGate(allocate?: (uid: string, name: string) => number) {
+  const ids = new Map<string, number>();
+  const names = new Map<number, string>();
+  const revoked = new Set<string>();
+  const consentPending = new Set<string>();
+  const idOf = (uid: string, name: string) => {
+    let id = ids.get(uid);
+    if (id === undefined) {
+      id = allocate ? allocate(uid, name) : ids.size + 1;
+      ids.set(uid, id);
+    }
+    names.set(id, name);
+    return id;
+  };
+  const gate: AccountGate & { revoked: Set<string>; consentPending: Set<string>; idOf: typeof idOf } = {
+    revoked,
+    consentPending,
+    idOf,
+    identify(token) {
+      const login = logins.get(token);
+      if (!login || revoked.has(token)) return { ok: false, code: 'auth.invalid' };
+      if (consentPending.has(login.uid)) return { ok: false, code: 'consent.outdated' };
+      const userId = idOf(login.uid, login.name);
+      return { ok: true, userId, sessionId: sessionOf(userId, login.session), name: login.name, publicId: String(userId).padStart(8, '0') };
+    },
+    nameOf: userId => names.get(userId),
+  };
+  return gate;
+}
+
+/** 数据库测试的账号核验：账号的用户行本由账号功能建立，测试中由仓储代建，按 uid 区分 */
+export function repoGate(repo: { ensure(uidHash: string, name: string, now: number): number }) {
+  let made = 0;
+  return testGate((_uid, name) => repo.ensure((++made).toString(16).padStart(32, '0'), name, 1));
+}
 
 /** 以假连接直接驱动 RoomServer 的客户端：收到的每条消息都检查能否通过客户端的校验，`expect` 按类型取出消息 */
 export class Client {
@@ -44,11 +98,11 @@ export class Client {
       },
     };
     this.sess = must(srv.connect(this.conn) ?? undefined, '服务端接受的连接');
-    this.send({ t: 'hello', v: PROTO_VERSION, name, uid, token });
+    this.send({ t: 'hello', v: PROTO_VERSION, auth: loginOf(uid, name), resume: token });
     const welcome = (this.welcome = this.expect('welcome'));
     if (welcome) {
       this.id = welcome.id;
-      this.token = welcome.token;
+      this.token = welcome.resume;
     }
   }
   send(m: C2S) {
@@ -88,7 +142,8 @@ export function clientAt(srv: RoomServer, name: string, ip: string) {
 
 export function world(store: RatingStore = new MemoryStore(), opt: RoomServerOptions = {}) {
   let clock = 1000;
-  const srv = new RoomServer({ now: () => clock, random: () => 0.3, store, ...opt });
+  const gate = testGate();
+  const srv = new RoomServer({ now: () => clock, random: () => 0.3, store, gate, ...opt });
   const advance = (secs: number) => {
     clock += secs;
     srv.tick();
@@ -102,7 +157,7 @@ export function world(store: RatingStore = new MemoryStore(), opt: RoomServerOpt
       secs -= step;
     }
   };
-  return { srv, advance, idle, store };
+  return { srv, advance, idle, store, gate };
 }
 
 /** 按顺序落子，每一手双方都必须收到 `moved` */
