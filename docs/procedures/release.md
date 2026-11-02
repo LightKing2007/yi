@@ -106,6 +106,8 @@ npm run release -- 2.0.3
 2. 在 macOS、Windows、Linux 上分别构建安装程序；
 3. 创建草稿 Release，附件为四个安装程序、服务端 `yi-server-2.0.3.cjs`、软件物料清单 `yi-sbom-2.0.3.cdx.json`（OPS-032）与列出以上全部附件 SHA-256 的 `SHA256SUMS`（OPS-030），说明由更新日志生成。
 
+5.5.1 自带游戏内更新的版本，附件另含 `latest.yml`、`latest-linux.yml`，两份清单与其他附件一起写入 `SHA256SUMS`。只允许公布已完整构建、校验的 Release。首次上线前，先发布并安装支持这两个路径的独立官网版本；再以 `npm run deploy:website -- downloads 游戏版本` 原子同步四个程序及两份清单。Windows、Linux 的升级验证包含从前一版检查、下载、重启安装、再次启动后的版本与设置保留，权限不足与校验失败均不得损坏现有安装。
+
 5.6 人工核对草稿 Release 的附件与说明（OPS-023），确认无误后发布：
 
 ```bash

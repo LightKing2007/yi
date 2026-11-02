@@ -71,6 +71,8 @@ jobs:
             release/*.dmg
             release/*.exe
             release/*.AppImage
+            release/latest.yml
+            release/latest-linux.yml
             release/yi-server-*.cjs
           if-no-files-found: error
           retention-days: 3 # 只供本次运行的 publish 转交给 Release；Release 里另有一份，附件不必久存
@@ -96,7 +98,7 @@ jobs:
           # 软件物料清单（OPS-032）：按锁定文件列出全部依赖，CycloneDX 格式
           npm sbom --sbom-format cyclonedx --package-lock-only > "dist/yi-sbom-$v.cdx.json"
           # 校验和（OPS-030、SEC-070）：全部附件的 SHA-256，格式与下载页面的 /SHA256SUMS 相同，上线脚本据此核对（OPS-031）
-          (cd dist && sha256sum Yi-* yi-server-*.cjs yi-sbom-*.cdx.json > SHA256SUMS && cat SHA256SUMS)
+          (cd dist && sha256sum Yi-* latest.yml latest-linux.yml yi-server-*.cjs yi-sbom-*.cdx.json > SHA256SUMS && cat SHA256SUMS)
       - name: 建草稿 Release
         env:
           GH_TOKEN: ${{ github.token }}

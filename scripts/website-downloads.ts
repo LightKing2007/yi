@@ -12,6 +12,16 @@ export function websitePackages(version: string): string[] {
   return [`Yi-${version}-win-x64-setup.exe`, `Yi-${version}-mac-arm64.dmg`, `Yi-${version}-mac-x64.dmg`, `Yi-${version}-linux-x86_64.AppImage`];
 }
 
+/** 新版 Release 带完整的双平台更新清单；旧 Release 没有清单时仍可恢复官网下载。 */
+function publishedFiles(version: string, sums: string): string[] {
+  const files = websitePackages(version);
+  const names = sums.split('\n').map(line => line.trim().split(/\s+/)[1]);
+  const metadata = ['latest.yml', 'latest-linux.yml'];
+  const found = metadata.filter(name => names.includes(name));
+  if (found.length !== 0 && found.length !== metadata.length) throw new Error('更新清单缺项');
+  return [...files, ...found];
+}
+
 /** 安装程序复制或下载的系统边界；不得执行这些文件。 */
 export interface DownloadInstallation {
   root: string;
@@ -22,7 +32,7 @@ export interface DownloadInstallation {
 
 /** 校验失败时保留原下载目录，网站代码版本与安装程序版本互不绑定。 */
 export function installWebsiteDownloads(opt: DownloadInstallation): void {
-  const files = websitePackages(opt.version);
+  const files = publishedFiles(opt.version, opt.sums);
   const root = path.join(opt.root, 'downloads');
   fs.mkdirSync(path.join(root, 'releases'), { recursive: true });
   const stage = fs.mkdtempSync(path.join(root, '.incoming-'));

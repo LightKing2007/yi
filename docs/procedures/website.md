@@ -39,3 +39,9 @@ SSH 使用域名并严格验证已保存的主机密钥，不自动接受新密�
 - 状态：`npm run deploy:website -- status`。日志：`ssh deploy@yi.lightking.com.cn journalctl -u yi-web --since yesterday --no-pager`。
 
 站点目录中 `releases/完整提交号` 为不可变网站产物，`current` 与 `previous` 为网站链接；`downloads/releases/游戏版本` 为安装程序，`downloads/current` 单独切换。安装包切换成功后删除服务器上的旧游戏版本，只保留当前一份；历史安装包由 GitHub Release 保存。`config-backup/` 保存配置迁移前的副本，`deploy.log` 只记录网站操作。每次操作仍按运维规程检查磁盘；未成功的 `.incoming-*` 暂存目录须核对所属操作后清理，不能删除 current 或 previous 指向的目录。
+
+## 6 游戏内更新清单
+
+6.1 新版游戏 Release 除四个程序外，提供 `latest.yml` 与 `latest-linux.yml`。同步下载程序的既有命令同时下载两份清单，核对 Release 中的 SHA-256 后，与程序一起原子切换。旧版本没有清单时仍可同步；一份清单缺失或校验失败则保持原目录。
+
+6.2 官网只开放这两个固定 YAML 路径，不缓存，文件最多 64 KiB。macOS 继续使用官网既有 SHA256SUMS 检查版本，点击提示后进入下载页面。

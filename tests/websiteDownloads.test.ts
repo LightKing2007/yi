@@ -6,6 +6,23 @@ import { createHash } from 'node:crypto';
 import { expect, it } from 'vitest';
 import { installWebsiteDownloads, websitePackages } from '../scripts/website-downloads';
 
+it('新版双平台更新清单与程序一起校验并切换，缺项或篡改时不得替换现行版本', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-web-updates-'));
+  const files = [...websitePackages('4.1.0'), 'latest.yml', 'latest-linux.yml'];
+  const sums = files.map(file => `${createHash('sha256').update(file).digest('hex')}  ${file}`).join('\n');
+  const options = { root, version: '4.1.0', sums, fetch: (file: string, target: string) => fs.writeFileSync(target, file) };
+  try {
+    expect(() => installWebsiteDownloads({ ...options, sums: sums.split('\n').slice(0, -1).join('\n') })).toThrow('更新清单缺项');
+    installWebsiteDownloads(options);
+    expect(fs.readdirSync(path.join(root, 'downloads/current')).sort()).toEqual(['SHA256SUMS', ...files].sort());
+    expect(() => installWebsiteDownloads({ ...options, fetch: (_file, target) => fs.writeFileSync(target, 'corrupt') })).toThrow('校验不符');
+    expect(fs.readlinkSync(path.join(root, 'downloads/current'))).toBe('releases/4.1.0');
+    expect(fs.readFileSync(path.join(root, 'downloads/current/latest.yml'), 'utf8')).toBe('latest.yml');
+  } finally {
+    fs.rmSync(root, { recursive: true });
+  }
+});
+
 it('只安装并公布指定已发布版本的四个程序，校验失败时保留原下载目录', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-web-downloads-'));
   const files = ['Yi-3.1.0-win-x64-setup.exe', 'Yi-3.1.0-mac-arm64.dmg', 'Yi-3.1.0-mac-x64.dmg', 'Yi-3.1.0-linux-x86_64.AppImage'];
