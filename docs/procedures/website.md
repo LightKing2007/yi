@@ -39,3 +39,13 @@ SSH 使用域名并严格验证已保存的主机密钥，不自动接受新密�
 - 状态：`npm run deploy:website -- status`。日志：`ssh deploy@yi.lightking.com.cn journalctl -u yi-web --since yesterday --no-pager`。
 
 站点目录中 `releases/完整提交号` 为不可变网站产物，`current` 与 `previous` 为网站链接；`downloads/releases/游戏版本` 为安装程序，`downloads/current` 单独切换。安装包切换成功后删除服务器上的旧游戏版本，只保留当前一份；历史安装包由 GitHub Release 保存。`config-backup/` 保存配置迁移前的副本，`deploy.log` 只记录网站操作。每次操作仍按运维规程检查磁盘；未成功的 `.incoming-*` 暂存目录须核对所属操作后清理，不能删除 current 或 previous 指向的目录。
+
+## 5 游戏内更新清单
+
+5.1 首次启用更新清单前，必须先升级服务器上 root 所有的部署工具。仅执行 `install web-提交号` 不会替换 `/usr/local/lib/yi-web-deploy.cjs`，旧工具仍只同步四个程序，会遗漏两份清单。取得生产配置安装授权后，在包含本次改动且 CI 成功的已合并修订上执行 `npm run deploy:website -- bootstrap`，备份并更新部署工具、配套单元与 sudo 白名单；该步骤执行 `daemon-reload`，不重启网站或联机服务，不切换网站或下载目录。然后安装支持更新清单路径的网站 Release，最后同步游戏 Release。
+
+5.2 新版游戏 Release 除四个程序外，提供 `latest.yml` 与 `latest-linux.yml`。同步下载程序的既有命令同时下载两份清单，核对 Release 中的 SHA-256 后，与程序一起原子切换。旧版本没有清单时仍可同步；一份清单缺失或校验失败则保持原目录。
+
+5.3 官网只开放这两个固定 YAML 路径，不缓存，文件最多 64 KiB。macOS 继续使用官网既有 SHA256SUMS 检查版本，点击提示后进入下载页面。
+
+5.4 同步完成后，分别请求 `/latest.yml` 与 `/latest-linux.yml`，确认返回 200、清单版本与拟发布游戏版本一致、引用的程序可以下载，再核对四个程序的 SHA-256。只检查网站健康或只升级网站代码，不能代替这一步。

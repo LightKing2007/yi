@@ -136,7 +136,11 @@
       "zh_CN",
       "zh_TW",
       "en"
-    ]
+    ],
+    "publish": {
+      "provider": "generic",
+      "url": "https://yi.lightking.com.cn/"
+    }
   },
   "allowScripts": {
     "esbuild@0.25.12": true,

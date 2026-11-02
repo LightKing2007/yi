@@ -3,8 +3,8 @@
 | 项目 | 内容 |
 |---|---|
 | 性质 | 规程，强制执行；依据 [07-operations.md](../standards/07-operations.md)、[08-versioning.md](../standards/08-versioning.md)、[09-text-and-i18n.md](../standards/09-text-and-i18n.md) |
-| 文件版本 | 1.1.13 |
-| 修订日期 | 2026-10-31 |
+| 文件版本 | 1.1.14 |
+| 修订日期 | 2026-11-02 |
 | 适用范围 | 从修改代码到玩家获得新版本的全部步骤：分支、提交、PR、更新日志、发版、上线、回滚、紧急修复 |
 
 本规程只规定操作步骤。各步骤须满足的要求以规则编号引用，规则内容以 `docs/standards/` 为准。
@@ -105,6 +105,8 @@ npm run release -- 2.0.3
 1. 核对标签与版本号、更新日志，并运行测试（OPS-022）；
 2. 在 macOS、Windows、Linux 上分别构建安装程序；
 3. 创建草稿 Release，附件为四个安装程序、服务端 `yi-server-2.0.3.cjs`、软件物料清单 `yi-sbom-2.0.3.cdx.json`（OPS-032）与列出以上全部附件 SHA-256 的 `SHA256SUMS`（OPS-030），说明由更新日志生成。
+
+5.5.1 自带游戏内更新的版本，附件另含 `latest.yml`、`latest-linux.yml`，两份清单与其他附件一起写入 `SHA256SUMS`。只允许公布已完整构建、校验的 Release。首次上线前，先按[独立官网规程第 5 章](website.md#5-游戏内更新清单)升级 root 所有的部署工具，再发布并安装支持这两个路径的独立官网版本；随后以 `npm run deploy:website -- downloads 游戏版本` 原子同步四个程序及两份清单。Windows、Linux 的升级验证包含从前一版检查、下载、重启安装、再次启动后的版本与设置保留，权限不足与校验失败均不得损坏现有安装。
 
 5.6 人工核对草稿 Release 的附件与说明（OPS-023），确认无误后发布：
 

@@ -12,7 +12,7 @@ import { readStaticSite } from './staticSite';
 import { normalizeSupportQuery } from './supportContent';
 import { supportPage, supportPages } from './supportPage';
 import { PLATFORMS, type PagePkg } from './page';
-import { sendDocument, sendPage } from './pageResponse';
+import { sendDocument, sendPage, sendUpdateFeed } from './pageResponse';
 import { detectPlatform } from './platform';
 
 const PER_IP = 2,
@@ -54,7 +54,6 @@ const OK = 200,
   RANGE_NOT_SATISFIABLE = 416,
   UNAVAILABLE = 503;
 
-/** 页面的路径（不含开头的斜杠）：主页与下载页面 */
 const HOME = '',
   DOWNLOAD = 'download/';
 
@@ -354,6 +353,7 @@ export function fileServer(dir: string, stall: StallLimit = STALL, staticRoot = 
   const fixed = readStaticSite(staticRoot);
   const documents = fixed?.pages ?? new Map([...agreementPages(__APP_VERSION__), ...supportPages(__APP_VERSION__)]);
   const reading = (res: ServerResponse, name: string, query: string, head: boolean) => {
+    if (sendUpdateFeed(dir, name, res, head)) return true;
     const search = normalizeSupportQuery(query);
     if (name === 'support') {
       // 无脚本提交搜索时由同源服务筛选；空查询直接使用包含渐进增强脚本的静态目录
@@ -395,6 +395,5 @@ export function fileServer(dir: string, stall: StallLimit = STALL, staticRoot = 
       else sendPage(res, missing, { head, platform: false, status: NOT_FOUND });
     }
   };
-  /** 进行中的下载数（指标 yi_downloads_active） */
   return Object.assign(handle, { active: downloads.active });
 }

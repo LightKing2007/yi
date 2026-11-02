@@ -67,6 +67,7 @@ const allowed = new Set([
   'webIcons',
   'webUi',
   'pageResponse',
+  'updateFeed',
   'platform',
   'staticSite',
 ]);

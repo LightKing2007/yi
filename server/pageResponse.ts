@@ -40,3 +40,6 @@ export function sendDocument(res: ServerResponse, pages: ReadonlyMap<string, Buf
   res.writeHead(MOVED, { 'X-Content-Type-Options': 'nosniff', Location: documentLocation(canonical) }).end();
   return true;
 }
+
+/** 小型更新清单沿用官网响应的白名单入口。 */
+export { sendUpdateFeed } from './updateFeed';
