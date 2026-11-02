@@ -92,6 +92,7 @@ function client(i, { port, stats, rooms, auth }) {
     created: msg => rooms.set(i + 1, msg.code),
     start: msg => {
       state.color = msg.color;
+      state.toMove = 1; // 新的一局黑先：再来一局交换先后手后，不能沿用上一局的 turn，等不到新的 turn 就误以为轮到自己
       state.board.clear();
     },
     turn: msg => (state.toMove = msg.color),
