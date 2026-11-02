@@ -48,7 +48,7 @@
     "@types/ws": "^8.5.0",
     "@vitest/coverage-v8": "^5.0.5",
     "age-encryption": "^0.3.1",
-    "electron": "^44.9.3",
+    "electron": "^45.1.0",
     "electron-builder": "^26.18.0",
     "esbuild": "^0.28.2",
     "eslint": "^10.13.0",
