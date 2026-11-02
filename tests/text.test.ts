@@ -185,6 +185,15 @@ describe('更新日志', () => {
     expect(bad).toEqual([]);
   });
 
+  it('游戏内日志页的每一条都在发版脚本读出的某一节中（版本小标题写成 H，待发布的标记由 releasedLog 生成）', () => {
+    const page = must(
+      INFO_PAGES.find(p => p.title === '日志'),
+      '日志页',
+    );
+    const shown = page.lines.filter(line => line[0] === 'P').map(line => line[1]);
+    expect(log.flatMap(section => section.lines)).toEqual(shown);
+  });
+
   it('最上面一节是当前版本，或者是正在准备的下一个版本', () => {
     expect(cmp(must(log[0], '更新日志的第一节').version, pkg.version)).toBeGreaterThanOrEqual(0);
     expect(
