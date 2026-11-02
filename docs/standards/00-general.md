@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 文件编号 | YI-STD-001 |
-| 文件版本 | 1.1.77 |
+| 文件版本 | 1.1.78 |
 | 发布日期 | 2026-10-02 |
 | 状态 | 现行；整改项按 [plan/remediation.md](../plan/remediation.md) 的期限实施 |
 | 编制 | LightKing、Claude |
@@ -339,3 +339,4 @@ GB/T 11457—2006 界定的以及下列术语和定义适用于本规范。
 | 1.1.75 | 2026-11-01 | 随联机协议第 4 版的第二批（F2，账号握手）更新 [04-api.md](04-api.md)：API-013 以登录令牌与重连令牌取代 `uid`，API-044 取消 `name` 消息的限额，API-045 改按账号拒绝，第 8 节新增 `auth.replaced`；[07-operations.md](07-operations.md) 新增日志事件 `player.replaced`、`player.revoked`；规则编号不变 |
 | 1.1.76 | 2026-11-01 | 随联机协议第 4 版的第三批（F3，状态版本与重同步）更新 [04-api.md](04-api.md)（1.1.21）：API-052 改为满足，第 8 节新增 `game.stale`；规则编号不变 |
 | 1.1.77 | 2026-11-02 | 修订 [06-testing.md](06-testing.md)（1.1.7）的 TST-010：写明页面入口 `src/main.tsx` 与场景脚本 `src/app/scenarios.ts` 不计入覆盖率（只做装配，由界面文字排版检查与画面回归运行；场景脚本此前已在 `vite.config.ts` 中排除，本次补入条文）；规则编号不变 |
+| 1.1.78 | 2026-11-02 | 按决策 0014 允许 Electron 层使用 electron-updater，并在 API-060 增加 Windows、Linux 更新清单白名单 |
