@@ -32,7 +32,7 @@ function receive(raw: unknown): void {
 
 /** 安装会退出游戏；只有菜单和未匹配、未开房的大厅提供安装操作。 */
 export function canInstallUpdate(): boolean {
-  return (screen.value === Screen.Menu || screen.value === Screen.Online) && st.phase <= Phase.Lobby;
+  return !st.busy && (screen.value === Screen.Menu || screen.value === Screen.Online) && st.phase <= Phase.Lobby;
 }
 
 /** 点击原有更新提示下载，或下载完成后重启安装。 */

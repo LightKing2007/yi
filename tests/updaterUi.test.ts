@@ -16,6 +16,7 @@ beforeEach(() => {
   updateState.value = null;
   screen.value = Screen.Menu;
   st.phase = Phase.Off;
+  st.busy = false;
   vi.stubGlobal('yiNative', {
     update: async (action: UpdateAction) => {
       calls.push(action);
@@ -79,6 +80,19 @@ it('IPC 状态拒绝恶意版本、未知阶段、非有限进度和伪造能力
     expect(parseUpdateState(bad)).toBeNull();
   }
   expect(parseUpdateState({ ...READY, phase: 'error', failed: 'download' })).toMatchObject({ failed: 'download' });
+});
+
+it('开房或加入好友房间的请求尚未回应时拒绝安装，回到空闲大厅后才允许', async () => {
+  screen.value = Screen.Online;
+  st.phase = Phase.Lobby;
+  st.busy = true;
+  expect(canInstallUpdate()).toBe(false);
+  await updateAction('install');
+  expect(calls).toEqual([]);
+  st.busy = false;
+  expect(canInstallUpdate()).toBe(true);
+  await updateAction('install');
+  expect(calls).toEqual(['install']);
 });
 
 it('浏览器环境不调用原生更新；IPC 拒绝时显示可重试状态且不阻断单机', async () => {

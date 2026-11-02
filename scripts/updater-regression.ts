@@ -33,7 +33,7 @@ async function probe(root: HTMLElement, state: UpdateState, disabled: boolean) {
 
 /** 由 text-fit 驱动，在真实 Chromium DOM 中检查更新入口及点击后发送的有限操作。 */
 export async function runUpdateRegressions() {
-  const previous = { native: native(), lang: settings.value.lang, screen: screen.value, phase: st.phase, update: updateState.value };
+  const previous = { native: native(), lang: settings.value.lang, screen: screen.value, phase: st.phase, busy: st.busy, update: updateState.value };
   const calls: UpdateAction[] = [];
   const root = document.createElement('div');
   root.style.cssText = `position:absolute;left:0;top:0;width:${WIDTH_PX}px`;
@@ -51,6 +51,7 @@ export async function runUpdateRegressions() {
     await document.fonts.ready;
     screen.value = Screen.Menu;
     st.phase = Phase.Off;
+    st.busy = false;
     for (const lang of [Lang.WY, Lang.ZH, Lang.EN]) {
       setSettings({ lang });
       for (const phase of ['checking', 'available', 'downloading', 'ready', 'installing', 'error'] as const) {
@@ -62,6 +63,10 @@ export async function runUpdateRegressions() {
     assert(calls[0] === 'download', '点击新版提示必须请求下载');
     st.phase = Phase.Playing;
     await probe(root, READY, true);
+    st.phase = Phase.Lobby;
+    st.busy = true;
+    await probe(root, READY, true);
+    st.busy = false;
     st.phase = Phase.Off;
     const install = await probe(root, READY, false);
     install.focus();
@@ -75,6 +80,7 @@ export async function runUpdateRegressions() {
     setSettings({ lang: previous.lang });
     screen.value = previous.screen;
     st.phase = previous.phase;
+    st.busy = previous.busy;
     updateState.value = previous.update;
   }
 }
