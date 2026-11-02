@@ -8,7 +8,7 @@ import { other } from '../src/core/types';
 import type { Invalid } from '../src/shared/parse';
 import { CLOSE_CODE, GRACE_SECS, HELLO_SECS, IDLE_SECS, LEGACY_PROTO_VERSION, newRating, type C2S } from '../src/shared/protocol';
 import { errorMsg } from './errorMsg';
-import { dropMatch, unqueue } from './matchmaking';
+import { dropMatch, oppInfo, unqueue } from './matchmaking';
 import { BAN_SECS, type LimitedOp } from './ratelimit';
 import { bothOnline, colorOf, finish, leaveRoom, resync, seat } from './room';
 import { RoomState, type Conn, type OnlineIdentity, type Player, type Revocation, type Room, type ServerContext } from './roomTypes';
@@ -220,10 +220,25 @@ export function takeOver(
   if (r && r.state !== RoomState.Wait) {
     if (old) resync(ctx, r, back);
     else resumeRoom(ctx, r, back);
-  }
+  } else replayLobby(ctx, back);
   const event = old ? 'player.replaced' : 'player.resumed';
   ctx.log('info', event, { msg: `${back.name} ${old ? '在别处连上，已接管' : '重新连上'}`, playerId: back.id, roomId: back.room || undefined });
   return back;
+}
+
+/** 接管时补发开局之前的状态：正在匹配、等双方确认的配对、自己开的等待中的房间（否则新连接停在大厅，服务端却认为它在忙） */
+function replayLobby(ctx: ServerContext, p: Player) {
+  const queued = p.queued;
+  if (queued) ctx.send(p, { t: 'queued', mode: queued.mode, type: queued.type, size: queued.size });
+  const m = p.match;
+  if (m) {
+    const mine = m.side[0].p === p ? 0 : 1,
+      theirs = mine === 0 ? 1 : 0;
+    ctx.send(p, { t: 'found', opp: oppInfo(m.side[theirs].p, m.mode, m.type), secs: Math.max(0, Math.round(m.deadline - ctx.now())) });
+    if (m.ok[theirs]) ctx.send(p, { t: 'accepted' });
+  }
+  const r = ctx.rooms.get(p.room);
+  if (r && r.state === RoomState.Wait && r.host === p.id) ctx.send(p, { t: 'created', code: r.code });
 }
 
 /** 登录被撤销（protocol-v4.md 第 4.3 条）：退出只关闭以该会话握手的连接，改密、重置关闭该账号的连接；对局中的席位按掉线保留 */

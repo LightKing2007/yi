@@ -9,7 +9,7 @@
  */
 import { Screen } from '../app/state';
 import { Phase, changed, inGame, myTurn, st } from './state';
-import { connect, disconnect, setMessageHandler } from './connection';
+import { connectAuto, disconnect, setMessageHandler } from './connection';
 import { askLeave, closeRoom, confirm, mark, move, pass, undo, unqueue } from './actions';
 import { handle } from './handlers';
 import { update } from './frame';
@@ -80,7 +80,7 @@ export const online = {
   },
   /** 进多人游戏页时在后台连上服务器；回到开始菜单时断开 */
   onScreen(_from: Screen, to: Screen) {
-    if (to === Screen.Online) connect();
+    if (to === Screen.Online) connectAuto(); // 被接管或登录失效之后不自动连接
     if (to === Screen.Menu && !inGame()) disconnect();
     if (to === Screen.Game && !inGame()) st.shownOnline = false;
   },

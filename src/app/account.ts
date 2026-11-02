@@ -14,6 +14,13 @@ export const account = signal<LoginState>({ saved: false });
 
 /** 账号接口与登录；未开启时为 undefined */
 let wired: { api: AccountApi; session: AccountSession } | undefined;
+/** 登录变化的通知（联机层据此断开以先前登录握手的连接；联机层不用界面状态库，经此登记） */
+const loginListeners: (() => void)[] = [];
+
+/** 登记登录变化的通知：开启账号功能后，登录、退出、令牌失效时调用 */
+export function onLoginChange(listener: () => void) {
+  loginListeners.push(listener);
+}
 
 /** 是否打开账号入口：只在开发模式下、地址带 ?accounts 时打开 */
 export function accountsWanted(search: string, dev: boolean): boolean {
@@ -28,6 +35,7 @@ export function startAccounts(deps: { server: string; fetcher: Fetcher; store?: 
   const session = new AccountSession(api, deps.store);
   session.onChange(state => {
     account.value = state;
+    for (const listener of loginListeners) listener();
   });
   wired = { api, session };
   // 恢复的结果经 onChange 反映到界面；接口调用不抛出异常（失败时返回错误码），读取保存的登录出错按未登录处理

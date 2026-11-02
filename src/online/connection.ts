@@ -3,7 +3,7 @@
  * 收到消息的校验（API-016）、断线后按关闭码带抖动地退避重连（API-050）与给玩家看的断线原因、主动断开。
  */
 import { now } from '../core/clock';
-import { loginRejected, loginToken } from '../app/account';
+import { loginRejected, loginToken, onLoginChange } from '../app/account';
 import { logError, logWarn } from '../app/native';
 import { isInvalid, parseS2C } from '../shared/parse';
 import { CLOSE_CODE, CONNECT_SECS, PING_SECS, PROTO_VERSION, RETRY_RESET_SECS, type C2S, type S2C } from '../shared/protocol';
@@ -66,8 +66,23 @@ export function netClose() {
   }
 }
 
-/** 在后台连上服务器（已连上或正在连时什么也不做） */
+/**
+ * 被同一账号在别处接管（4002）或登录失效（4001）后为真：此后不自动重连，进入多人游戏页等自动的连接也不发起，
+ * 直到玩家亲自操作（匹配、开房间、加入等经 send 连接）或换了登录；否则两处客户端会来回互相接管
+ */
+let halted = false;
+/** 当前连接握手所用的登录令牌：登录变了（退出、换账号）时断开这条连接，不能以先前账号的身份继续发消息 */
+let socketAuth: string | undefined;
+
+/** 自动的连接（进入多人游戏页时）：被接管或登录失效之后不发起，提示原因 */
+export function connectAuto() {
+  if (halted) return;
+  connect();
+}
+
+/** 在后台连上服务器（已连上或正在连时什么也不做）；这是玩家亲自操作的连接，解除被接管后的停止 */
 export function connect() {
+  halted = false;
   if (ws) return;
   st.error = null;
   if (!loginToken()) {
@@ -104,6 +119,7 @@ export function connect() {
       netClose(); // 连接期间退出了登录
       return;
     }
+    socketAuth = auth;
     sock.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, auth, resume: st.reconnecting && st.token ? st.token : undefined } satisfies C2S));
     st.pingAt = now() + PING_SECS;
   };
@@ -179,6 +195,7 @@ function lostText(code?: number): Msg {
 export function lost(code?: number) {
   if (isFaultClose(code)) logError('联机', `连接被服务端以关闭码 ${code} 关闭，不再重连`);
   if (code === CLOSE_CODE.authFailed) loginRejected();
+  if (code === CLOSE_CODE.authFailed || code === CLOSE_CODE.replaced) halted = true;
   const wait = st.phase === Phase.Playing && !st.over && st.token ? retryWaitSecs(code, nextAttempt(), random) : null;
   if (wait !== null) {
     if (!st.reconnecting) {
@@ -201,6 +218,15 @@ export function lost(code?: number) {
   if (wasBusy) note(st.error);
   changed();
 }
+
+/** 登录变了（退出、换账号、令牌失效）：以先前登录握手的连接立即断开；新的登录解除被接管后的停止 */
+function loginChanged() {
+  if (loginToken() === socketAuth) return;
+  socketAuth = undefined;
+  halted = false;
+  if (ws) disconnect();
+}
+onLoginChange(loginChanged);
 
 export function disconnect() {
   netClose();

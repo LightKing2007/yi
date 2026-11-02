@@ -287,3 +287,31 @@ describe('账号握手与登录撤销（protocol-v4.md 第 3、4 章）', () => 
     expect(conn.closed).toBe(CLOSE_CODE.authFailed);
   });
 });
+
+describe('接管时补发开局之前的状态（protocol-v4.md 第 4.1 条）', () => {
+  it('正在匹配：新连接收到 queued；等双方确认：收到 found（剩余秒数）与对方已接受；开了等待中的房间：收到房号', () => {
+    const { srv, advance } = world();
+    const jia = new Client(srv, '甲');
+    jia.send({ t: 'queue', mode: 'match', type: 1, size: 9 });
+    const queued = new Client(srv, '甲', undefined, jia.uid);
+    expect(queued.expect('queued')).toEqual({ t: 'queued', mode: 'match', type: 1, size: 9 });
+    const yi = new Client(srv, '乙');
+    yi.send({ t: 'queue', mode: 'match', type: 1, size: 9 });
+    yi.send({ t: 'confirm', ok: true });
+    advance(5);
+    const found = new Client(srv, '甲', undefined, jia.uid);
+    expect(found.expect('found')).toEqual({ t: 'found', opp: { name: '乙' }, secs: 10 });
+    expect(found.expect('accepted')).toEqual({ t: 'accepted' });
+    found.send({ t: 'confirm', ok: true });
+    expect(found.expect('start')).toBeTruthy(); // 新连接上的确认照常开局
+
+    const bing = new Client(srv, '丙');
+    bing.send({ t: 'create', type: 0, size: 15, hostColor: 0, renju: true, moveTime: 0 });
+    const code = bing.expect('created')?.code;
+    const host = new Client(srv, '丙', undefined, bing.uid);
+    expect(host.expect('created')).toEqual({ t: 'created', code });
+    const ding = new Client(srv, '丁');
+    ding.send({ t: 'join', code: code ?? '' });
+    expect(host.expect('start')).toBeTruthy();
+  });
+});

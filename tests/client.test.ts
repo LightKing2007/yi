@@ -216,6 +216,33 @@ describe('联机客户端', () => {
     expect(accountCalls.count).toBe(calls + 1); // 向账号接口重新取资料，令牌确已失效时回到未登录
   });
 
+  it('被接管后进入多人游戏页也不自动连接（否则两处来回接管）；玩家亲自操作时才重新连上', () => {
+    net.connect();
+    pump();
+    lastSocket().cut(CLOSE_CODE.replaced);
+    pump();
+    const before = sockets.length;
+    net.online.onScreen(state.Screen.Game, state.Screen.Online); // 对局结束后自动回到多人游戏页
+    pump();
+    expect(sockets.length).toBe(before);
+    net.queue('match', 0, 15);
+    pump();
+    expect(sockets.length).toBe(before + 1);
+    expect(net.st.phase).toBe(net.Phase.Queue);
+  });
+
+  it('退出登录或换了账号：以先前登录握手的连接立即断开', async () => {
+    const account = await import('../src/app/account');
+    net.connect();
+    pump();
+    expect(net.st.phase).toBe(net.Phase.Lobby);
+    const sock = lastSocket();
+    await account.accounts()?.session.logout();
+    pump();
+    expect([net.st.phase, sock.readyState]).toEqual([net.Phase.Off, 3]);
+    await account.accounts()?.session.restore();
+  });
+
   it('对局中被同一账号在别处接管（4002）或登录失效（4001）时不重连', () => {
     for (const code of [CLOSE_CODE.replaced, CLOSE_CODE.authFailed]) {
       const peer = startGame(0);
