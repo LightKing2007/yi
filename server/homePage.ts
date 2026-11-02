@@ -6,7 +6,9 @@ import { homeStyle } from './homeStyle';
 import { board } from './board';
 import { BURST, LATTICE, RINGS, SHAPES, stream } from './geometry';
 import { featureRing } from './ring';
-import { ARROW, PLATFORMS, esc, megabytes, recommended, shell, type PagePkg } from './page';
+import { PLATFORMS, esc, megabytes, recommended, shell, type PagePkg } from './page';
+import { ARROW_DOWN } from './webIcons';
+import { btn, factTags, secHead, statNum } from './webUi';
 import type { Detected } from './platform';
 
 /** 下载页面的地址；带 start 时进入页面即开始下载推荐的安装程序 */
@@ -22,12 +24,12 @@ function heroAction(pkgs: PagePkg[], detected: Detected) {
   const pkg = recommended(pkgs, detected);
   if (!pkg) {
     const note = detected.mobile ? '“弈”为桌面游戏，请在计算机上下载' : '提供 Windows、macOS 及 Linux 版本';
-    return `<a class="btn" href="${DOWNLOAD}">${ARROW}<span>前往下载</span></a><span class="hint">${note}</span>`;
+    return `${btn({ href: DOWNLOAD, text: '前往下载', icon: ARROW_DOWN })}<span class="hint">${note}</span>`;
   }
   const info = PLATFORMS[pkg.platform];
   if (!info) return '';
   return (
-    `<a class="btn" href="${DOWNLOAD_START}">${ARROW}<span>下载 ${esc(info.short)}</span></a>` +
+    btn({ href: DOWNLOAD_START, text: `下载 ${info.short}`, icon: ARROW_DOWN }) +
     `<span class="hint">版本 ${esc(pkg.version)} · ${esc(info.tag)} · ${megabytes(pkg.size)}<a href="${DOWNLOAD}#all">其他版本</a></span>`
   );
 }
@@ -53,25 +55,25 @@ const GOMOKU = board({ size: 15, stars: 'dd ld hh dl ll', moves: 'hh hg gi ih ig
 /** 围棋（19 路）：四角布局之后，黑方在天元四周落下最后一子，提取被围住的白子（第 5 手） */
 const GO = board({ size: 19, stars: STARS_19, moves: 'pd dd pp dp jj ij kj ji jk', colors: 'bwbwwbbbb', cls: 'mini wood go' });
 
-/** 棋种的要点：标签式的短语，不是段落 */
-const tags = (items: string[]) => `<div class="facts" role="list">${items.map(item => `<span role="listitem">${item}</span>`).join('')}</div>`;
-
 function games() {
-  return `<section class="games shell reveal-circle" id="games">${SHAPES}
-<div class="sec-head"><span class="idx">壹</span><span class="label">两种棋</span>
-<h2 class="rv">两种棋，一方木枰</h2>
-<p class="rv">“弈”是一款五子棋与围棋桌面游戏，可与好友同屏对弈、与电脑对弈，或联网与其他玩家对战。两种棋各有完整的规则实现，联机时每一手棋均由服务器校验。</p></div>
+  const head = secHead({
+    index: 1,
+    label: '两种棋',
+    title: '两种棋，一方木枰',
+    lede: '“弈”是一款五子棋与围棋桌面游戏，可与好友同屏对弈、与电脑对弈，或联网与其他玩家对战。两种棋各有完整的规则实现，联机时每一手棋均由服务器校验。',
+  });
+  return `<section class="games shell reveal-circle" id="games">${SHAPES}${head}
 <div class="split">
 <article class="game"><div class="game-num"><b>15</b><span>路</span></div>
 <div class="game-art">${GOMOKU}<span class="strike" aria-hidden="true"></span></div>
 <div class="game-text"><h3>五子棋<small>Gomoku</small></h3>
 <p>横、竖或斜向连成五子即获胜。黑方禁手（三三、四四、长连）可在“设置”中开关，禁手点以红色小叉标示。</p>
-${tags(['15 路棋盘', '黑方禁手', '获胜时击散其余棋子，可查看棋局'])}</div></article>
+${factTags(['15 路棋盘', '黑方禁手', '获胜时击散其余棋子，可查看棋局'])}</div></article>
 <article class="game"><div class="game-num"><b>19</b><span>路</span></div>
 <div class="game-art">${GO}</div>
 <div class="game-text"><h3>围棋<small>Go</small></h3>
 <p>提供 9 路、13 路、19 路棋盘，完整支持提子、禁着点与打劫。双方连续停一手后进入点目，按数子法计分，贴 7.5 目。</p>
-${tags(['9 · 13 · 19 路棋盘', '数子法', '点目时自动估算死子'])}</div></article>
+${factTags(['9 · 13 · 19 路棋盘', '数子法', '点目时自动估算死子'])}</div></article>
 </div></section>`;
 }
 
@@ -101,8 +103,8 @@ const START_RANK = '四级';
 
 function modes() {
   const ranks = RANKS.map(r => `<span role="listitem"${r === START_RANK ? ' class="start"' : ''}>${r}</span>`).join('');
-  return `<section class="modes ink" id="modes"><div class="modes-pin">${RINGS}
-<div class="sec-head"><span class="idx">贰</span><span class="label">对局方式</span><h2>三种对局，一套规则</h2></div>
+  const head = secHead({ index: 2, label: '对局方式', title: '三种对局，一套规则', reveal: false });
+  return `<section class="modes ink" id="modes"><div class="modes-pin">${RINGS}${head}
 <div class="track">
 <article class="mode"><span class="mode-no">一</span><h3>双人对弈</h3>
 <p>同一台计算机上，两人轮流落子。可悔棋、停一手，终局后可查看棋局。</p>
@@ -131,17 +133,23 @@ const PHRASES: [string, string, string][] = [
 
 function details() {
   const rows = PHRASES.map(([zh, lzh, en]) => `<div role="row"><span>${zh}</span><span>${lzh}</span><span lang="en">${en}</span></div>`).join('');
-  return `<section class="tongues shell" id="details">${LATTICE}
-<div class="sec-head"><span class="idx">肆</span><span class="label">语言与细节</span>
-<h2 class="rv">文言、中文、English</h2>
-<p class="rv">界面提供三种语言，可在“设置”中随时切换。浅色与深色主题、界面大小与坐标显示亦可按需调整，设置修改后自动保存。</p></div>
+  const head = secHead({
+    index: 4,
+    label: '语言与细节',
+    title: '文言、中文、English',
+    lede: '界面提供三种语言，可在“设置”中随时切换。浅色与深色主题、界面大小与坐标显示亦可按需调整，设置修改后自动保存。',
+  });
+  const stats = [
+    { num: '60', unit: '秒', label: '网络中断后，60 秒内恢复连接即可继续对局，掉线期间双方暂停计时。' },
+    { num: '3', unit: '次', label: '联机对局中，悔棋与求和须经对方同意，每局每方各限 3 次。' },
+    { num: '7.5', unit: '目', label: '围棋按数子法计分，黑方贴 7.5 目；点目结果须经双方确认。' },
+    { num: '19', unit: '个', label: '排位段位自十级、一级、初段直至九段，按 Elo 等级分升降。' },
+  ]
+    .map(statNum)
+    .join('');
+  return `<section class="tongues shell" id="details">${LATTICE}${head}
 <div class="phrases" role="table" aria-label="三种语言对照"><div class="phrases-head" role="row"><span>中文</span><span>文言</span><span>English</span></div>${rows}</div>
-<div class="figures">
-<div class="fig rv"><b>60<small>秒</small></b><p>网络中断后，60 秒内恢复连接即可继续对局，掉线期间双方暂停计时。</p></div>
-<div class="fig rv"><b>3<small>次</small></b><p>联机对局中，悔棋与求和须经对方同意，每局每方各限 3 次。</p></div>
-<div class="fig rv"><b>7.5<small>目</small></b><p>围棋按数子法计分，黑方贴 7.5 目；点目结果须经双方确认。</p></div>
-<div class="fig rv"><b>19<small>个</small></b><p>排位段位自十级、一级、初段直至九段，按 Elo 等级分升降。</p></div>
-</div>${stream('tongues')}</section>`;
+<div class="stats">${stats}</div>${stream('tongues')}</section>`;
 }
 
 function finale(pkgs: PagePkg[], detected: Detected) {

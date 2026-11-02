@@ -77,10 +77,13 @@ it('目录与文书页均保持无脚本安全头和 HEAD 语义，旧根地址�
       const route = routeFor(slug);
       const response = await fetch(base + route);
       const html = await response.text();
-      expect(response.headers.get('content-security-policy')).toBe("default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; font-src 'self'");
+      expect(response.headers.get('content-security-policy')).toBe(
+        "default-src 'self'; style-src 'unsafe-inline'; img-src 'self'; font-src 'self'; script-src 'self'",
+      );
       expect(response.headers.get('cache-control')).toBe('no-cache');
       expect(response.headers.get('x-content-type-options')).toBe('nosniff');
-      expect(html).not.toContain('<script');
+      expect(html).toContain('/assets/site-enhance.js');
+      expect(html).not.toContain('/assets/support-search.js');
       expect(html).not.toContain('<form');
       const head = await fetch(base + route, { method: 'HEAD' });
       expect([head.status, head.headers.get('content-length'), await head.text()]).toEqual([200, response.headers.get('content-length'), '']);

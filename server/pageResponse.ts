@@ -7,7 +7,7 @@ const MOVED = 301;
 const HTML_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
   'Content-Type': 'text/html; charset=utf-8',
-  'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; font-src 'self'",
+  'Content-Security-Policy': "default-src 'self'; style-src 'unsafe-inline'; img-src 'self'; font-src 'self'; script-src 'self'",
   'Referrer-Policy': 'no-referrer',
   'Cache-Control': 'no-cache',
 };
@@ -16,14 +16,11 @@ interface PageOptions {
   head: boolean;
   platform?: boolean;
   status?: number;
-  /** 仅静态帮助目录允许加载同源外部脚本 */
-  script?: boolean;
 }
 
-/** HEAD 与 GET 的长度一致但不发送正文；纯阅读页面不请求客户端芯片等提示。 */
-export function sendPage(res: ServerResponse, body: Buffer, { head, platform = true, status = OK, script = false }: PageOptions) {
-  const security = script ? { ...HTML_HEADERS, 'Content-Security-Policy': `${HTML_HEADERS['Content-Security-Policy']}; script-src 'self'` } : HTML_HEADERS;
-  res.writeHead(status, { ...security, ...(platform ? CLIENT_HINT_HEADERS : {}), 'Content-Length': body.length }).end(head ? undefined : body);
+/** HEAD 与 GET 的长度一致但不发送正文；所有页面仅允许同源增强脚本，纯阅读页面不请求设备提示。 */
+export function sendPage(res: ServerResponse, body: Buffer, { head, platform = true, status = OK }: PageOptions) {
+  res.writeHead(status, { ...HTML_HEADERS, ...(platform ? CLIENT_HINT_HEADERS : {}), 'Content-Length': body.length }).end(head ? undefined : body);
 }
 
 /** 路径逐段编码，保留文书目录中的斜杠。 */

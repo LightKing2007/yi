@@ -43,6 +43,7 @@ const allowed = new Set([
   'agreementStyle',
   'agreementText',
   'supportPage',
+  'supportStyle',
   'supportContent',
   'supportSources/download',
   'supportSources/display',
@@ -50,6 +51,7 @@ const allowed = new Set([
   'supportSources/online',
   'supportSources/settings',
   'notFoundPage',
+  'notFoundStyle',
   'legalMarkdown',
   'downloadPage',
   'downloadStyle',
@@ -60,6 +62,10 @@ const allowed = new Set([
   'ring',
   'page',
   'pageStyle',
+  'webTokens',
+  'webHtml',
+  'webIcons',
+  'webUi',
   'pageResponse',
   'platform',
   'staticSite',
@@ -99,6 +105,16 @@ await build({
   format: 'iife',
   plugins: [textPlugin],
 });
+await build({
+  entryPoints: ['scripts/site-enhance.ts'],
+  outfile: 'dist-website/site/assets/site-enhance.js',
+  bundle: true,
+  minify: true,
+  platform: 'browser',
+  target: 'es2022',
+  format: 'iife',
+});
+execFileSync(process.execPath, ['scripts/check-website.mjs'], { stdio: 'inherit' });
 execFileSync('tar', ['-cf', 'dist-website/site.tar', '-C', 'dist-website/site', '.']);
 
 // 部署工具独立打包，永远不作为官网进程的依赖或运行代码。

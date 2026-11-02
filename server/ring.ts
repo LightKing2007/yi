@@ -5,6 +5,7 @@
  */
 
 import { stream } from './geometry';
+import { secHead } from './webUi';
 
 /** 卡片：3×3 棋形（b 黑子、w 白子、. 空点，自左上逐行）、名称与说明 */
 const CARDS: [string, string, string][] = [
@@ -38,8 +39,8 @@ export function featureRing() {
       `<span class="card-no">No.${no} / ${total}</span><h3>${title}</h3><span class="card-note">${note}</span></article>`
     );
   }).join('');
-  return `<section class="ringsec ink" id="features">${stream('ring')}<div class="ring-pin">
-<div class="sec-head"><span class="idx">叁</span><span class="label">功能一览</span><h2>十二项功能，环绕一周</h2></div>
+  const head = secHead({ index: 3, label: '功能一览', title: '十二项功能，环绕一周', reveal: false });
+  return `<section class="ringsec ink" id="features">${stream('ring')}<div class="ring-pin">${head}
 <div class="ring-stage"><div class="ring">${cards}</div></div></div></section>`;
 }
 

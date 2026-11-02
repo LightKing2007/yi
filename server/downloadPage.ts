@@ -5,7 +5,9 @@
  */
 import { downloadStyle } from './downloadStyle';
 import { LATTICE, RINGS, SHAPES, stream } from './geometry';
-import { ARROW, PLATFORMS, RELEASES, esc, fileUrl, latestVersion, megabytes, recommended, shell, type PagePkg } from './page';
+import { PLATFORMS, RELEASES, esc, fileUrl, latestVersion, megabytes, recommended, shell, type PagePkg } from './page';
+import { ARROW_DOWN } from './webIcons';
+import { badge, btn, codeLine, secHead } from './webUi';
 import type { Detected } from './platform';
 
 /** 触屏设备上的提示：iPad 上的 Safari 自称 Mac，服务端无从区分，以 CSS 的指针类型判断后显示；已推断为手机时不需要 */
@@ -78,8 +80,8 @@ function status(pkg: PagePkg | undefined, detected: Detected, starting: boolean)
 
 /** 下载按钮：一枚大号白子，落在背景棋盘网格的一个交叉点上（网格以白子为准排布）；label 为子下的文字 */
 const stone = (href: string, label: string, download: boolean) =>
-  `<div class="stone-wrap"><i class="stone-grid" aria-hidden="true"></i><a class="stone-btn" href="${href}"${download ? ' download' : ''}>` +
-  `<span class="stone" aria-hidden="true">${ARROW}</span><span class="stone-label">${label}</span></a></div>`;
+  `<div class="stone-wrap"><i class="stone-grid" aria-hidden="true"></i><a class="stone-btn" href="${esc(href)}"${download ? ' download' : ''}>` +
+  `<span class="stone" aria-hidden="true">${ARROW_DOWN}</span><span class="stone-label">${esc(label)}</span></a></div>`;
 
 /**
  * 推荐的安装程序：一枚白子作下载按钮，其下是平台名称、版本与大小、系统要求；校验值折叠起来，需要时展开。
@@ -93,7 +95,7 @@ function pick(pkg: PagePkg, pkgs: PagePkg[], detected: Detected) {
     pkg.platform === 'mac-arm64' && !detected.sure && intel
       ? `<p class="alt">使用 Intel 芯片的 Mac？请<a href="${fileUrl(intel)}" download>下载 Intel 芯片版本</a>。</p>`
       : '';
-  return `<div class="pick">${stone(fileUrl(pkg), `下载 ${esc(info.short)}`, true)}
+  return `<div class="pick">${stone(fileUrl(pkg), `下载 ${info.short}`, true)}
 <div class="pick-os"><h2>${esc(info.label)}</h2><span>${esc(info.tag)}</span></div>
 <div class="pick-meta"><span>版本 ${esc(pkg.version)}</span><span>${megabytes(pkg.size)}</span><span>${esc(info.req)}</span></div>${alt}
 ${sumFold(pkg, 'pick-sum')}
@@ -108,7 +110,7 @@ function hero(pkg: PagePkg | undefined, pkgs: PagePkg[], detected: Detected, sta
 <div class="dl-hero-in"><div class="thanks">
 <span class="label">下载</span>
 <h1>感谢您<br>${detected.mobile ? '关注' : '下载'}“弈”</h1>
-<p class="status${starting ? ' live' : ''}">${status(pkg, detected, starting)}</p>
+<p class="status${starting ? ' live' : ''}" role="status">${status(pkg, detected, starting)}</p>
 ${detected.mobile ? '' : TOUCH_NOTE}
 <div class="hint">${notes}<a href="#all">全部版本</a><a href="#guide">安装说明</a></div>
 </div>${right}</div></section>`;
@@ -120,20 +122,23 @@ function guide(detected: Detected) {
   const radios = GUIDES.map(([os]) => `<input type="radio" name="os" id="os-${os}"${os === pick ? ' checked' : ''}>`).join('');
   const tabs = GUIDES.map(([os]) => `<label for="os-${os}">${os}</label>`).join('');
   const panels = GUIDES.map(([os, steps]) => `<ol class="steps" data-os="${os}">${steps.map(step => `<li>${step}</li>`).join('')}</ol>`).join('');
-  return `<section class="guide shell reveal-circle" id="guide">${SHAPES}
-<div class="sec-head"><span class="idx">壹</span><span class="label">安装说明</span><h2>三步完成安装</h2>
-<p>安装程序尚未经过操作系统厂商的公证或签名，首次运行时系统可能给出提示，按以下步骤操作即可。</p></div>
+  const head = secHead({
+    index: 1,
+    label: '安装说明',
+    title: '三步完成安装',
+    lede: '安装程序尚未经过操作系统厂商的公证或签名，首次运行时系统可能给出提示，按以下步骤操作即可。',
+  });
+  return `<section class="guide shell reveal-circle" id="guide">${SHAPES}${head}
 <div class="os-pick">${radios}<div class="tabs" role="group" aria-label="操作系统">${tabs}</div>${panels}</div></section>`;
 }
 
 function row(p: PagePkg, recommended: boolean) {
   const info = PLATFORMS[p.platform];
   if (!info) return '';
-  const tag = recommended ? '<em>推荐</em>' : '';
   return `<div class="row${recommended ? ' on' : ''}" role="listitem">
-<div class="row-os"><b>${esc(info.label)}</b><span>${esc(info.tag)}</span>${tag}</div>
+<div class="row-os"><b>${esc(info.label)}</b><span>${esc(info.tag)}</span>${recommended ? badge('推荐') : ''}</div>
 <div class="row-req">${esc(info.req)}</div><div class="row-meta">${esc(p.version)} · ${megabytes(p.size)}</div>
-<a class="btn ghost" href="${fileUrl(p)}" download>${ARROW}<span>下载</span></a>
+${btn({ href: fileUrl(p), text: '下载', icon: ARROW_DOWN, ghost: true, download: true })}
 ${sumFold(p, 'row-sum')}</div>`;
 }
 
@@ -141,13 +146,17 @@ function all(pkgs: PagePkg[], detected: Detected) {
   const rows = pkgs.length
     ? `<div class="rows" role="list">${pkgs.map(p => row(p, p.platform === detected.platform)).join('')}</div>`
     : '<p class="none">暂无可供下载的安装程序。</p>';
-  return `<section class="all ink reveal-circle" id="all">${RINGS}${stream('all')}
-<div class="sec-head"><span class="idx">贰</span><span class="label">全部版本</span><h2>其他版本</h2>
-<p>如需为其他计算机下载，或使用 Intel 芯片的 Mac，请从下表中选择。下载支持断点续传。</p></div>${rows}</section>`;
+  const head = secHead({
+    index: 2,
+    label: '全部版本',
+    title: '其他版本',
+    lede: '如需为其他计算机下载，或使用 Intel 芯片的 Mac，请从下表中选择。下载支持断点续传。',
+  });
+  return `<section class="all ink reveal-circle" id="all">${RINGS}${stream('all')}${head}${rows}</section>`;
 }
 
 function verify() {
-  const cmds = COMMANDS.map(([os, cmd]) => `<div><span>${os}</span><code>${cmd}</code></div>`).join('');
+  const cmds = COMMANDS.map(([os, cmd]) => `<div><span>${os}</span>${codeLine(cmd)}</div>`).join('');
   const reqs = REQUIREMENTS.map(([item, need]) => `<div><dt>${item}</dt><dd>${need}</dd></div>`).join('');
   return `<section class="more shell reveal-circle" id="verify">${LATTICE}
 <div class="cols">

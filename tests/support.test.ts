@@ -35,7 +35,8 @@ it('目录复用文书布局，六类三十四个问题分别链接到独立页�
   }
   expect(html).not.toContain('<nav aria-label="问题分类">');
   expect(html).not.toContain('data-support-category');
-  expect(html).not.toContain('<script');
+  expect(html).toContain('/assets/site-enhance.js');
+  expect(html).not.toContain('/assets/support-search.js');
 });
 
 it('检索匹配标题、分类和答案，支持多个关键词、空结果与安全转义', () => {
@@ -52,7 +53,8 @@ it('检索匹配标题、分类和答案，支持多个关键词、空结果与�
   expect(empty).toContain('查看全部 34 个问题');
   expect(empty).not.toContain('class="document-link"');
   expect(supportPage('test', '<"&')).toContain('value="&#60;&#34;&#38;"');
-  expect(empty).not.toContain('<script');
+  expect(empty).toContain('/assets/site-enhance.js');
+  expect(empty).not.toContain('/assets/support-search.js');
 });
 
 it('三十四份 Markdown 均生成独立阅读页，答案、相关链接与返回目录完整', () => {
@@ -66,7 +68,8 @@ it('三十四份 Markdown 均生成独立阅读页，答案、相关链接与返
     expect(html).toContain(article.summary);
     expect(html).toContain('class="support-ornaments" aria-hidden="true"');
     expect(html).toContain('href="/support">← 返回帮助目录</a>');
-    expect(html).not.toContain('<script');
+    expect(html).toContain('/assets/site-enhance.js');
+    expect(html).not.toContain('/assets/support-search.js');
     expect(html).not.toContain('<form');
   }
   expect(pages.get('support/report-issue')?.toString()).toContain('href="https://github.com/LightKing2007/yi/issues"');
@@ -81,7 +84,9 @@ it('目录搜索与独立问题页保持安全头、HEAD 和规范路径语义',
     const response = await fetch(`${base}/support`);
     const html = await response.text();
     expect(response.status).toBe(200);
-    expect(response.headers.get('content-security-policy')).toBe("default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; font-src 'self'");
+    expect(response.headers.get('content-security-policy')).toBe(
+      "default-src 'self'; style-src 'unsafe-inline'; img-src 'self'; font-src 'self'; script-src 'self'",
+    );
     expect(response.headers.get('accept-ch')).toBeNull();
     expect(await (await fetch(`${base}/support?from=download`)).text()).toBe(html);
     const result = await fetch(`${base}/support?q=WebGL2`);
