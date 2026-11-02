@@ -59,7 +59,7 @@ const hero = `
     radial-gradient(circle at 42% 38%, #fdfbf6 0, #efe9de 50%, #d6cdbd 88%, #c2b7a4 100%);
   box-shadow: 0 3px 4px rgb(0 0 0 / 0.5), 0 30px 60px -18px rgb(0 0 0 / 0.85), inset 0 -6px 14px rgb(120 100 70 / 0.35);
   transition: transform 0.6s cubic-bezier(0.3, 1.4, 0.5, 1), box-shadow 0.6s var(--ease); }
-.stone .ico { width: 26%; height: 26%; transition: transform 0.5s var(--ease); }
+.stone .ico { width: 26%; height: 26%; }
 .stone::after { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 1px solid rgb(236 231 221 / 0.6); opacity: 0;
   animation: stone-ripple 3.2s var(--ease) 2s infinite; }
 .stone-label { position: relative; font-size: 16px; letter-spacing: 0.22em; padding-bottom: 6px; }
@@ -67,7 +67,6 @@ const hero = `
   transform: scaleX(0.3); transition: transform 0.5s var(--ease); }
 .stone-btn:hover .stone { transform: translateY(-6px) scale(1.04);
   box-shadow: 0 3px 4px rgb(0 0 0 / 0.5), 0 44px 80px -20px rgb(0 0 0 / 0.9), inset 0 -6px 14px rgb(120 100 70 / 0.35); }
-.stone-btn:hover .ico { transform: translateY(3px); }
 .stone-btn:hover .stone-label::after { transform: scaleX(1); }
 .stone-btn:focus-visible { outline: none; }
 .stone-btn:focus-visible .stone { outline: 2px solid var(--kaya); outline-offset: 6px; }
