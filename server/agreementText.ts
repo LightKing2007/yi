@@ -10,7 +10,7 @@ export const AGREEMENT_INFO = {
   updated: '2026-11-02',
   operator: '个人开发者王耀（LightKing）',
   status: '正式版',
-  statusNote: '自【待确认：生效日期】起生效',
+  statusNote: '自 2026 年 11 月 2 日起生效',
   introduction: '有关个人信息、服务使用与未成年人保护的文书，汇集于此。',
   notice: '注册账号与联机对战须阅读并同意《隐私政策》与《用户服务条款》；同意在客户端的注册页面作出，浏览本页不会记录同意。',
 };
