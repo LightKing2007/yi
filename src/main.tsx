@@ -7,7 +7,7 @@ import { App } from './ui/App';
 import * as net from './online/client';
 import * as controller from './app/controller';
 import { catchErrors, logError, native } from './app/native';
-import { accountsWanted, loginStoreOf, startAccounts } from './app/account';
+import { loginStoreOf, startAccounts } from './app/account';
 import { serverUrl } from './online/connection';
 
 catchErrors();
@@ -34,9 +34,8 @@ try {
   throw e;
 }
 initAudio();
-// 账号入口在协议第 4 版接通前默认关闭，开发时以 ?accounts 打开
-if (accountsWanted(location.search, import.meta.env.DEV))
-  startAccounts({ server: serverUrl(), fetcher: (url, init) => fetch(url, init), store: loginStoreOf(native()) });
+// 协议第 4 版起联机须登录：启动时开启账号功能，恢复保存的登录
+startAccounts({ server: serverUrl(), fetcher: (url, init) => fetch(url, init), store: loginStoreOf(native()) });
 render(<App />, document.getElementById('ui')!);
 if (scenarios && scenarioName) {
   const q = new URLSearchParams(location.search);

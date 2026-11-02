@@ -24,7 +24,7 @@ export interface Settings {
   humanWhite: boolean; // 人机对弈时玩家执白（电脑先行）
   aiLevel: number; // 电脑难度：0 简单 1 普通 2 困难
   renju: boolean; // 五子棋黑棋禁手
-  nick: string; // 联机昵称
+  nick: string; // 第 3 版联机的昵称：第 4 版起联机以账号的雅号显示，不再使用；保留字段，旧版本读写设置时照常
   lang: Lang;
   theme: number; // 0 浅色 1 深色
   coords: boolean; // 棋盘坐标

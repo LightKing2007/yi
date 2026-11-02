@@ -1,6 +1,6 @@
 /**
  * 账号的界面状态（next-development.md 第 5 章批次 E）：把联机层的登录包装为信号，并给出界面所需的换算——邮件语言、错误提示、输入检查。
- * 协议第 4 版接通前入口默认关闭（批次 E 的验收项：未接通流程不提前开放入口），开发时以地址参数 ?accounts 打开。
+ * 协议第 4 版起联机须登录，启动时即开启（protocol-v4.md 第 11 章 F4）。
  */
 import { signal } from '@preact/signals';
 import { AccountSession, type LoginState, type LoginStore } from '../online/account';
@@ -22,18 +22,14 @@ export function onLoginChange(listener: () => void) {
   loginListeners.push(listener);
 }
 
-/** 是否打开账号入口：只在开发模式下、地址带 ?accounts 时打开 */
-export function accountsWanted(search: string, dev: boolean): boolean {
-  return dev && new URLSearchParams(search).has('accounts');
-}
-
-/** 开启账号功能：由联机地址推出接口地址，并恢复保存的登录；地址不合格时不开启，返回 false */
+/** 开启账号功能：由联机地址推出接口地址，并恢复保存的登录；地址不合格时不开启，返回 false。再次开启时（检查脚本换用替身）先前的登录不再影响界面 */
 export function startAccounts(deps: { server: string; fetcher: Fetcher; store?: LoginStore }): boolean {
   const base = apiBase(deps.server);
   if (!base) return false;
   const api = new AccountApi(base, deps.fetcher);
   const session = new AccountSession(api, deps.store);
   session.onChange(state => {
+    if (wired?.session !== session) return;
     account.value = state;
     for (const listener of loginListeners) listener();
   });

@@ -255,7 +255,7 @@ export function accountGate(height: number) {
   return null;
 }
 
-/** 大厅中的账号条：雅号与“账号”按钮；账号功能未开启或未登录时为 null（大厅照旧显示昵称输入框） */
+/** 大厅中的账号条：雅号与“账号”按钮；账号功能未开启或未登录时为 null */
 export function AccountBar() {
   const user = accounts() ? account.value.user : undefined;
   if (!user) return null;

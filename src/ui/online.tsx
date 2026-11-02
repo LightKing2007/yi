@@ -7,7 +7,8 @@ import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { goScreen, newGame, toggleReview } from '../app/controller';
 import { layout } from '../app/app';
-import { Lang, NICK_MAX_CHARS, setSettings, settings } from '../app/settings';
+import { account } from '../app/account';
+import { Lang, settings } from '../app/settings';
 import { game, screen, Screen, uiTick, boardView } from '../app/state';
 import { now } from '../core/clock';
 import { BLACK, GameType, WHITE } from '../core/types';
@@ -16,10 +17,10 @@ import { T, TF } from '../i18n';
 import * as net from '../online/client';
 import { Phase, netTick, ratingOf, st, tr } from '../online/client';
 import { seatPlates } from '../scene/online';
-import { RANKS, clipName, queueRules, rankAt, rankIndex, rankName, type AskKind, type Opponent } from '../shared/protocol';
+import { RANKS, queueRules, rankAt, rankIndex, rankName, type AskKind, type Opponent } from '../shared/protocol';
 import { Row, UpdateNote } from './panels';
 import { AccountBar } from './account';
-import { Button, Field, Fit, Hair, Seg, StoneIcon } from './widgets';
+import { Button, Fit, Hair, Seg, StoneIcon } from './widgets';
 
 const typeName = (type: number) => T(type ? '围棋' : '五子棋');
 
@@ -45,9 +46,6 @@ function Notice({ style }: { style?: Record<string, string> }) {
     </div>
   );
 }
-
-/** 昵称输入框的码元上限只是兜底：一个字素可能由多个码元组成，实际按字素截到 NAME_MAX 个（I18N-030） */
-const NICK_INPUT_MAX = NICK_MAX_CHARS;
 
 const labelW = () => (settings.value.lang === Lang.EN ? 118 : 80);
 
@@ -223,19 +221,14 @@ function friendTab() {
 }
 
 function lobby(h: number) {
-  const s = settings.value,
-    u = ui.value;
+  const u = ui.value;
   return (
     <div class="npanel col" style={{ height: h + 'px', ['--lw' as any]: labelW() + 'px' }}>
       <h1 class="title" style={{ height: '60px' }}>
         {T('联机对战')}
       </h1>
       <UpdateNote style={{ marginTop: '-8px', marginBottom: '8px' }} />
-      {AccountBar() ?? (
-        <Row label={T('昵称')}>
-          <Field value={s.nick} maxLength={NICK_INPUT_MAX} placeholder={T('给自己取个名字')} onInput={v => setSettings({ nick: clipName(v) })} />
-        </Row>
-      )}
+      <AccountBar />
       <Seg items={[T('匹配'), T('排位'), T('好友')]} sel={u.tab} onChange={v => setUi({ tab: v })} />
       <div style={{ height: '20px' }} />
       <div key={u.tab} class="tab-body">
@@ -579,7 +572,7 @@ export function ScenePlates() {
   }, [on]);
   if (!on) return <div class={last.current ? 'plates off' : 'plates'}>{last.current}</div>;
   const pl = seatPlates(L),
-    nick = settings.value.nick.trim() || T('棋手');
+    nick = account.value.user?.name ?? T('棋手');
   const rankedView = st.phase === Phase.Queue || st.phase === Phase.Found ? st.qMode === 'ranked' : st.phase !== Phase.Hosting && u.tab === 1;
   const myType = st.phase === Phase.Queue || st.phase === Phase.Found ? st.qType : u.type;
   const me = TF('你 · %s', nick) + (rankedView ? '  ·  ' + T(rankName(ratingOf(myType).points)) : '');
