@@ -43,7 +43,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@preact/signals": "^2.11.3",
+    "@preact/signals": "^2.11.4",
     "@types/node": "^24.19.2",
     "@types/ws": "^8.5.0",
     "@vitest/coverage-v8": "^5.0.5",
@@ -53,11 +53,11 @@
     "esbuild": "^0.28.2",
     "eslint": "^10.13.0",
     "jscpd": "^5.4.2",
-    "preact": "^11.0.2",
+    "preact": "^11.1.0",
     "prettier": "^3.9.10",
     "subset-font": "^2.9.0",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.72.0",
+    "typescript-eslint": "^8.72.1",
     "vite": "^8.3.5",
     "vitest": "^5.0.3",
     "ws": "^8.18.0"
