@@ -75,7 +75,10 @@ class Opponent {
   private color = 0;
   private ws: WebSocket;
 
-  constructor(url: string) {
+  constructor(
+    url: string,
+    private readonly auth: string,
+  ) {
     this.ws = new WebSocket(url);
     this.ws.addEventListener('message', ev => this.receive(ev.data));
   }
@@ -83,7 +86,7 @@ class Opponent {
   /** 连上并握手 */
   async open() {
     await waitFor(() => this.ws.readyState === WebSocket.OPEN, '对手连上服务端');
-    this.send({ t: 'hello', v: PROTO_VERSION, name: 'Opponent', uid: 'fit-check-opponent-0001' });
+    this.send({ t: 'hello', v: PROTO_VERSION, auth: this.auth });
   }
 
   send(m: C2S) {
@@ -268,9 +271,13 @@ async function sweepAccount() {
 }
 
 /** 以文言、中文、英文依次走一遍；返回每种语言提示条检查的条数 */
-export async function runAll(serverUrl: string) {
+export async function runAll(serverUrl: string, [mine, theirs]: string[]) {
+  if (!mine || !theirs) throw new Error('缺少测试账号的登录令牌');
   await runPanelScroll();
-  const opp = new Opponent(serverUrl);
+  // 协议第 4 版的联机须登录：本页以替身登录，替身回应真实服务端认可的令牌（fit-check.cjs 注册的测试账号）
+  startStub(mine);
+  await accounts()?.session.login('player@example.com', 'fit-check-password');
+  const opp = new Opponent(serverUrl, theirs);
   await opp.open();
   const probed: Record<string, number> = {};
   try {
@@ -286,7 +293,7 @@ export async function runAll(serverUrl: string) {
     }
     // 账号功能开启后多人游戏页先显示登录门槛，所以放在联机流程全部走完之后
     await runAccountRegressions();
-    startStub();
+    startStub(mine);
     for (const lang of [Lang.WY, Lang.ZH, Lang.EN]) {
       setSettings({ lang });
       await sweepAccount();

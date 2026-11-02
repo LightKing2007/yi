@@ -6,6 +6,7 @@ import { expect } from 'vitest';
 import { RoomServer, type Conn, type Session } from '../server/rooms';
 import { PROTO_VERSION, type C2S, type S2C } from '../src/shared/protocol';
 import { must } from './must';
+import { loginOf, testGate } from './serverWorld';
 
 // ---------------- 浏览器环境 ----------------
 
@@ -53,7 +54,7 @@ interface FakeState {
   /** 服务端发出的这些消息在路上丢掉（模拟老版本服务端或丢包） */
   dropTypes: string[];
 }
-export const newServer = () => new RoomServer({ now: () => fake.now, random: () => 0.3 });
+export const newServer = () => new RoomServer({ now: () => fake.now, random: () => 0.3, gate: testGate() });
 export const fake: FakeState = { now: 1000, server: newServer(), netDown: false, dropTypes: [] };
 
 const queue: (() => void)[] = [];
@@ -143,6 +144,9 @@ export function inject(data: unknown) {
 }
 
 /** 另一位棋手：直接接在服务端上 */
+/** 已用过的对手账号数：每位新的对手各用一个账号 */
+let peerAccounts = 0;
+
 export class Peer {
   inbox: S2C[] = [];
   sess: Session;
@@ -152,16 +156,16 @@ export class Peer {
     },
     close: () => {},
   };
-  /** token：带令牌重连，找回掉线的自己；uid：本机匿名身份，默认与客户端不同 */
+  /** token：带重连令牌，找回掉线的自己；uid：账号，默认每位新的对手各用一个，与客户端不同 */
   constructor(
     public srv: RoomServer = fake.server,
     token?: string,
-    uid = 'peer-device-0000000001',
+    public uid = 'peer-account-' + String(++peerAccounts).padStart(10, '0'),
   ) {
     const sess = srv.connect(this.conn);
     expect(sess).not.toBeNull();
     this.sess = sess as Session;
-    this.send({ t: 'hello', v: PROTO_VERSION, name: '乙', uid, token });
+    this.send({ t: 'hello', v: PROTO_VERSION, auth: loginOf(uid, '乙'), resume: token });
   }
   /** 收到的最后一条该类型的消息 */
   last<K extends S2C['t']>(type: K) {
@@ -186,10 +190,27 @@ export type State = typeof import('../src/app/state');
 let net: Client;
 
 /** 装好替身后导入客户端，并把它的时钟换成假时钟；在 beforeAll 中调用 */
+/** 客户端向账号接口发出的请求数（查资料） */
+export const accountCalls = { count: 0 };
+
+/** 客户端所用的测试账号 */
+export const CLIENT_ACCOUNT = 'client-account-0000000001';
+
 export async function loadClient(): Promise<{ net: Client; state: State }> {
   const clock = await import('../src/core/clock');
   clock.setClock(() => fake.now);
   net = await import('../src/online/client');
+  // 协议第 4 版的联机须登录：客户端以测试账号“甲”恢复保存的登录，假服务端的账号核验认得它的令牌
+  const account = await import('../src/app/account');
+  const saved = { token: loginOf(CLIENT_ACCOUNT, '甲'), expiresAt: '2099-01-01T00:00:00.000Z' };
+  const user = { publicId: '00000001', name: '甲', emailVerified: true, consentsCurrent: true, onlineAllowed: true };
+  const store = { load: async () => saved, save: async () => true, clear: async () => undefined };
+  const fetcher = async () => {
+    accountCalls.count++;
+    return new Response(JSON.stringify(user), { status: 200 });
+  };
+  account.startAccounts({ server: 'ws://127.0.0.1:1', fetcher, store });
+  await account.accounts()?.session.restore();
   return { net, state: await import('../src/app/state') };
 }
 

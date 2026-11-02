@@ -9,7 +9,7 @@ import type { AccountConfig } from './accountConfig';
 import { apiLimited, withAccountApi } from './accountApi';
 import type { AccountSecrets } from './accountSecrets';
 import { MINUTE_MS } from './authPolicy';
-import { Authentication } from './authentication';
+import { Authentication, type SessionRevocation } from './authentication';
 import { CodeCredentials } from './codeCredentials';
 import { authPruner } from './db/authPrune';
 import { EmailCodes, type CodeMail } from './emailCodes';
@@ -47,6 +47,10 @@ export interface AccountService {
   limited: Limited;
   /** 停止定时清理 */
   close: () => void;
+  /** 联机握手的账号核验（protocol-v4.md 第 3 章） */
+  gate: Pick<Authentication, 'identify' | 'nameOf'>;
+  /** 登记登录撤销的通知（退出、改密、重置提交后调用），联机程序据此断开连接（protocol-v4.md 第 4.3 条） */
+  onRevoke: (listener: (event: SessionRevocation) => void) => void;
 }
 
 /** 随邮件内嵌的墨色“弈”字图（构建时嵌入，见 scripts/build-node.mjs） */
@@ -69,8 +73,13 @@ export function startAccounts(deps: AccountServiceDeps): AccountService {
   const sender = deps.sender ?? smtpSender({ ...secrets.smtp, heloName: HELO_NAME, image: mailImage() });
   const codes = new EmailCodes(db, vault, new CodeCredentials(secrets.code), { globalPerMinute: config.codeBudget, sender, now });
   const required = { privacy: config.privacyVersion, terms: config.termsVersion };
-  // 撤销通知暂无联机连接可断（协议第 4 版接入前），只记一行，不含账号或会话编号
-  const auth = new Authentication(db, vault, codes, { required, now, onRevoke: () => log?.('info', 'auth.revoked', { msg: '登录会话已撤销' }) });
+  // 撤销通知：记一行（不含账号或会话编号），再交给联机程序断开相应的连接
+  const listeners: ((event: SessionRevocation) => void)[] = [];
+  const revoked = (event: SessionRevocation) => {
+    log?.('info', 'auth.revoked', { msg: '登录会话已撤销' });
+    for (const listener of listeners) listener(event);
+  };
+  const auth = new Authentication(db, vault, codes, { required, now, onRevoke: revoked });
   const recovered = codes.repo.recover();
   const prune = pruner(db, codes, now);
   prune();
@@ -86,5 +95,7 @@ export function startAccounts(deps: AccountServiceDeps): AccountService {
     api: next => withAccountApi(next, { auth, codes, required, origins, sourceKey: secrets.source, queued, log }),
     limited: apiLimited(origins, tooManyRequests),
     close: stop,
+    gate: { identify: token => auth.identify(token), nameOf: userId => auth.nameOf(userId) },
+    onRevoke: listener => listeners.push(listener),
   };
 }

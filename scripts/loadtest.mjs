@@ -2,7 +2,8 @@
  * 服务端压测（TST-045，整改项 P2-07）：启动打包好的服务端，以真实的 WebSocket 连接施加负载，按 /metrics（OPS-071）与进程统计检查：
  * 单条消息处理耗时 p99 ≤ 5 毫秒、CPU ≤ 50%、常驻内存 ≤ 256 MB、事件循环延迟 p99 ≤ 50 毫秒。
  *   node scripts/loadtest.mjs [--connections 500] [--rate 2] [--seconds 60] [--warmup 10] [--json 文件]
- * 先运行 npm run build:node。连接两两开好友房间下五子棋，每条连接每秒发 rate 条消息：轮到自己时落子，否则发心跳；终局后再来一局。
+ * 先运行 npm run build:node。服务端打开账号功能（临时随机密钥），每条连接一个预先注册的账号（scripts/test-accounts.mjs），以登录令牌握手。
+ * 连接两两开好友房间下五子棋，每条连接每秒发 rate 条消息：轮到自己时落子，否则发心跳；终局后再来一局。
  * 另记客户端看到的落子往返耗时（发出落子到收到服务端广播），含 WebSocket 收发与 JSON 解析，只作参考。
  * 服务端限制同一 IP 至多 8 条连接（API-040），连接分别以 127.0.0.2 起的本机地址发起：Linux 上 127.0.0.0/8 均为本机地址，
  * macOS 默认只有 127.0.0.1，只能测 8 条以内。环境变量 LOADTEST_SERVER_PREFIX 为启动服务端的前缀命令，如 "taskset -c 0,1"（限定 2 个核）。
@@ -14,6 +15,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import WebSocket from 'ws';
+import { prepareAccounts } from './test-accounts.mjs';
 
 const root = path.join(path.dirname(new URL(import.meta.url).pathname), '..');
 const PER_IP = 8; // 与 server/host.ts 的 MAX_PER_IP 一致
@@ -76,7 +78,7 @@ function handleP99(before, after) {
 }
 
 /** 一条施压的连接：两两成对，偶数号开房间，奇数号加入。返回连接与每次轮到发消息时调用的 step */
-function client(i, port, stats, rooms) {
+function client(i, { port, stats, rooms, auth }) {
   const ws = new WebSocket(`ws://127.0.0.1:${port}`, { localAddress: sourceAddress(i), perMessageDeflate: false });
   const state = { color: 0, toMove: 0, board: new Set(), sentAt: 0, open: false };
   const send = msg => ws.readyState === ws.OPEN && ws.send(JSON.stringify(msg));
@@ -103,7 +105,7 @@ function client(i, port, stats, rooms) {
   };
   ws.on('open', () => {
     state.open = true;
-    send({ t: 'hello', v: 4, name: `压测${i}`, uid: `loadtest-${String(i).padStart(12, '0')}` });
+    send({ t: 'hello', v: 4, auth }); // 协议第 4 版以登录令牌握手（protocol-v4.md 第 3 章）
   });
   ws.on('message', data => {
     const msg = JSON.parse(String(data));
@@ -128,14 +130,14 @@ function client(i, port, stats, rooms) {
 }
 
 /** 启动服务端（可带 LOADTEST_SERVER_PREFIX 前缀命令），等健康检查可用；返回子进程、端口与其日志 */
-async function startServer(tmp) {
+async function startServer(tmp, accounts) {
   const server = path.join(root, 'dist-server/server.cjs');
   if (!fs.existsSync(server)) throw new Error('先运行 npm run build:node');
   const port = 20000 + Math.floor(Math.random() * 20000);
   const prefix = (process.env.LOADTEST_SERVER_PREFIX ?? '').split(' ').filter(Boolean);
   const [cmd, ...args] = [...prefix, process.execPath, server, String(port)];
   const child = spawn(cmd, args, {
-    env: { ...process.env, YI_DB: path.join(tmp, 'yi.db'), YI_LOG_LEVEL: 'warn' },
+    env: { ...process.env, YI_DB: path.join(tmp, 'yi.db'), YI_LOG_LEVEL: 'warn', ...accounts },
     stdio: ['ignore', 'pipe', 'inherit'],
   });
   const log = { text: '' };
@@ -157,7 +159,7 @@ async function startServer(tmp) {
 async function measure(opt, server) {
   const stats = { sent: 0, rtt: [], errors: [], closed: [] };
   const rooms = new Map();
-  const clients = Array.from({ length: opt.connections }, (_, i) => client(i, server.port, stats, rooms));
+  const clients = Array.from({ length: opt.connections }, (_, i) => client(i, { port: server.port, stats, rooms, auth: server.tokens[i] }));
   const interval = MS_PER_SEC / opt.rate;
   const timers = clients.map((item, i) => setTimeout(() => timers.push(setInterval(item.step, interval)), (interval * i) / opt.connections));
   await sleep(opt.warmup * MS_PER_SEC);
@@ -211,7 +213,10 @@ async function main(argv) {
   const opt = options(argv);
   if (os.platform() !== 'linux' && opt.connections > PER_IP) throw new Error(`只有 Linux 上 127.0.0.0/8 均为本机地址；本系统至多 --connections ${PER_IP}`);
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-loadtest-'));
-  const server = await startServer(tmp);
+  // 每条连接一个账号；只经联机握手，不以密码登录，所以不做真实密码派生
+  const names = Array.from({ length: opt.connections }, (_, i) => `压测${i}`);
+  const { env, tokens } = await prepareAccounts({ tmp, dbFile: path.join(tmp, 'yi.db'), names, fast: true });
+  const server = { ...(await startServer(tmp, env)), tokens };
   try {
     const result = await measure(opt, server);
     server.child.kill('SIGTERM');

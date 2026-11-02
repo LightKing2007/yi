@@ -85,7 +85,7 @@ export const st = {
   error: null as Msg | null, // 连接失败的原因（只在出错时显示）
   notice: [] as Msg[], // 最近一条提示，几段用“ · ”连起来
   noticeAt: -99,
-  token: '',
+  token: '', // 重连令牌（welcome.resume）
   ratings: { gomoku: newRating(), go: newRating() } as Ratings,
   busy: false, // 开房间 / 加入房间的请求已发出，等回应
   // 匹配 / 排位

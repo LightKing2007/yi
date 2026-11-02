@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.23 |
+| 文件版本 | 1.1.24 |
 | 修订日期 | 2026-11-01 |
 | 规则前缀 | `OPS` |
 
@@ -142,6 +142,8 @@
 | `player.online` | info | 玩家上线 | `playerId` |
 | `player.offline` | info | 玩家断开 | `playerId`、`code` |
 | `player.resumed` | info | 玩家重连成功 | `playerId`、`roomId` |
+| `player.replaced` | info | 同一账号在别处连上，接管了在线的玩家（协议第 4 版） | `playerId`、`roomId` |
+| `player.revoked` | info | 账号的登录被撤销，断开其联机连接（协议第 4 版） | `playerId` |
 | `match.paired` | info | 配对成功 | `mode`、`playerId`、`opponentId` |
 | `room.created` | info | 开房 | `roomId`、`playerId` |
 | `game.start` | info | 开局 | `roomId`、`gameId`、`kind` |

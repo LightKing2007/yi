@@ -3,7 +3,7 @@
 | 项目 | 内容 |
 |---|---|
 | 文件编号 | YI-STD-001 |
-| 文件版本 | 1.1.74 |
+| 文件版本 | 1.1.75 |
 | 发布日期 | 2026-10-02 |
 | 状态 | 现行；整改项按 [plan/remediation.md](../plan/remediation.md) 的期限实施 |
 | 编制 | LightKing、Claude |
@@ -336,3 +336,4 @@ GB/T 11457—2006 界定的以及下列术语和定义适用于本规范。
 | 1.1.72 | 2026-11-01 | 修订 [04-api.md](04-api.md) 的 API-060 与 API-063：帮助与支持改为分类目录和三十四个独立问题页，每个问题一份 Markdown；文书、帮助和 404 构建为静态 HTML，帮助目录以原生 GET 表单作为检索回退，并仅加载同源外部检索脚本；规则编号不变 |
 | 1.1.73 | 2026-11-01 | 随联机协议第 4 版的第一批（F1）更新 [04-api.md](04-api.md)：第 8 节新增错误码 `game.limit-moves`、`game.limit-acts`、`match.declined`、`match.left`、`match.unconfirmed`；API-004、API-015、API-020 改为满足，API-024 改为部分满足，API-046 的终局原因改为 `limit-moves`、`limit-acts`；[07-operations.md](07-operations.md) 新增日志事件 `proto.outdated`；规则编号不变 |
 | 1.1.74 | 2026-11-01 | 按项目所有者的决定完成官网前端骨架与全站规范化重构：建立 [11-website-frontend.md](11-website-frontend.md)，统一设计 token、外壳、组件与页面样式，全部既有页面迁入共享库；修订 [04-api.md](04-api.md)（1.1.20）的 API-063，允许全站同源外部 `defer` 渐进增强脚本及由 `default-src 'self'` 许可的同源预取（浏览器实测不使用未受支持的 `prefetch-src`），禁止内联脚本与事件，无脚本功能保持完整；新增构建时静态页面验收 |
+| 1.1.75 | 2026-11-01 | 随联机协议第 4 版的第二批（F2，账号握手）更新 [04-api.md](04-api.md)：API-013 以登录令牌与重连令牌取代 `uid`，API-044 取消 `name` 消息的限额，API-045 改按账号拒绝，第 8 节新增 `auth.replaced`；[07-operations.md](07-operations.md) 新增日志事件 `player.replaced`、`player.revoked`；规则编号不变 |

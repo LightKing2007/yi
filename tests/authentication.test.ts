@@ -141,6 +141,22 @@ it('协议更新后登录仍可查看资料，联机需验证邮箱并明确同�
   expect(ctx.notifications).toEqual([{ event: { userId: ctx.user.userId, sessionId: expect.any(Number) }, committed: true, remainingSessions: 0 }]);
 });
 
+it('联机握手的核验（protocol-v4.md 第 3.1.1 条）：未同意协议为 consent.outdated，同意后得到账号编号、会话编号、雅号与公开 UID；退出后为 auth.invalid', async () => {
+  const ctx = world();
+  await ctx.login(); // 第二次登录的会话编号与账号编号不同，下面能区分两者
+  const token = (await ctx.login()).token;
+  expect(ctx.auth.identify(token)).toEqual({ ok: false, code: 'consent.outdated' });
+  expect(ctx.auth.acceptConsents(token, { accepted: true, privacy: 'v1', terms: 'v1' })).toBe(true);
+  const session = ctx.auth.online(token);
+  const profile = ctx.auth.me(token);
+  expect(ctx.auth.identify(token)).toEqual({ ok: true, userId: ctx.user.userId, sessionId: session?.id, name: profile?.name, publicId: profile?.publicId });
+  expect(ctx.auth.nameOf(ctx.user.userId)).toBe(profile?.name);
+  expect(ctx.auth.nameOf(ctx.user.userId + 999)).toBeUndefined();
+  expect(ctx.auth.identify('0'.repeat(32))).toEqual({ ok: false, code: 'auth.invalid' });
+  ctx.auth.logout(token);
+  expect(ctx.auth.identify(token)).toEqual({ ok: false, code: 'auth.invalid' });
+});
+
 it('重置密码原子撤销全部旧会话，通知在提交后发送，验证码不能重放', async () => {
   const ctx = world();
   const first = (await ctx.login()).token;

@@ -9,13 +9,13 @@ import WebSocket from 'ws';
 import { startHost } from '../server/host';
 import { startWebsite } from '../server/websiteHost';
 import { PROTO_VERSION, type S2C } from '../src/shared/protocol';
-import { newUid, type Msg } from './serverWorld';
+import { loginOf, newUid, testGate, type Msg } from './serverWorld';
 
 describe('WebSocket 传输', () => {
   it('两个真实连接开一局并在断线后重连', async () => {
-    const host = await startHost(0, { host: '127.0.0.1' });
+    const host = await startHost(0, { host: '127.0.0.1', gate: testGate() });
     const url = `ws://127.0.0.1:${host.port}`;
-    const open = (name: string, token?: string) =>
+    const open = (name: string, token?: string, uid = newUid()) =>
       new Promise<{ ws: WebSocket; next: <T extends S2C['t']>(type: T) => Promise<Msg<T>> }>((res, rej) => {
         const ws = new WebSocket(url),
           inbox: S2C[] = [],
@@ -36,14 +36,15 @@ describe('WebSocket 传输', () => {
             else waiters.push([type, deliver]);
           });
         ws.on('open', () => {
-          ws.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, name, uid: newUid(), token }));
+          ws.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, auth: loginOf(uid, name), resume: token }));
           res({ ws, next });
         });
         ws.on('error', rej);
       });
     try {
+      const yiAccount = newUid();
       const jia = await open('甲'),
-        yi = await open('乙');
+        yi = await open('乙', undefined, yiAccount);
       await jia.next('welcome');
       const wb = await yi.next('welcome');
       jia.ws.send(JSON.stringify({ t: 'create', type: 0, size: 15, hostColor: 0, renju: true, moveTime: 0 }));
@@ -56,7 +57,7 @@ describe('WebSocket 传输', () => {
       expect(await jia.next('error')).toEqual({ t: 'error', code: 'proto.invalid-message', level: 'E4' });
       yi.ws.terminate();
       expect((await jia.next('peer')).online).toBe(false);
-      const yi2 = await open('乙', wb.token);
+      const yi2 = await open('乙', wb.resume, yiAccount);
       expect((await yi2.next('sync')).acts).toEqual([{ k: 'M', x: 7, y: 7 }]);
       expect((await jia.next('peer')).online).toBe(true);
       jia.ws.close();

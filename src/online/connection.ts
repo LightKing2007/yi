@@ -3,11 +3,10 @@
  * 收到消息的校验（API-016）、断线后按关闭码带抖动地退避重连（API-050）与给玩家看的断线原因、主动断开。
  */
 import { now } from '../core/clock';
-import { T } from '../i18n';
-import { setSettings, settings } from '../app/settings';
+import { loginRejected, loginToken, onLoginChange } from '../app/account';
 import { logError, logWarn } from '../app/native';
 import { isInvalid, parseS2C } from '../shared/parse';
-import { CLOSE_CODE, CONNECT_SECS, PING_SECS, PROTO_VERSION, RETRY_RESET_SECS, UID_PATTERN, cleanName, type C2S, type S2C } from '../shared/protocol';
+import { CLOSE_CODE, CONNECT_SECS, PING_SECS, PROTO_VERSION, RETRY_RESET_SECS, type C2S, type S2C } from '../shared/protocol';
 import { ONLINE_SERVER } from './config';
 import { isFaultClose, retryWaitSecs } from './retry';
 import { Phase, changed, note, st, type Msg } from './state';
@@ -45,39 +44,6 @@ export function serverUrl() {
 /** 毫秒与秒的换算 */
 const MS_PER_SEC = 1000;
 
-/** 本机匿名身份的随机字节数（32 位十六进制） */
-const UID_BYTES = 16;
-/** 十六进制的基数 */
-const HEX_RADIX = 16;
-/** 自动生成的昵称在“棋手”后加的三位数：[NICK_SUFFIX_MIN, NICK_SUFFIX_MIN + NICK_SUFFIX_SPAN) */
-const NICK_SUFFIX_MIN = 100;
-const NICK_SUFFIX_SPAN = 900;
-
-/** 本机的匿名身份：第一次联机时生成并存在本地，段位跟着它走；本地的值不合格式时重新生成（服务端会拒绝它） */
-function uid() {
-  const make = () => Array.from(crypto.getRandomValues(new Uint8Array(UID_BYTES)), byte => byte.toString(HEX_RADIX).padStart(2, '0')).join('');
-  try {
-    let id = localStorage.getItem('yi.uid');
-    if (!id || !UID_PATTERN.test(id)) {
-      id = make();
-      localStorage.setItem('yi.uid', id);
-    }
-    return id;
-  } catch {
-    return make();
-  }
-}
-
-/** 联机昵称：设置中的昵称，没有时生成“棋手”加三位数并存入设置；按 API-014 清洗 */
-export function nick() {
-  let n = settings.value.nick.trim();
-  if (!n) {
-    n = T('棋手') + (NICK_SUFFIX_MIN + Math.floor(Math.random() * NICK_SUFFIX_SPAN));
-    setSettings({ nick: n });
-  }
-  return cleanName(n, T('棋手'));
-}
-
 /** 发一条消息；还没连上就先存着，连上后发出 */
 export function send(m: C2S) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m));
@@ -100,10 +66,32 @@ export function netClose() {
   }
 }
 
-/** 在后台连上服务器（已连上或正在连时什么也不做） */
+/**
+ * 被同一账号在别处接管（4002）或登录失效（4001）后为真：此后不自动重连，进入多人游戏页等自动的连接也不发起，
+ * 直到玩家亲自操作（匹配、开房间、加入等经 send 连接）或换了登录；否则两处客户端会来回互相接管
+ */
+let halted = false;
+/** 当前连接握手所用的登录令牌：登录变了（退出、换账号）时断开这条连接，不能以先前账号的身份继续发消息 */
+let socketAuth: string | undefined;
+
+/** 自动的连接（进入多人游戏页时）：被接管或登录失效之后不发起，提示原因 */
+export function connectAuto() {
+  if (halted) return;
+  connect();
+}
+
+/** 在后台连上服务器（已连上或正在连时什么也不做）；这是玩家亲自操作的连接，解除被接管后的停止 */
 export function connect() {
+  halted = false;
   if (ws) return;
   st.error = null;
+  if (!loginToken()) {
+    // 联机须登录（protocol-v4.md 第 3 章）：没有登录时不连，多人游戏页显示登录门槛
+    st.phase = Phase.Off;
+    st.error = ['请先登录'];
+    changed();
+    return;
+  }
   if (st.phase === Phase.Off) st.phase = Phase.Connecting;
   let sock: WebSocket;
   try {
@@ -126,7 +114,13 @@ export function connect() {
     opened = true;
     clearTimeout(timer);
     st.lastRecv = openedAt = now();
-    sock.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, name: nick(), uid: uid(), token: st.reconnecting ? st.token : undefined } satisfies C2S));
+    const auth = loginToken();
+    if (!auth) {
+      netClose(); // 连接期间退出了登录
+      return;
+    }
+    socketAuth = auth;
+    sock.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, auth, resume: st.reconnecting && st.token ? st.token : undefined } satisfies C2S));
     st.pingAt = now() + PING_SECS;
   };
   sock.onmessage = ev => {
@@ -187,6 +181,8 @@ function nextAttempt() {
 /** 不再重连时给玩家看的原因 */
 function lostText(code?: number): Msg {
   if (code === CLOSE_CODE.version) return ['客户端版本与服务器不一致，请更新游戏'];
+  if (code === CLOSE_CODE.authFailed) return ['登录已失效，请重新登录'];
+  if (code === CLOSE_CODE.replaced) return ['账号已在别处登录'];
   if (code === CLOSE_CODE.policy) return ['操作过于频繁，请稍后再试'];
   if (code === CLOSE_CODE.internal) return ['服务器出现问题，请稍后再试'];
   return ['网络连接失败，请检查网络后重试'];
@@ -198,6 +194,8 @@ function lostText(code?: number): Msg {
  */
 export function lost(code?: number) {
   if (isFaultClose(code)) logError('联机', `连接被服务端以关闭码 ${code} 关闭，不再重连`);
+  if (code === CLOSE_CODE.authFailed) loginRejected();
+  if (code === CLOSE_CODE.authFailed || code === CLOSE_CODE.replaced) halted = true;
   const wait = st.phase === Phase.Playing && !st.over && st.token ? retryWaitSecs(code, nextAttempt(), random) : null;
   if (wait !== null) {
     if (!st.reconnecting) {
@@ -220,6 +218,15 @@ export function lost(code?: number) {
   if (wasBusy) note(st.error);
   changed();
 }
+
+/** 登录变了（退出、换账号、令牌失效）：以先前登录握手的连接立即断开；新的登录解除被接管后的停止 */
+function loginChanged() {
+  if (loginToken() === socketAuth) return;
+  socketAuth = undefined;
+  halted = false;
+  if (ws) disconnect();
+}
+onLoginChange(loginChanged);
 
 export function disconnect() {
   netClose();

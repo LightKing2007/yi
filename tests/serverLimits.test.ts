@@ -10,7 +10,7 @@ import { HTTP_LIMITS, hardenHttp, startHost } from '../server/host';
 import { fileServer } from '../server/files';
 import { CLOSE_CODE, HELLO_SECS, PROTO_VERSION, type S2C } from '../src/shared/protocol';
 import { must } from './must';
-import { expectClientAccepts, newUid, Client, world, startGame } from './serverWorld';
+import { expectClientAccepts, newUid, Client, world, startGame, loginOf, testGate } from './serverWorld';
 
 const LIMITED = { t: 'error', code: 'rate.limited', level: 'E3' };
 /** 绕过类型检查，发一条任意内容的消息 */
@@ -98,21 +98,6 @@ describe('握手时限、改名与匹配队列的次数（API-044）', () => {
     expect(jia.closed).toBe(false);
   });
 
-  it('改名：与当前昵称相同的不计次数，真正改名每 10 秒至多 1 次（API-044）', () => {
-    const { srv } = world();
-    const jia = new Client(srv, '甲'),
-      ding = new Client(srv, '丁');
-    jia.drain();
-    for (let i = 0; i < 5; i++) jia.send({ t: 'name', name: '甲' }); // 客户端每次匹配前都会发一次
-    jia.send({ t: 'name', name: '乙' });
-    expect(jia.inbox).toEqual([]);
-    jia.send({ t: 'name', name: '丙' });
-    expect(jia.inbox).toEqual([LIMITED]);
-    jia.send({ t: 'queue', mode: 'match', type: 0, size: 15 });
-    ding.send({ t: 'queue', mode: 'match', type: 0, size: 15 });
-    expect(ding.expect('found')?.opp.name).toBe('乙');
-  });
-
   it('进入、退出匹配队列合计每 10 秒至多 10 次（API-044）', () => {
     const { srv, idle } = world();
     const jia = new Client(srv, '甲');
@@ -161,7 +146,7 @@ describe('全局上限（API-046）', () => {
     const conns = Array.from({ length: 500 }, () => ({ send: () => {}, close: () => {} }));
     const sessions = conns.map(conn => srv.connect(conn));
     expect(sessions.filter(sess => sess === null)).toHaveLength(0);
-    sessions.forEach((sess, i) => sess && srv.message(sess, { t: 'hello', v: PROTO_VERSION, name: '丙', uid: newUid() }, conns[i]));
+    sessions.forEach((sess, i) => sess && srv.message(sess, { t: 'hello', v: PROTO_VERSION, auth: loginOf(newUid(), '丙') }, conns[i]));
     expect(srv.health().players).toBe(500);
   });
 
@@ -179,7 +164,7 @@ describe('连接层的限制（API-041、API-042、API-047）', () => {
   const attempt = (url: string) =>
     new Promise<number | 'welcome'>((res, rej) => {
       const ws = new WebSocket(url);
-      ws.on('open', () => ws.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, name: '甲', uid: newUid() })));
+      ws.on('open', () => ws.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, auth: loginOf(newUid(), '甲') })));
       ws.on('message', () => {
         ws.terminate();
         res('welcome');
@@ -193,7 +178,7 @@ describe('连接层的限制（API-041、API-042、API-047）', () => {
 
   it('同一 IP 每分钟新建连接超过 30 次即以 1013 关闭，此后 60 秒内仍被拒', async () => {
     let clock = 1000;
-    const host = await startHost(0, { host: '127.0.0.1', now: () => clock });
+    const host = await startHost(0, { host: '127.0.0.1', now: () => clock, gate: testGate() });
     const url = `ws://127.0.0.1:${host.port}`;
     try {
       for (let i = 0; i < 30; i++) {
@@ -211,7 +196,7 @@ describe('连接层的限制（API-041、API-042、API-047）', () => {
   });
 
   it('经本机反向代理的连接按真实地址计数：同一地址的第 9 条连接以 1013 关闭，其他地址照常连上（API-040）', async () => {
-    const host = await startHost(0, { host: '127.0.0.1' });
+    const host = await startHost(0, { host: '127.0.0.1', gate: testGate() });
     const url = `ws://127.0.0.1:${host.port}`;
     const opened: WebSocket[] = [];
     /** 以代理转来的方式连上并握手，连接保持不断：收到 welcome 时返回 'welcome'，连接被关闭时返回关闭码 */
@@ -219,7 +204,7 @@ describe('连接层的限制（API-041、API-042、API-047）', () => {
       new Promise<number | 'welcome'>((res, rej) => {
         const ws = new WebSocket(url, { headers: { 'X-Forwarded-For': ip } });
         opened.push(ws);
-        ws.on('open', () => ws.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, name: '甲', uid: newUid() })));
+        ws.on('open', () => ws.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, auth: loginOf(newUid(), '甲') })));
         ws.once('message', () => res('welcome'));
         ws.on('close', code => res(code));
         ws.on('error', rej);
@@ -238,7 +223,7 @@ describe('连接层的限制（API-041、API-042、API-047）', () => {
 describe('连接与下载的超时（API-047）', () => {
   it('真实连接上握手超时以 4008 关闭', async () => {
     let clock = 1000;
-    const host = await startHost(0, { host: '127.0.0.1', now: () => clock });
+    const host = await startHost(0, { host: '127.0.0.1', now: () => clock, gate: testGate() });
     try {
       const ws = new WebSocket(`ws://127.0.0.1:${host.port}`);
       const closed = new Promise<number>(r => ws.on('close', code => r(code)));

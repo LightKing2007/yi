@@ -1,9 +1,9 @@
 /** 联机服务端：2.0.1 的联机修复与重连令牌的换发、作废（SEC-020、SEC-022） */
 import { describe, expect, it } from 'vitest';
 import { MemoryStore } from '../server/rooms';
-import { GRACE_SECS } from '../src/shared/protocol';
+import { CLOSE_CODE, GRACE_SECS, PROTO_VERSION } from '../src/shared/protocol';
 import { must } from './must';
-import { Client, clientAt, world, startGame, matchUp } from './serverWorld';
+import { Client, clientAt, loginOf, sessionOf, world, startGame, matchUp } from './serverWorld';
 
 describe('2.0.1 联机修复：重连与计时', () => {
   it('令牌已经失效（服务器重启过或掉线太久）：告诉客户端原来的对局不在了', () => {
@@ -15,7 +15,7 @@ describe('2.0.1 联机修复：重连与计时', () => {
     expect(yi.has('resumeFailed')).toBe(false);
   });
 
-  it('旧连接其实已经断了但还没被发现：新连接用令牌接管，旧连接迟到的断开被忽略', () => {
+  it('旧连接其实已经断了但还没被发现：新连接接管，对方看来一直在线；旧连接迟到的断开被忽略', () => {
     const { srv } = world();
     const jia = new Client(srv, '甲'),
       yi = new Client(srv, '乙');
@@ -27,7 +27,7 @@ describe('2.0.1 联机修复：重连与计时', () => {
     expect(jia2.id).toBe(jia.id);
     expect(jia2.expect('start')?.color).toBe(1);
     expect(jia2.expect('sync')?.acts).toEqual([{ k: 'M', x: 7, y: 7 }]);
-    expect(yi.expect('peer')).toEqual({ t: 'peer', online: true });
+    expect(yi.has('peer')).toBe(false); // 服务端没发现过掉线，不通知对方
     srv.disconnect(jia.sess, jia.conn); // 旧连接这时才被发现断开
     expect(yi.has('peer')).toBe(false);
     yi.send({ t: 'move', x: 8, y: 8 });
@@ -122,16 +122,37 @@ describe('2.0.1 联机修复：加入房间的失败次数', () => {
   });
 });
 
-describe('2.0.1 联机修复：同一台设备、新版本提示', () => {
-  it('同一台设备的两个窗口不能同时排位', () => {
+describe('一个账号一条连接（protocol-v4.md 第 4 章）、新版本提示', () => {
+  it('同一账号在别处连上：先前的连接收到 auth.replaced 并以 4002 关闭，排位随账号转到新连接，不会两处同时排位', () => {
+    const { srv } = world();
+    const jia = new Client(srv, '甲');
+    jia.send({ t: 'queue', mode: 'ranked', type: 0, size: 15 });
+    expect(jia.expect('queued')).toBeTruthy();
+    const jia2 = new Client(srv, '甲', undefined, jia.uid);
+    expect(jia.inbox).toEqual([{ t: 'error', code: 'auth.replaced', level: 'E2' }]);
+    expect(jia.closeCode).toBe(CLOSE_CODE.replaced);
+    expect(jia2.id).toBe(jia.id);
+    expect(srv.queued('ranked', 0)).toBe(1);
+    const yi = new Client(srv, '乙');
+    yi.send({ t: 'queue', mode: 'ranked', type: 0, size: 15 });
+    expect(jia2.expect('found')?.opp.name).toBe('乙'); // 配对的通知发到新连接
+    expect(srv.health().players).toBe(2);
+  });
+
+  it('先前连接迟到的消息与关闭事件不影响接管后的玩家', () => {
     const { srv } = world();
     const jia = new Client(srv, '甲'),
-      jia2 = new Client(srv, '甲', undefined, jia.uid);
-    jia.send({ t: 'queue', mode: 'ranked', type: 0, size: 15 });
-    jia2.send({ t: 'queue', mode: 'ranked', type: 0, size: 15 });
-    expect(jia2.expect('error')?.code).toBe('queue.ranked-elsewhere');
-    jia2.send({ t: 'queue', mode: 'match', type: 0, size: 15 });
-    expect(jia2.expect('queued')?.mode).toBe('match');
+      yi = new Client(srv, '乙');
+    startGame(jia, yi);
+    const old = { sess: jia.sess, conn: jia.conn };
+    const jia2 = new Client(srv, '甲', undefined, jia.uid);
+    expect(jia2.expect('sync')).toBeTruthy();
+    srv.message(old.sess, { t: 'resign' }, old.conn); // 旧连接上迟到的认输
+    srv.disconnect(old.sess, old.conn);
+    expect(yi.has('over')).toBe(false);
+    expect(yi.has('peer')).toBe(false);
+    jia2.send({ t: 'move', x: 7, y: 7 });
+    expect(yi.expect('moved')).toBeTruthy();
   });
 
   it('配置了最新版本时，welcome 带上版本号与下载地址', () => {
@@ -163,15 +184,16 @@ describe('重连令牌（SEC-020、SEC-022）', () => {
     expect(back.token).toMatch(/^[0-9a-f]{32}$/);
   });
 
-  it('收到新连接上的下一条消息后，原来的令牌作废；新令牌照常可用', () => {
+  it('收到新连接上的下一条消息后，原来的令牌作废；令牌只对它的账号有效，别的账号拿着它也回不到这一局', () => {
     const { srv, gone } = dropped();
     const back = new Client(srv, '甲', gone.token, gone.uid);
     back.send({ t: 'ping' });
     back.drop();
-    const stale = new Client(srv, '甲', gone.token, gone.uid);
-    expect(stale.has('resumeFailed')).toBe(true);
-    expect(stale.id).not.toBe(gone.id);
-    const again = new Client(srv, '甲', back.token, gone.uid);
+    expect(srv.tokenCount()).toBe(2); // 原令牌已作废：甲的新令牌与乙的一枚
+    const thief = new Client(srv, '丁', back.token);
+    expect(thief.has('resumeFailed')).toBe(true);
+    expect(thief.id).not.toBe(gone.id);
+    const again = new Client(srv, '甲', undefined, gone.uid); // 同一账号重新登录，不带令牌也回到原来的对局
     expect(again.id).toBe(gone.id);
     expect(again.has('start')).toBe(true);
   });
@@ -185,7 +207,7 @@ describe('重连令牌（SEC-020、SEC-022）', () => {
     expect(new Set([gone.token, lost.token, again.token]).size).toBe(3);
     again.send({ t: 'ping' });
     again.drop();
-    for (const token of [gone.token, lost.token]) expect(new Client(srv, '甲', token, gone.uid).has('resumeFailed'), token).toBe(true);
+    expect(srv.tokenCount()).toBe(2); // 作废的两枚都已删除，只剩甲的最新一枚与乙的一枚
     expect(new Client(srv, '甲', again.token, gone.uid).id).toBe(gone.id);
   });
 
@@ -206,5 +228,90 @@ describe('重连令牌（SEC-020、SEC-022）', () => {
     const late = new Client(srv, '甲', gone.token, gone.uid);
     expect(late.has('resumeFailed')).toBe(true);
     expect(late.id).not.toBe(gone.id);
+  });
+});
+
+describe('账号握手与登录撤销（protocol-v4.md 第 3、4 章）', () => {
+  it('账号功能未开启时不能联机：server.maintenance，以 1001 关闭', () => {
+    const { srv } = world(new MemoryStore(), { gate: undefined });
+    const jia = new Client(srv, '甲');
+    expect(jia.welcome).toBeUndefined();
+    expect(jia.inbox).toEqual([{ t: 'error', code: 'server.maintenance', level: 'E2' }]);
+    expect(jia.closeCode).toBe(CLOSE_CODE.restart);
+    expect(srv.health().players).toBe(0);
+  });
+
+  it('登录令牌无效或已撤销：auth.invalid，以 4001 关闭；未同意当前协议：consent.outdated，以 4001 关闭；都不上线', () => {
+    const { srv, gate } = world();
+    gate.revoked.add(loginOf('revoked-account-0001', '甲'));
+    const revoked = new Client(srv, '甲', undefined, 'revoked-account-0001');
+    expect([revoked.inbox, revoked.closeCode]).toEqual([[{ t: 'error', code: 'auth.invalid', level: 'E4' }], CLOSE_CODE.authFailed]);
+    gate.consentPending.add('pending-account-0001');
+    const pending = new Client(srv, '乙', undefined, 'pending-account-0001');
+    expect([pending.inbox, pending.closeCode]).toEqual([[{ t: 'error', code: 'consent.outdated', level: 'E2' }], CLOSE_CODE.authFailed]);
+    expect(srv.health().players).toBe(0);
+  });
+
+  it('退出（撤销一个会话）只关闭以该会话握手的连接；改密（撤销全部会话）关闭该账号的连接；对局席位按掉线保留', () => {
+    const { srv, gate } = world();
+    const jia = new Client(srv, '甲'),
+      yi = new Client(srv, '乙');
+    startGame(jia, yi);
+    const userId = gate.idOf(jia.uid, '甲');
+    srv.revoke({ userId, sessionId: sessionOf(userId, 2) }); // 别的会话退出：这条连接不受影响
+    expect(jia.closed).toBe(false);
+    srv.revoke({ userId, sessionId: sessionOf(userId) });
+    expect(jia.inbox.at(-1)).toEqual({ t: 'error', code: 'auth.invalid', level: 'E4' });
+    expect(jia.closeCode).toBe(CLOSE_CODE.authFailed);
+    expect(yi.expect('peer')).toEqual({ t: 'peer', online: false, wait: GRACE_SECS });
+    const back = new Client(srv, '甲', undefined, jia.uid); // 重新登录后回来
+    expect(back.expect('sync')).toBeTruthy();
+    srv.revoke({ userId }); // 改密：不论会话
+    expect(back.closeCode).toBe(CLOSE_CODE.authFailed);
+    srv.revoke({ userId: 999 }); // 没有在线连接的账号：什么也不做
+  });
+
+  it('换一次登录（新的会话）接管后：退出先前的会话不再影响这条连接，退出新的会话才断开；不在房间时取最新的雅号', () => {
+    const { srv, gate } = world();
+    const jia = new Client(srv, '甲');
+    const userId = gate.idOf(jia.uid, '甲');
+    // 同一账号在另一台设备上以新的登录连上，期间改了雅号
+    const conn = { inbox: [] as unknown[], closed: undefined as number | undefined };
+    const sess = srv.connect({ send: m => conn.inbox.push(m), close: code => (conn.closed = code) });
+    if (!sess) throw new Error('服务端拒绝了连接');
+    srv.message(sess, { t: 'hello', v: PROTO_VERSION, auth: loginOf(jia.uid, '甲改', 2) });
+    expect(conn.inbox[0]).toMatchObject({ t: 'welcome', id: jia.id, user: { name: '甲改' } });
+    srv.revoke({ userId, sessionId: sessionOf(userId) });
+    expect(conn.closed).toBeUndefined();
+    srv.revoke({ userId, sessionId: sessionOf(userId, 2) });
+    expect(conn.closed).toBe(CLOSE_CODE.authFailed);
+  });
+});
+
+describe('接管时补发开局之前的状态（protocol-v4.md 第 4.1 条）', () => {
+  it('正在匹配：新连接收到 queued；等双方确认：收到 found（剩余秒数）与对方已接受；开了等待中的房间：收到房号', () => {
+    const { srv, advance } = world();
+    const jia = new Client(srv, '甲');
+    jia.send({ t: 'queue', mode: 'match', type: 1, size: 9 });
+    const queued = new Client(srv, '甲', undefined, jia.uid);
+    expect(queued.expect('queued')).toEqual({ t: 'queued', mode: 'match', type: 1, size: 9 });
+    const yi = new Client(srv, '乙');
+    yi.send({ t: 'queue', mode: 'match', type: 1, size: 9 });
+    yi.send({ t: 'confirm', ok: true });
+    advance(5);
+    const found = new Client(srv, '甲', undefined, jia.uid);
+    expect(found.expect('found')).toEqual({ t: 'found', opp: { name: '乙' }, secs: 10 });
+    expect(found.expect('accepted')).toEqual({ t: 'accepted' });
+    found.send({ t: 'confirm', ok: true });
+    expect(found.expect('start')).toBeTruthy(); // 新连接上的确认照常开局
+
+    const bing = new Client(srv, '丙');
+    bing.send({ t: 'create', type: 0, size: 15, hostColor: 0, renju: true, moveTime: 0 });
+    const code = bing.expect('created')?.code;
+    const host = new Client(srv, '丙', undefined, bing.uid);
+    expect(host.expect('created')).toEqual({ t: 'created', code });
+    const ding = new Client(srv, '丁');
+    ding.send({ t: 'join', code: code ?? '' });
+    expect(host.expect('start')).toBeTruthy();
   });
 });

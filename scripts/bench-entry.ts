@@ -14,7 +14,7 @@ import { gomokuMove } from '../src/core/gomokuAI';
 import { goSnap, gomokuSnap } from '../src/core/snap';
 import { GameType, MAXN, Rng } from '../src/core/types';
 import { fileServer } from '../server/files';
-import { RoomServer, type Conn } from '../server/rooms';
+import { RoomServer, type AccountGate, type Conn } from '../server/rooms';
 import { PROTO_VERSION, type S2C } from '../src/shared/protocol';
 import { sampleHttp, sampleSync } from './bench-sampling';
 
@@ -71,8 +71,20 @@ const DEAD_SEED = 7,
   DEAD_RUNS = 3;
 /** 服务端基准挑落点用的种子 */
 const SERVER_SEED = 42;
-/** 模拟设备编号的位数（uid 须为 16 位以上，API-013） */
-const UID_DIGITS = 8;
+/** 基准的账号令牌：序号的 32 位十六进制（与真实令牌同格式） */
+const TOKEN_HEX = 32;
+/** 十六进制的基数与公开 UID 的位数 */
+const HEX_RADIX = 16;
+const PUBLIC_ID_DIGITS = 8;
+const benchToken = (i: number) => i.toString(HEX_RADIX).padStart(TOKEN_HEX, '0');
+/** 基准的账号核验：令牌即序号，账号编号为序号加一；不经数据库，测的是消息处理（协议第 4 版的联机须登录） */
+const BENCH_GATE: AccountGate = {
+  identify: token => {
+    const i = parseInt(token, HEX_RADIX);
+    return { ok: true, userId: i + 1, sessionId: i + 1, name: `棋手${i}`, publicId: String(i + 1).padStart(PUBLIC_ID_DIGITS, '0') };
+  },
+  nameOf: userId => `棋手${userId - 1}`,
+};
 
 /** 第 p 百分位（p 为 0 至 100），按最近秩法取值 */
 function percentile(sorted: number[], p: number) {
@@ -197,7 +209,7 @@ function pickMove(player: FakePlayer, rng: Rng) {
 export function benchServer(opt: Pick<BenchOptions, 'connections' | 'rounds' | 'tickSamples' | 'tickWarmup'>) {
   const { connections, rounds } = opt;
   // 固定业务时钟，采样增加时不会因机器速度或握手耗时触发掉线；计时仍用单调真实时钟。
-  const srv = new RoomServer({ now: () => 0 });
+  const srv = new RoomServer({ now: () => 0, gate: BENCH_GATE });
   const rng = new Rng(SERVER_SEED);
   const players: FakePlayer[] = [];
   const times: number[] = [];
@@ -206,7 +218,7 @@ export function benchServer(opt: Pick<BenchOptions, 'connections' | 'rounds' | '
     const conn: Conn = { send: msg => void inbox.push(msg), close: () => {} };
     const player: FakePlayer = { inbox, conn, sess: srv.connect(conn), color: 0, mirror: new Game() };
     players.push(player);
-    send(srv, player, { t: 'hello', v: PROTO_VERSION, name: `棋手${i}`, uid: `bench-device-${String(i).padStart(UID_DIGITS, '0')}` }, times);
+    send(srv, player, { t: 'hello', v: PROTO_VERSION, auth: benchToken(i) }, times);
   }
   for (let i = 0; i + 1 < connections; i += 2) {
     const [host, guest] = [players[i], players[i + 1]];

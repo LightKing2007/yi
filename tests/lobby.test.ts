@@ -4,7 +4,7 @@
  */
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { CONFIRM_SECS } from '../src/shared/protocol';
-import { Peer, advance, fake, loadClient, pump, resetNet, sockets, storage, type Client, type State } from './fakeNet';
+import { CLIENT_ACCOUNT, Peer, advance, fake, loadClient, pump, resetNet, sockets, type Client, type State } from './fakeNet';
 
 let net: Client, state: State;
 beforeAll(async () => ({ net, state } = await loadClient()));
@@ -101,15 +101,16 @@ describe('取消匹配与排位', () => {
     expect(net.st.opp).toEqual({ name: '乙', points: 1200 });
   });
 
-  it('同一台设备已经在排位中：提示原因并回到大厅', () => {
-    net.connect();
-    pump();
-    const twin = new Peer(fake.server, undefined, storage.get('yi.uid'));
-    twin.send({ t: 'queue', mode: 'ranked', type: 0, size: 15 });
+  it('同一账号在别处连上联机：本处以 4002 断开，提示原因，不再重连（protocol-v4.md 第 4.1 条）', () => {
     net.queue('ranked', 0, 15);
     pump();
-    expect(net.st.phase).toBe(net.Phase.Lobby);
-    expect(net.st.notice).toEqual([['这台设备已经在排位中了']]);
+    expect(net.st.phase).toBe(net.Phase.Queue);
+    new Peer(fake.server, undefined, CLIENT_ACCOUNT); // 同一账号在另一台设备上连上
+    pump();
+    expect(net.st.phase).toBe(net.Phase.Off);
+    expect(net.st.error).toEqual(['账号已在别处登录']);
+    advance(60);
+    expect(sockets).toHaveLength(1); // 不重连
   });
 });
 

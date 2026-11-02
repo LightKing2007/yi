@@ -44,6 +44,11 @@ export class AccountSession {
     return this.token !== undefined;
   }
 
+  /** 登录令牌：只交给联机握手（protocol-v4.md 第 3.1 条），未登录时为 undefined */
+  get loginToken(): string | undefined {
+    return this.token;
+  }
+
   /** 登记变化的通知；返回取消函数 */
   onChange(listener: (state: LoginState) => void): () => void {
     this.listeners.add(listener);

@@ -5,7 +5,7 @@
 import { CLOSE_CODE, OVERLOAD_RETRY_MIN_SECS, POLICY_RETRY_SECS, RETRY_BASE_SECS, RETRY_GRACE_MAX_SECS } from '../shared/protocol';
 
 /** 不再重连的关闭码：正常关闭、帧内容不是合法 UTF-8、消息过大、协议版本不支持 */
-const NO_RETRY: readonly number[] = [CLOSE_CODE.normal, CLOSE_CODE.badUtf8, CLOSE_CODE.tooBig, CLOSE_CODE.version];
+const NO_RETRY: readonly number[] = [CLOSE_CODE.normal, CLOSE_CODE.badUtf8, CLOSE_CODE.tooBig, CLOSE_CODE.version, CLOSE_CODE.authFailed, CLOSE_CODE.replaced];
 
 /** 该关闭码说明本端发出的数据有问题（不是合法 UTF-8，或消息过大），须写 error 日志供维护者排查 */
 export const isFaultClose = (code?: number) => code === CLOSE_CODE.badUtf8 || code === CLOSE_CODE.tooBig;

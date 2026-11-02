@@ -13,12 +13,8 @@ export const LIMITED_NOTICE_SECS = 1;
 export const VIOLATION_WINDOW_SECS = 60;
 /** 时间窗内累计违规达到这个次数即断开（API-045） */
 export const VIOLATION_MAX = 10;
-/** 因累计违规被断开后，同一匿名身份多久内不能再连上（API-045） */
+/** 因累计违规被断开后，同一账号多久内不能再连上（API-045） */
 export const BAN_SECS = 5 * 60;
-/** 改名频率的时间窗（API-044） */
-export const NAME_WINDOW_SECS = 10;
-/** 时间窗内至多改名几次（API-044） */
-export const NAME_CHANGES_MAX = 1;
 /** 进入、退出匹配队列频率的时间窗（API-044） */
 export const QUEUE_WINDOW_SECS = 10;
 /** 时间窗内至多进入、退出匹配队列合计几次（API-044） */
@@ -209,15 +205,14 @@ export class HttpGate {
   }
 }
 
-/** 受频率限制的操作：改名、进入或退出匹配队列（API-044） */
-export type LimitedOp = 'name' | 'queue';
+/** 受频率限制的操作：进入或退出匹配队列（API-044；协议第 4 版取消了改名消息） */
+export type LimitedOp = 'queue';
 
 /** 一条连接的各项限额（API-043 至 API-045）：消息令牌桶、按操作的频率、违规累计 */
 export class ConnLimits {
   private bucket: TokenBucket;
   private violationWindow = new WindowCounter(VIOLATION_WINDOW_SECS, VIOLATION_MAX);
   private ops: Record<LimitedOp, WindowCounter> = {
-    name: new WindowCounter(NAME_WINDOW_SECS, NAME_CHANGES_MAX),
     queue: new WindowCounter(QUEUE_WINDOW_SECS, QUEUE_OPS_MAX),
   };
   private noticedAt = -Infinity;

@@ -256,12 +256,12 @@ describe('围棋的停着与点目', () => {
 describe('对方掉线与回来', () => {
   it('对方掉线：提示并显示等待时限；对方带令牌回来后提示', () => {
     const peer = startGame();
-    const token = peer.last('welcome')?.token;
+    const token = peer.last('welcome')?.resume;
     peer.drop();
     pump();
     expect([net.st.peerOnline, net.st.peerBackBy]).toEqual([false, fake.now + GRACE_SECS]);
     expect(notices()).toEqual(['对方掉线了，正在等待重连']);
-    new Peer(fake.server, token);
+    new Peer(fake.server, token, peer.uid);
     expect([net.st.peerOnline, net.st.peerBackBy]).toEqual([true, 0]);
     expect(notices()).toEqual(['对方回来了']);
   });

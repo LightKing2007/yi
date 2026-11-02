@@ -11,13 +11,13 @@ import { KEYS_CREDENTIAL, newAccountKeys, SMTP_CREDENTIAL } from '../server/acco
 import { ACCOUNT_PRUNE_MS } from '../server/accountService';
 import { LOG_FLUSH_MS, SNAPSHOT_MS, serve, type ServeDeps } from '../server/serve';
 import { PROTO_VERSION } from '../src/shared/protocol';
-import { newUid } from './serverWorld';
+import { seedAccounts } from '../scripts/seed-accounts';
 
 let dir = '';
 const handles: (() => void)[] = [];
 
 /** 以假的进程依赖运行 serve：记下日志、退出码、信号处理函数与定时器 */
-function harness(port = 0, env: Record<string, string> = {}) {
+function harness(port = 0, env: Record<string, string> = {}, now = () => 1000) {
   const lines: { event: string; [key: string]: unknown }[] = [];
   const logger = new Logger({ ver: 'test', write: line => lines.push(JSON.parse(line)), now: () => 1000 });
   const config = { ...parseConfig([], { YI_DB: path.join(dir, 'yi.db'), ...env }, dir).config, port };
@@ -29,7 +29,7 @@ function harness(port = 0, env: Record<string, string> = {}) {
     config,
     logger,
     build: { version: '3.0.0', commit: 'abc1234' },
-    now: () => 1000,
+    now,
     exit: code => exits.push(code),
     onSignal: (signal, handler) => signals.set(signal, handler),
     every: (ms, fn) => {
@@ -92,8 +92,8 @@ describe('服务端的运行', () => {
   });
 });
 
-/** 连上 port 并握手；next(type) 等到这一类消息为止 */
-async function player(port: number, name: string) {
+/** 连上 port 并以登录令牌握手；next(type) 等到这一类消息为止，closed 为服务端关闭时的关闭码 */
+async function player(port: number, auth: string) {
   const ws = new WebSocket(`ws://127.0.0.1:${port}`);
   const inbox: { t: string; code?: string }[] = [];
   let wake = () => {};
@@ -109,17 +109,34 @@ async function player(port: number, name: string) {
     }
   };
   await new Promise(res => ws.on('open', res));
-  ws.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, name, uid: newUid() }));
+  const closed = new Promise<number>(res => ws.on('close', res));
+  ws.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, auth }));
   await next('welcome');
-  return { send: (msg: object) => ws.send(JSON.stringify(msg)), next, close: () => ws.close() };
+  return { send: (msg: object) => ws.send(JSON.stringify(msg)), next, close: () => ws.close(), closed };
 }
 
+/** 开着账号功能的服务端：临时凭据，以 scripts/seed-accounts.ts 直接注册两个账号（真实密码派生，不发邮件），返回各自的登录令牌 */
+async function accountsHarness() {
+  const creds = path.join(dir, 'creds');
+  fs.mkdirSync(creds);
+  fs.writeFileSync(path.join(creds, KEYS_CREDENTIAL), newAccountKeys());
+  fs.writeFileSync(path.join(creds, SMTP_CREDENTIAL), JSON.stringify(SMTP_FIXTURE));
+  const tokens = await seedAccounts({ dbFile: path.join(dir, 'yi.db'), credentialsDir: creds, agreement: 'p1', names: ['甲', '乙'] });
+  // 账号与会话按真实时刻注册，服务端须用同一时钟：否则同意记录与会话都在“未来”，握手被拒
+  const run = harness(0, { YI_ACCOUNTS: '1', YI_PRIVACY_VERSION: 'p1', YI_TERMS_VERSION: 'p1', CREDENTIALS_DIRECTORY: creds }, Date.now);
+  await serve(run.deps);
+  const [port = 0] = run.lines.at(-1)?.ports as number[];
+  return { run, port, tokens };
+}
+/** 发信配置的样例（只须格式合格，测试中不发信） */
+const SMTP_FIXTURE = { host: 'smtpdm.example.com', port: 465, username: 'a@b.cn', password: 'fixture', fromAddress: 'a@b.cn', fromName: '弈' };
+/** 两次真实密码派生（scrypt N=2^17）：按本机 ×10 估计 CI 加覆盖率插桩的耗时，显式放宽时限 */
+const SEED_TIMEOUT_MS = 60_000;
+
 describe('数据库的监控指标', () => {
-  it('指标快照中有数据库文件的大小，开局写对局记录的事务计入事务耗时', async () => {
-    const run = harness();
-    await serve(run.deps);
-    const [port = 0] = run.lines.at(-1)?.ports as number[];
-    const [host, guest] = [await player(port, '甲'), await player(port, '乙')];
+  it('指标快照中有数据库文件的大小，开局写对局记录的事务计入事务耗时', { timeout: SEED_TIMEOUT_MS }, async () => {
+    const { run, port, tokens } = await accountsHarness();
+    const [host, guest] = [await player(port, tokens[0] ?? ''), await player(port, tokens[1] ?? '')];
     host.send({ t: 'create', type: 0, size: 15, hostColor: 0, renju: true, moveTime: 0 });
     guest.send({ t: 'join', code: (await host.next('created'))?.code });
     await guest.next('start');
@@ -194,7 +211,6 @@ describe('账号功能', () => {
     expect(await exited(run.exits)).toEqual([0]);
     expect(run.timers.get(ACCOUNT_PRUNE_MS)?.stopped).toBe(true);
   });
-
   it('凭据缺失时逐项写 account.secrets-invalid、不监听端口，以 78 退出；日志不含密钥', async () => {
     fs.mkdirSync(path.join(dir, 'creds'));
     fs.writeFileSync(path.join(dir, 'creds', SMTP_CREDENTIAL), JSON.stringify({ ...smtp, password: 'leak-me', port: 0 }));
@@ -206,4 +222,35 @@ describe('账号功能', () => {
     expect(JSON.stringify(run.lines)).not.toContain('leak-me');
     expect(run.timers.size).toBe(0);
   });
+});
+
+describe('联机握手与登录撤销：真实账号（protocol-v4.md 第 3、4 章）', () => {
+  it(
+    '联机握手核验登录令牌：无效令牌以 4001 关闭；退出登录撤销会话后，该会话的联机连接以 4001 断开（protocol-v4.md 第 3、4 章）',
+    { timeout: SEED_TIMEOUT_MS },
+    async () => {
+      const { run, port, tokens } = await accountsHarness();
+      const stranger = new WebSocket(`ws://127.0.0.1:${port}`);
+      const refused = new Promise<{ code: number; first: unknown }>(res => {
+        let first: unknown;
+        stranger.on('message', data => (first ??= JSON.parse(String(data))));
+        stranger.on('close', code => res({ code, first }));
+      });
+      await new Promise(res => stranger.on('open', res));
+      stranger.send(JSON.stringify({ t: 'hello', v: PROTO_VERSION, auth: '0'.repeat(32) }));
+      expect(await refused).toEqual({ code: 4001, first: { t: 'error', code: 'auth.invalid', level: 'E4' } });
+      const [jia, yi] = [await player(port, tokens[0] ?? ''), await player(port, tokens[1] ?? '')];
+      const logout = await fetch(`http://127.0.0.1:${port}/api/v1/sessions/current`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${tokens[0]}`, Origin: 'app://yi' },
+      });
+      expect(logout.status).toBe(204);
+      expect(await jia.closed).toBe(4001);
+      yi.send({ t: 'ping' });
+      expect(await yi.next('pong')).toEqual({ t: 'pong' }); // 别的账号不受影响
+      yi.close();
+      run.signals.get('SIGTERM')?.();
+      expect(await exited(run.exits)).toEqual([0]);
+    },
+  );
 });

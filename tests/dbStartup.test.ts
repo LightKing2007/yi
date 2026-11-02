@@ -8,7 +8,7 @@ import { MEMORY, openDatabase } from '../server/db';
 import { DbRatingStore } from '../server/db/ratingStore';
 import { Repo } from '../server/db/repo';
 import { openPersistence, startPersistence } from '../server/db/startup';
-import { Client, matchUp, world } from './serverWorld';
+import { Client, matchUp, repoGate, world } from './serverWorld';
 
 let dir = '';
 let dbFile = '';
@@ -26,14 +26,22 @@ afterEach(() => {
   fs.rmSync(dir, { recursive: true });
 });
 
+/** 经段位存放处开一局（写入对局记录，一次事务）；双方用户先另行建好 */
+function startOneGame(run: ReturnType<typeof openPersistence>) {
+  const repo = new Repo(run.db);
+  const black = repo.ensure(HASH_A, '甲', 1),
+    white = repo.ensure('b'.repeat(32), '乙', 1);
+  run.store.startGame({ kind: 'friend', type: 'gomoku', size: 15, black: { userId: black, name: '甲' }, white: { userId: white, name: '乙' } });
+}
+
 describe('启动时的持久化', () => {
   it('首次启动新建数据库；段位写入数据库，退出时关闭', () => {
     const run = openPersistence(options());
     expect(logs).toEqual(['db.migrating', 'db.migrated', 'db.opened']);
-    run.store.set(HASH_A, { gomoku: { points: 1216, win: 1, loss: 0, draw: 0 }, go: { points: 1200, win: 0, loss: 0, draw: 0 } }, '甲');
+    startOneGame(run);
     run.close();
     const db = new DatabaseSync(dbFile);
-    expect(db.prepare('SELECT points FROM ratings WHERE game_type = ?').get('gomoku')?.points).toBe(1216);
+    expect(db.prepare('SELECT count(*) AS n FROM games').get()?.n).toBe(1);
     db.close();
   });
 
@@ -41,7 +49,7 @@ describe('启动时的持久化', () => {
     const seconds: number[] = [];
     let clock = 10;
     const run = openPersistence({ ...options(), repo: { clock: () => (clock += 0.25), onTransaction: taken => seconds.push(taken) } });
-    run.store.set(HASH_A, { gomoku: { points: 1216, win: 1, loss: 0, draw: 0 }, go: { points: 1200, win: 0, loss: 0, draw: 0 } }, '甲');
+    startOneGame(run);
     expect(seconds).toEqual([0.25]);
     const wal = fs.statSync(`${dbFile}-wal`).size;
     expect(wal).toBeGreaterThan(0); // 写入还在 WAL 中
@@ -96,13 +104,13 @@ describe('入口调用的启动函数', () => {
 });
 
 describe('联机服务端在数据库上读写段位', () => {
-  it('握手即建游客用户；排位结算写入数据库，重新握手读回', () => {
+  it('段位按账号的内部编号读写：排位结算写入数据库，同一账号重新握手读回', () => {
     const db = openDatabase(MEMORY, { now: () => 1, appVersion: 'test' });
-    const store = new DbRatingStore(new Repo(db), { now: () => 2 });
-    const { srv } = world(store);
+    const repo = new Repo(db);
+    const store = new DbRatingStore(repo, { now: () => 2 });
+    const { srv } = world(store, { gate: repoGate(repo) });
     const first = new Client(srv, '甲'),
       second = new Client(srv, '乙');
-    expect(db.prepare('SELECT name FROM users ORDER BY id').all()).toEqual([{ name: '甲' }, { name: '乙' }]);
     const { sa } = matchUp(first, second, 'ranked');
     const [black, white] = sa.color === 1 ? [first, second] : [second, first];
     black.send({ t: 'resign' });
@@ -110,7 +118,7 @@ describe('联机服务端在数据库上读写段位', () => {
     const again = new Client(srv, '胜者', undefined, white.uid);
     expect(again.welcome?.ratings.gomoku.points).toBe(1216);
     expect(db.prepare('SELECT count(*) AS n FROM ratings').get()?.n).toBe(2); // 只写这一局的棋类
-    expect(db.prepare("SELECT name FROM users WHERE name = '胜者'").all()).toHaveLength(1); // 同一台设备，改名而不新建用户
+    expect(db.prepare('SELECT count(*) AS n FROM users').get()?.n).toBe(2); // 同一账号重新握手不新建用户
     db.close();
   });
 });

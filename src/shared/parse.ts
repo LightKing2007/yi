@@ -10,7 +10,6 @@ import {
   DOWNLOAD_URL_PATTERN,
   DRAWN,
   PROTO_VERSION,
-  UID_PATTERN,
   type ErrorParams,
   VERSION_PATTERN,
   type Act,
@@ -38,7 +37,7 @@ export const isInvalid = <M extends object>(msg: M | Invalid): msg is Invalid =>
 
 /** 未知字段超过这个数就按非法消息处理（API-011） */
 const MAX_UNKNOWN_FIELDS = 16;
-/** 昵称原文的长度上限（UTF-16 码元数）：16 个字素即使都是组合表情也够用，清洗与截断由 cleanName 负责 */
+/** 名字（雅号）原文的长度上限（UTF-16 码元数）：16 个字素即使都是组合表情也够用 */
 const NAME_RAW_MAX = 256;
 /** 写进日志的取值最多保留的字符数，免得恶意的超长值撑大日志 */
 const SHOWN_MAX = 40;
@@ -50,7 +49,9 @@ const SIZES = [9, 13, 15, 19];
 const MOVE_TIMES = [0, 30, 60, 120];
 /** 好友房间房主执子：0 随机，1 黑，2 白（API-012） */
 const HOST_COLORS = [0, 1, 2];
-/** 房号与重连令牌的格式（API-013） */
+/** 公开 UID 的规范值：八位，字母表同 src/shared/publicId.ts（校验位由服务端保证，这里只限格式） */
+const PUBLIC_ID = /^[0-9A-HJKMNP-TV-Z]{8}$/;
+/** 房号、登录令牌与重连令牌的格式（API-013） */
 const ROOM_CODE = /^[0-9]{4}$/;
 const TOKEN_PATTERN = /^[0-9a-f]{32}$/;
 /** 错误编号：UUID v4 的小写形式（API-023） */
@@ -166,9 +167,8 @@ const QUEUE_MODES: Record<QueueMode, true> = { match: true, ranked: true };
 
 /** 各消息的字段与取值范围（API-012、API-013） */
 const C2S_SCHEMA: Schema<C2S, 't'> = {
-  hello: { v: need(intIn(1, PROTO_MAX)), name: need(text(NAME_RAW_MAX)), uid: need(match(UID_PATTERN)), token: opt(match(TOKEN_PATTERN)) },
+  hello: { v: need(intIn(1, PROTO_MAX)), auth: need(match(TOKEN_PATTERN)), resume: opt(match(TOKEN_PATTERN)) },
   ping: {},
-  name: { name: need(text(NAME_RAW_MAX)) },
   queue: { mode: need(member(QUEUE_MODES)), type: TYPE, size: SIZE },
   unqueue: {},
   confirm: { ok: OK },
@@ -243,7 +243,8 @@ const ACT: Take = val => {
 const S2C_SCHEMA: Schema<S2C, 't'> = {
   welcome: {
     id: need(intIn(1, Number.MAX_SAFE_INTEGER)),
-    token: need(match(TOKEN_PATTERN)),
+    resume: need(match(TOKEN_PATTERN)),
+    user: record({ publicId: need(match(PUBLIC_ID)), name: need(text(NAME_RAW_MAX)) }),
     ratings: record({ gomoku: RATING, go: RATING }),
     latest: opt(match(VERSION_PATTERN)),
     url: opt(match(DOWNLOAD_URL_PATTERN)),

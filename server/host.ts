@@ -3,13 +3,14 @@
  * 同一个端口上的普通网页请求：本机来的 /healthz 回应健康检查（API-061），其余一律 404；官网由独立进程运行。
  * 连接层的限制：单条消息大小（API-002）、同一 IP 的连接数与新建频率（API-040、API-041）、同一 IP 的 HTTP 请求频率（API-041）、HTTP 超时（API-047）。
  */
+import type { AccountService } from './accountService';
 import { randomUUID } from 'node:crypto';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { CLOSE_CODE } from '../src/shared/protocol';
 import { clientIp } from './clientIp';
-import { hardenHttp, withHttpLimit, type Limited } from './http';
+import { hardenHttp, withHttpLimit } from './http';
 export { HTTP_LIMITS, hardenHttp } from './http';
 import { withHealth, type Build, type Web } from './health';
 import type { Gauges } from './metrics';
@@ -180,8 +181,8 @@ function closeAll(listening: Listening[]) {
  */
 export type HostOptions = RoomServerOptions & {
   host?: string;
-  /** 账号功能打开时的接口与其限流回应（accountService.ts）；不设时 /api 一律 404 */
-  accounts?: { api: (next: Web) => Web; limited: Limited };
+  /** 账号功能打开时的接口、限流回应、联机握手的核验与撤销通知（accountService.ts）；不设时 /api 一律 404，联机握手以 server.maintenance 拒绝 */
+  accounts?: Pick<AccountService, 'api' | 'limited' | 'gate' | 'onRevoke'>;
   build?: Build;
   eventLoopLag?: () => number;
   dbFileBytes?: () => number;
@@ -189,7 +190,8 @@ export type HostOptions = RoomServerOptions & {
 
 /** 在 ports 上开服（第一个是主端口）；有端口被占用时抛出 */
 export async function startHost(ports: number | number[], opt: HostOptions = {}): Promise<Host> {
-  const server = new RoomServer(opt);
+  const server = new RoomServer({ ...opt, gate: opt.accounts?.gate ?? opt.gate });
+  opt.accounts?.onRevoke(event => server.revoke(event));
   const build = opt.build ?? { version: __APP_VERSION__, commit: '' };
   const now = opt.now ?? (() => performance.now() / MS_PER_SEC);
   let servers: WebSocketServer[] = [];

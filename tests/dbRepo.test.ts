@@ -91,22 +91,20 @@ describe('数据访问', () => {
 });
 
 describe('数据库中的段位存放处', () => {
-  it('上线即建游客用户；写入两种棋的段位', () => {
+  it('按账号的内部编号读取段位：从未排位时为起始段位，写入后读回（protocol-v4.md 第 5 章）', () => {
     const store = new DbRatingStore(repo, { now: () => 42 });
-    expect(store.get(HASH_A)).toBeUndefined();
-    store.seen(HASH_A, '甲');
-    expect(store.get(HASH_A)).toEqual({ gomoku: newRating(), go: newRating() });
-    store.set(HASH_A, gomoku(1216), '甲改名');
-    expect(store.get(HASH_A)).toEqual(gomoku(1216));
-    expect(count('ratings')).toBe(2);
-    expect(db.prepare('SELECT name, last_seen_at FROM users').get()).toEqual({ name: '甲改名', last_seen_at: 42 });
+    const userId = repo.ensure(HASH_A, '甲', 1);
+    expect(store.get(userId)).toEqual({ gomoku: newRating(), go: newRating() });
+    repo.transaction(() => repo.saveRating(userId, 'gomoku', gomoku(1216).gomoku, 42));
+    expect(store.get(userId)).toEqual(gomoku(1216));
+    expect(store.get(repo.ensure(HASH_B, '乙', 1))).toEqual({ gomoku: newRating(), go: newRating() }); // 互不影响
   });
 
-  it('数据库拒绝写入时整体回滚并抛出：段位与昵称都不变', () => {
-    const store = new DbRatingStore(repo, { now: () => 1 });
-    store.set(HASH_A, gomoku(1216), '甲');
-    expect(() => store.set(HASH_A, gomoku(-5), '乙')).toThrow(/CHECK constraint failed/);
-    expect(store.get(HASH_A)).toEqual(gomoku(1216));
-    expect(db.prepare('SELECT name FROM users').get()?.name).toBe('甲');
+  it('开局按双方账号的内部编号写入对局记录，不再按设备新建用户', () => {
+    const store = new DbRatingStore(repo, { now: () => 7 });
+    const [black, white] = [repo.ensure(HASH_A, '甲', 1), repo.ensure(HASH_B, '乙', 1)];
+    const id = store.startGame({ kind: 'ranked', type: 'gomoku', size: 15, black: { userId: black, name: '甲' }, white: { userId: white, name: '乙' } });
+    expect(db.prepare('SELECT black_user_id, white_user_id FROM games WHERE id = ?').get(id)).toEqual({ black_user_id: black, white_user_id: white });
+    expect(count('users')).toBe(2);
   });
 });

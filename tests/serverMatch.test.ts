@@ -1,17 +1,9 @@
 /** 联机服务端：匹配与排位、配对确认、好友房间、段位（以假时钟直接驱动 RoomServer） */
-import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { MemoryStore } from '../server/rooms';
 import { CLOSE_CODE, newRating, type LegacyS2C, type S2C } from '../src/shared/protocol';
 import { must } from './must';
 import { expectClientAccepts, newUid, Client, world, startGame, matchUp } from './serverWorld';
-
-/** 服务端存放段位所用的玩家键：`sha256('yi:' + uid)` 的前 32 位十六进制（DAT-075） */
-const uidHash = (uid: string) =>
-  createHash('sha256')
-    .update('yi:' + uid)
-    .digest('hex')
-    .slice(0, 32);
 
 describe('匹配', () => {
   it('两人进入队列即配对，看到对方后双方接受才开局', () => {
@@ -81,17 +73,10 @@ describe('离开队列与排位', () => {
     yi.drop();
     expect(srv.queued('ranked', 0)).toBe(0);
   });
-  it('排位：同一台设备不和自己配对；胜负按 Elo 计分并存档', () => {
+  it('排位：胜负按 Elo 计分并存档', () => {
     const store = new MemoryStore();
     const { srv } = world(store);
-    const jia = new Client(srv, '甲'),
-      jia2 = new Client(srv, '甲的小号', undefined, jia.uid);
-    jia.send({ t: 'queue', mode: 'ranked', type: 0, size: 15 });
-    jia2.send({ t: 'queue', mode: 'ranked', type: 0, size: 15 });
-    expect(jia.has('found')).toBe(false);
-    jia2.send({ t: 'unqueue' });
-    jia.send({ t: 'unqueue' });
-
+    const jia = new Client(srv, '甲');
     const yi = new Client(srv, '乙');
     const { sa, sb } = matchUp(jia, yi, 'ranked');
     expect(sa.kind).toBe('ranked');
@@ -127,10 +112,10 @@ describe('排位的计分', () => {
     const colors = new Set<number>();
     for (const strongFirst of [true, false]) {
       const store = new MemoryStore();
-      const { srv } = world(store);
+      const { srv, gate } = world(store);
       const uid = newUid(),
         rating = { points: strongPoints, win: 0, loss: 0, draw: 0 };
-      store.set(uidHash(uid), { gomoku: rating, go: { ...rating, points: 1200 } });
+      store.set(gate.idOf(uid, '强'), { gomoku: rating, go: { ...rating, points: 1200 } });
       const strong = new Client(srv, '强', undefined, uid),
         weak = new Client(srv, '弱');
       expect(strong.welcome?.ratings.gomoku.points).toBe(strongPoints);
@@ -166,23 +151,19 @@ describe('好友房间', () => {
     expect(sb.white.points).toBeUndefined();
   });
 
-  it('不在房间里时可以改名', () => {
-    const { srv } = world();
+  it('名字取账号的雅号；对局中改雅号不影响这一局，从下一局起生效（账号接口契约第 3.10 条）', () => {
+    const { srv, gate } = world();
     const jia = new Client(srv, '甲'),
       yi = new Client(srv, '乙');
-    jia.send({ t: 'name', name: '甲甲' });
+    expect(jia.welcome?.user.name).toBe('甲');
     const { sb } = startGame(jia, yi);
-    jia.send({ t: 'name', name: '不生效' });
-    expect(sb.black.name).toBe('甲甲');
-  });
-
-  it('名字里的控制字符被清掉并截短', () => {
-    const { srv } = world();
-    const jia = new Client(srv, '\n\t一二三四五六七八九十一二三四五六七八九十'),
-      yi = new Client(srv, '');
-    const { sb } = startGame(jia, yi);
-    expect(sb.black.name).toBe('一二三四五六七八九十一二三四五六');
-    expect(sb.white.name).toBe('棋手');
+    expect(sb.black.name).toBe('甲');
+    gate.idOf(jia.uid, '甲甲'); // 对局中经账号接口改了雅号
+    jia.send({ t: 'resign' });
+    jia.send({ t: 'leave' });
+    yi.send({ t: 'leave' });
+    const bing = new Client(srv, '丙');
+    expect(startGame(jia, bing).sb.black.name).toBe('甲甲');
   });
 
   it('等待中的房间很多、随机房号接连撞上时，仍然发出可以加入的四位房号', () => {
