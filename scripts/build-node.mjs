@@ -1,9 +1,9 @@
 /** 打包 Node 端：桌面版主进程与预加载（dist-electron/），独立联机服务端（dist-server/server.cjs，单文件、无需 npm install），异地备份（dist-server/offsite.cjs） */
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
-import path from 'node:path';
 import { build } from 'esbuild';
 import { mailImage } from './page-assets.mjs';
+import { rawText } from './raw-text.mjs';
 
 // 版本号与提交号写进程序里：服务端启动时打出来，线上跑的是哪一版一看便知
 const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
@@ -14,15 +14,6 @@ if (!commit)
   } catch {
     commit = 'unknown';
   }
-
-/** 以 `?raw` 结尾的导入按文本内联（与 Vite 的写法一致），将迁移 SQL 和官网文书打包进 server.cjs */
-const rawText = {
-  name: 'raw-text',
-  setup(build) {
-    build.onResolve({ filter: /\?raw$/ }, args => ({ path: path.resolve(args.resolveDir, args.path.slice(0, -'?raw'.length)), namespace: 'raw-text' }));
-    build.onLoad({ filter: /.*/, namespace: 'raw-text' }, args => ({ contents: fs.readFileSync(args.path, 'utf8'), loader: 'text' }));
-  },
-};
 
 const common = {
   bundle: true,

@@ -8,21 +8,13 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { build } from 'esbuild';
+import { rawText } from './raw-text.mjs';
 
 const ROOT = path.join(path.dirname(new URL(import.meta.url).pathname), '..');
 /** 服务端要求、测试账号注册时同意的协议版本（隐私政策与服务条款相同） */
 const AGREEMENT_VERSION = 'test-run';
 /** 一把 32 字节的随机密钥（base64），格式同 server/accountSecrets.ts */
 const randomKey = () => crypto.randomBytes(32).toString('base64');
-/** 以 ?raw 结尾的导入（迁移 SQL）按文本内联，与 scripts/build-node.mjs 相同 */
-const rawText = {
-  name: 'raw-text',
-  setup(b) {
-    b.onResolve({ filter: /\?raw$/ }, args => ({ path: path.resolve(args.resolveDir, args.path.slice(0, -'?raw'.length)), namespace: 'raw-text' }));
-    b.onLoad({ filter: /.*/, namespace: 'raw-text' }, args => ({ contents: fs.readFileSync(args.path, 'utf8'), loader: 'text' }));
-  },
-};
-
 /** 在 dir 下写入账号功能的凭据，返回凭据目录 */
 function writeCredentials(dir) {
   const credentials = path.join(dir, 'credentials');
