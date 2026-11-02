@@ -1,4 +1,4 @@
-/** 官网文书目录与独立草案页：纯 CSS 动效，不记录同意动作（API-063）。 */
+/** 官网文书目录与各文书页：纯 CSS 动效，不记录同意动作（API-063）。 */
 import { agreementStyle } from './agreementStyle';
 import { AGREEMENT_DOCUMENTS, AGREEMENT_INFO, type AgreementDocument } from './agreementText';
 import { esc, shell } from './page';
@@ -30,7 +30,7 @@ function catalog() {
 <div class="catalog-caption rv"><span class="label">目录</span></div>${entries}</div></section>`;
 }
 
-/** 长文目录只使用普通文字，正文保留草案状态与尚未开放功能的明确说明。 */
+/** 长文目录只使用普通文字，正文上方显示版本、生效状态与更新日期。 */
 function documentBody(document: AgreementDocument) {
   const rendered = legalMarkdown(document.content);
   const links = rendered.headings.filter(heading => heading.level === 2).map(heading => [`#${heading.id}`, heading.text] as const);
@@ -55,7 +55,7 @@ export function agreementPage(assetVersion: string, doc?: AgreementDocument) {
   const hero = documentHero({ label: '文书', title, lead: doc?.summary ?? AGREEMENT_INFO.introduction, ornaments: ornaments(), file: Boolean(doc) });
   return shell({
     title: `弈 · ${title}`,
-    description: doc ? `阅读“弈”的《${doc.name}》草案，了解相关规则与待完善事项。` : '“弈”的文书目录：隐私政策、用户服务条款与未成年人个人信息保护规则。',
+    description: doc ? `阅读“弈”的《${doc.name}》。` : '“弈”的文书目录：隐私政策、用户服务条款与未成年人个人信息保护规则。',
     assetVersion,
     nav: [...AGREEMENT_DOCUMENTS.map(document => [`/agreement/${document.slug}`, document.name] as [string, string]), ['/support', '帮助与支持']],
     current: doc ? `/agreement/${doc.slug}` : undefined,
