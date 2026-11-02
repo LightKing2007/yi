@@ -506,4 +506,11 @@ export const TABLE: [string, string, string][] = [
   ["调整联机方式：联机对战须先登录账号；同一账号在另一处进入联机时，原先的连接自动断开；退出登录或修改密码后，联机连接随即断开。此前的版本无法连接联机服务器，请更新至本版本。", "联机之法有改：联机对弈须先入籍；同籍于他处联机，则原处之连自断；出籍或改密语，联机之连随即断之。旧版不能连联机之服，请更为此版。", "Changed how online play works: you must sign in before playing online; when the same account goes online elsewhere, the earlier connection is closed automatically; signing out or changing the password closes the online connection immediately. Earlier versions can no longer connect to the online server; please update to this version."],
   ["调整联机段位：本版本起段位按账号计算，新账号从起始段位开始，此前的段位不再沿用。", "联机段位有改：自此版段位以籍计之，新籍自初始之位始，旧时段位不复沿用。", "Changed online ratings: from this version ratings are kept per account and new accounts start from the initial rank; earlier ratings are not carried over."],
   ["改进联机对局的同步：双方局面因网络原因不一致时，游戏自动与服务器重新同步；对方已改变局面后提交的操作不予执行，并提示“棋局已更新，请重新操作”。", "联机对局之同步更善：双方局面因网络不一时，自与服复同之；对方已易其局而后所为者不行，并示以“局已易，请复为之”。", "Improved online game synchronisation: when the two sides' boards differ because of network problems, the game resynchronises with the server automatically; an action submitted after the opponent has changed the game is not carried out, and the message “The game has changed. Please try again” is shown."],
+  ["正在检查更新", "正察新版", "Checking for updates"],
+  ["正在下载更新：%d%%", "正取新版：%d%%", "Downloading update: %d%%"],
+  ["更新已下载，点这里重启并安装", "新版已备，点此重启而更之", "Update ready. Click to restart and install"],
+  ["更新已下载，请返回开始菜单安装", "新版已备，请归初页而更之", "Update ready. Return to the main menu to install"],
+  ["正在安装更新", "正更其版", "Installing update"],
+  ["更新失败，点这里重试", "更新未成，点此复试", "Update failed. Click to retry"],
+  ["新增启动更新检查，无须进入联机对战；Windows 与 Linux 版可在游戏中下载更新，完成后重启安装。macOS 版仍通过官网下载。", "新增启时察版，无须联机；Windows 与 Linux 版可于局中取新版，备而重启以更之。macOS 版仍由官网取之。", "Added update checks at launch without entering online play; Windows and Linux can download updates in the game, then restart to install. macOS still uses the official download page."],
 ];

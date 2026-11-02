@@ -9,6 +9,7 @@ import * as controller from './app/controller';
 import { catchErrors, logError, native } from './app/native';
 import { bootAccounts } from './app/account';
 import { serverUrl } from './online/connection';
+import { bootUpdater } from './app/updater';
 
 catchErrors();
 
@@ -37,6 +38,8 @@ initAudio();
 // 协议第 4 版起联机须登录：启动时开启账号功能，恢复保存的登录
 bootAccounts(serverUrl(), native());
 render(<App />, document.getElementById('ui')!);
+const stopUpdater = bootUpdater();
+window.addEventListener('pagehide', stopUpdater, { once: true });
 if (scenarios && scenarioName) {
   const q = new URLSearchParams(location.search);
   scenarios.run(scenarioName, q.get('set') ?? 'now', q.has('hold')).catch(e => console.error('[scenario]', e));

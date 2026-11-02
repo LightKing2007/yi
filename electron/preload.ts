@@ -1,5 +1,6 @@
 /** 桌面版预加载：只向页面暴露少量系统功能（window.yiNative）：退出、提醒、写错误日志、打开日志文件夹、加密保存登录状态（SEC-032：至多 10 个函数） */
 import { contextBridge, ipcRenderer } from 'electron';
+import type { UpdateAction } from './update';
 
 contextBridge.exposeInMainWorld('yiNative', {
   platform: process.platform,
@@ -10,4 +11,10 @@ contextBridge.exposeInMainWorld('yiNative', {
   loadLogin: () => ipcRenderer.invoke('account:load'),
   saveLogin: (token: string, expiresAt: string) => ipcRenderer.invoke('account:save', token, expiresAt),
   clearLogin: () => ipcRenderer.invoke('account:clear'),
+  update: (action: UpdateAction) => ipcRenderer.invoke('app:update', action),
+  onUpdate: (callback: (state: unknown) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, state: unknown) => callback(state);
+    ipcRenderer.on('app:update-state', listener);
+    return () => ipcRenderer.removeListener('app:update-state', listener);
+  },
 });
