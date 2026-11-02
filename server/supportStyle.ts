@@ -83,4 +83,5 @@ const STYLE = `
 }
 `;
 
+/** 生成帮助目录与问题页的压缩样式。 */
 export const supportStyle = () => minify(agreementStyle() + STYLE);

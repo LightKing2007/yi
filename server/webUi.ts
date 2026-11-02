@@ -14,8 +14,8 @@ export function siteNavigation(links: readonly (readonly [href: string, text: st
 <nav class="nav-panel" aria-label="手机页面导航">${items}</nav></details>`;
 }
 
-/** 章节编号：壹贰叁肆……；超过十章时用阿拉伯数字。 */
 const CN_NUM = ['壹', '贰', '叁', '肆', '伍', '陆', '柒', '捌', '玖', '拾'];
+/** 章节编号：壹贰叁肆……；超过十章时用阿拉伯数字。 */
 export const chapterIndex = (n: number) => CN_NUM[n - 1] ?? String(n);
 
 /** 章节头：编号圆点 + 宽字距标签 + 宋体大标题 + 可选导语。 */

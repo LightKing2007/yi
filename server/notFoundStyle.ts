@@ -10,4 +10,5 @@ const STYLE = `
 .not-found .burst::before { animation: spin-plain 240s linear infinite; }
 `;
 
+/** 生成 404 页面的压缩样式。 */
 export const notFoundStyle = () => minify(geometryStyle + STYLE);

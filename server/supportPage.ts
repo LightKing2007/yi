@@ -67,7 +67,8 @@ function catalog(articles: readonly SupportArticle[], query: string, scripted: b
   }).join('');
   const empty = `<div class="support-empty" id="support-empty"${scripted && articles.length ? ' hidden' : ''}><h2>没有找到相关问题</h2><p>可以尝试更短的关键词，或浏览全部问题。</p>
 <a class="document-back" href="/support">← 查看全部 ${SUPPORT_ARTICLES.length} 个问题</a></div>`;
-  return `<div class="support-catalog" id="support-catalog"><div class="catalog-caption"><span class="label" id="support-caption">${query && !scripted ? '检索' : '目录'}</span>
+  const mode = query && !scripted ? '检索' : '目录';
+  return `<div class="support-catalog" id="support-catalog"><div class="catalog-caption"><span class="label" id="support-caption">${mode}</span>
 ${caption}</div>${scripted ? groups + empty : articles.length ? groups : empty}</div>`;
 }
 

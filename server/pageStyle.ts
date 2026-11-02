@@ -28,9 +28,11 @@ const base = `
   --title: url("/assets/title-yi.png?v={version}");
   color-scheme: dark;
 }
-.ink { --bg: var(--ink); --fg: var(--ink-fg); --dim: var(--ink-dim); --faint: var(--ink-faint); --line: rgb(236 231 221 / 0.12); --accent: var(--kaya); --on-accent: var(--ink);
+.ink { --bg: var(--ink); --fg: var(--ink-fg); --dim: var(--ink-dim); --faint: var(--ink-faint);
+  --line: rgb(236 231 221 / 0.12); --accent: var(--kaya); --on-accent: var(--ink);
   background: var(--bg); color: var(--fg); color-scheme: dark; }
-.shell { --bg: var(--shell); --fg: var(--shell-fg); --dim: var(--shell-dim); --faint: var(--shell-faint); --line: rgb(20 18 16 / 0.12); --accent: var(--ink); --on-accent: var(--shell);
+.shell { --bg: var(--shell); --fg: var(--shell-fg); --dim: var(--shell-dim); --faint: var(--shell-faint);
+  --line: rgb(20 18 16 / 0.12); --accent: var(--ink); --on-accent: var(--shell);
   background: var(--bg); color: var(--fg); color-scheme: light; }
 * { box-sizing: border-box; }
 html { background: var(--ink); scroll-behavior: smooth; -webkit-text-size-adjust: 100%; overflow-x: clip; }
