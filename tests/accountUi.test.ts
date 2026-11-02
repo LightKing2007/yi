@@ -1,9 +1,9 @@
 /** 账号界面的逻辑部分：开关、开启后恢复登录、加密存储的转接、邮件语言、错误提示与输入检查（src/app/account.ts），以及六格验证码的输入规则（src/ui/codeCells.ts）。 */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   account,
   accounts,
-  accountsWanted,
+  bootAccounts,
   codeComplete,
   emailLooksValid,
   loginRejected,
@@ -27,13 +27,6 @@ const user = { publicId: '7KM4P9D2', name: '棋友', emailVerified: true, consen
 const token = 'a1'.repeat(16);
 
 describe('开关与开启', () => {
-  it('只在开发模式下、地址带 ?accounts 时打开入口', () => {
-    expect(accountsWanted('?accounts', true)).toBe(true);
-    expect(accountsWanted('?server=ws://127.0.0.1:9&accounts=1', true)).toBe(true);
-    expect(accountsWanted('?accounts', false)).toBe(false);
-    expect(accountsWanted('?server=ws://127.0.0.1:9', true)).toBe(false);
-  });
-
   it('联机地址不合格时不开启；开启后以保存的令牌取资料，登录状态反映到信号', async () => {
     const calls: { url: string; auth: string | undefined }[] = [];
     const fetcher: Fetcher = async (url, init) => {
@@ -71,6 +64,44 @@ describe('开关与开启', () => {
     expect(await store.save(token, 'later')).toBe(true);
     await store.clear();
     expect(log).toEqual(['save 32 later', 'clear']);
+  });
+
+  it('再次开启（检查脚本换用替身）后，先前开启的登录迟到的结果不再影响界面', async () => {
+    let release = () => {};
+    const slow: Fetcher = () =>
+      new Promise(resolve => {
+        release = () => resolve(new Response(JSON.stringify(user), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+      });
+    const store = { load: async () => ({ token, expiresAt: '2026-12-01T00:00:00.000Z' }), save: async () => true, clear: async () => undefined };
+    startAccounts({ server: 'ws://127.0.0.1:8443', fetcher: slow, store });
+    await Promise.resolve();
+    const stub = { ...user, name: '替身' };
+    const quick: Fetcher = async () => new Response(JSON.stringify(stub), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    startAccounts({ server: 'ws://127.0.0.1:8443', fetcher: quick, store });
+    await accounts()?.session.restore();
+    expect(account.value.user?.name).toBe('替身');
+    release(); // 先前那次开启的资料这时才到
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(account.value.user?.name).toBe('替身');
+  });
+});
+
+describe('启动时开启', () => {
+  it('桌面版以加密存储中的登录、经全局 fetch 取资料', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      calls.push(`${url} ${(init.headers as Record<string, string>).Authorization}`);
+      return new Response(JSON.stringify(user), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    try {
+      const yi = { loadLogin: async () => ({ token, expiresAt: '2026-12-01T00:00:00.000Z' }) } as unknown as YiNative;
+      expect(bootAccounts('https://yi.example', yi)).toBe(false);
+      expect(bootAccounts('wss://yi.example', yi)).toBe(true);
+      await accounts()?.session.restore();
+      expect(calls.at(-1)).toBe(`https://yi.example/api/v1/me Bearer ${token}`);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

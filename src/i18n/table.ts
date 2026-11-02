@@ -235,8 +235,6 @@ export const TABLE: [string, string, string][] = [
   ["恢复默认", "复旧制", "Reset to defaults"],
   ["匹配对手", "觅对手", "Find a match"],
   ["创建房间", "设席", "Create room"],
-  ["昵称", "名号", "Name"],
-  ["给自己取个名字", "自题名号", "Your name"],
   ["方式", "何处", "Where"],
   ["局域网", "近邻", "LAN"],
   ["在线", "天涯", "Online"],
@@ -504,4 +502,8 @@ export const TABLE: [string, string, string][] = [
   ["密码过长", "密语过长", "The password is too long"],
   ["账号已在别处登录", "籍已于他处入", "Your account has signed in elsewhere"],
   ["棋局已更新，请重新操作", "局已易，请复为之", "The game has changed. Please try again"],
+  ["新增账号：以邮箱注册并登录后即可联机对战，段位与对局记录归属账号；账号页面可查看公开编号，修改雅号与密码。", "新设籍：以邮箱立籍而入，即可联机对弈，段位与对局之录皆归其籍；籍之页可观公开之号，可改雅号与密语。", "Added accounts: register with an email address and sign in to play online; ratings and game records now belong to the account. The account page shows the public ID and lets you change the display name and password."],
+  ["调整联机方式：联机对战须先登录账号；同一账号在另一处进入联机时，原先的连接自动断开；退出登录或修改密码后，联机连接随即断开。此前的版本无法连接联机服务器，请更新至本版本。", "联机之法有改：联机对弈须先入籍；同籍于他处联机，则原处之连自断；出籍或改密语，联机之连随即断之。旧版不能连联机之服，请更为此版。", "Changed how online play works: you must sign in before playing online; when the same account goes online elsewhere, the earlier connection is closed automatically; signing out or changing the password closes the online connection immediately. Earlier versions can no longer connect to the online server; please update to this version."],
+  ["调整联机段位：本版本起段位按账号计算，新账号从起始段位开始，此前的段位不再沿用。", "联机段位有改：自此版段位以籍计之，新籍自初始之位始，旧时段位不复沿用。", "Changed online ratings: from this version ratings are kept per account and new accounts start from the initial rank; earlier ratings are not carried over."],
+  ["改进联机对局的同步：双方局面因网络原因不一致时，游戏自动与服务器重新同步；对方已改变局面后提交的操作不予执行，并提示“棋局已更新，请重新操作”。", "联机对局之同步更善：双方局面因网络不一时，自与服复同之；对方已易其局而后所为者不行，并示以“局已易，请复为之”。", "Improved online game synchronisation: when the two sides' boards differ because of network problems, the game resynchronises with the server automatically; an action submitted after the opponent has changed the game is not carried out, and the message “The game has changed. Please try again” is shown."],
 ];
