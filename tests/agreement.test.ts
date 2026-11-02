@@ -34,7 +34,7 @@ const DOCUMENTS = [
 const ROUTES = [{ slug: 'agreement', name: '隐私政策与服务条款' }, ...DOCUMENTS];
 const routeFor = (slug: string) => (slug === 'agreement' ? '/agreement' : `/agreement/${slug}`);
 
-it('文书目录与三个草案子页面分别可读，正文不使用棋子装饰，尾斜杠规范化并忽略查询参数', async () => {
+it('文书目录与三个文书子页面分别可读，正文不使用棋子装饰，尾斜杠规范化并忽略查询参数', async () => {
   await withAgreement(async base => {
     for (const { slug, name } of ROUTES) {
       const route = routeFor(slug);
@@ -52,11 +52,12 @@ it('文书目录与三个草案子页面分别可读，正文不使用棋子装�
       } else {
         expect(html).toContain(`<h1>${name}</h1>`);
         const content = html.slice(html.indexOf('<section class="agreement-content'));
-        expect(content).toContain('草案 0.1 · 尚未生效');
+        expect(content).toContain('正式版 1.0 · 自');
         expect(content).toContain('个人开发者王耀（LightKing）');
         expect(content).toContain('<article class="document-article"');
         expect(content).toContain('id="section-1"');
-        expect(content).toContain('尚未开放');
+        expect(content).toContain('浏览本页不会记录同意');
+        expect(content).not.toContain('尚未生效');
         expect(content).not.toContain('正文待补充');
         expect(content).not.toContain('发布前核对清单');
         expect(content).not.toContain('class="document-number');
@@ -115,7 +116,7 @@ it('主页导航不显示协议，页脚使用完整名称且移除校验清单�
       expect(footer).not.toContain('href="/SHA256SUMS"');
     }
     const download = await (await fetch(`${base}/download/`)).text();
-    expect(download).toContain('href="/agreement/privacy-policy">隐私政策（草案）</a>');
+    expect(download).toContain('href="/agreement/privacy-policy">隐私政策</a>');
     expect(download).toContain('对局记录');
   });
 });
