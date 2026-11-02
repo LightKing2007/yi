@@ -132,6 +132,17 @@ export type OverReason = 'five' | 'full' | 'score' | 'resign' | 'timeout' | 'dis
 /** 对局动作（重连时回放）：M 落子 P 停着 U 悔棋 K 标记死子 R 恢复对局 */
 export type Act = { k: 'M'; x: number; y: number } | { k: 'P' } | { k: 'U'; n: number } | { k: 'K'; x: number; y: number } | { k: 'R' };
 
+/** 改变对局状态的上行消息（protocol-v4.md 第 7.2 条）：都带请求序号 seq 与状态版本 sv */
+export const ORDERED = ['move', 'pass', 'undo', 'draw', 'rematch', 'reply', 'resign', 'mark', 'agree', 'resume', 'leave'] as const;
+/**
+ * 请求序号与状态版本：seq 为本连接上的请求序号，从 1 开始逐条加 1（API-052），重连或接管后从 1 重新开始；
+ * sv 为发出请求时所知的状态版本（protocol-v4.md 第 7.2 条）
+ */
+export interface Stamp {
+  seq: number;
+  sv: number;
+}
+
 /** 客户端 → 服务端 */
 export type C2S =
   | { t: 'hello'; v: number; auth: string; resume?: string } // auth：账号的登录令牌；resume：上次 welcome 下发的重连令牌（protocol-v4.md 第 3.1 条）
@@ -142,17 +153,35 @@ export type C2S =
   | { t: 'create'; type: number; size: number; hostColor: number; renju: boolean; moveTime: number } // 开好友房间
   | { t: 'close' } // 关闭尚未开始的房间
   | { t: 'join'; code: string } // 用房号加入好友房间
-  | { t: 'move'; x: number; y: number }
-  | { t: 'pass' }
-  | { t: 'undo' }
-  | { t: 'draw' }
-  | { t: 'rematch' }
-  | { t: 'reply'; kind: AskKind; ok: boolean } // 回应对方的申请
-  | { t: 'resign' }
-  | { t: 'mark'; x: number; y: number } // 点目时标记 / 取消死子
-  | { t: 'agree' }
-  | { t: 'resume' }
-  | { t: 'leave' }; // 离开房间（对局中离开即认输）
+  | ({ t: 'move'; x: number; y: number } & Stamp)
+  | ({ t: 'pass' } & Stamp)
+  | ({ t: 'undo' } & Stamp)
+  | ({ t: 'draw' } & Stamp)
+  | ({ t: 'rematch' } & Stamp)
+  | ({ t: 'reply'; kind: AskKind; ok: boolean } & Stamp) // 回应对方的申请
+  | ({ t: 'resign' } & Stamp)
+  | ({ t: 'mark'; x: number; y: number } & Stamp) // 点目时标记 / 取消死子
+  | ({ t: 'agree' } & Stamp)
+  | ({ t: 'resume' } & Stamp)
+  | ({ t: 'leave' } & Stamp) // 离开房间（对局中离开即认输）
+  | { t: 'resync' }; // 请求完整同步：收到的状态版本跳号时（protocol-v4.md 第 7.4 条）
+
+/** 去掉序号与版本的上行消息 */
+type Unstamped<M> = M extends Stamp ? Omit<M, keyof Stamp> : M;
+/** 还没编号的上行消息：客户端的操作以此交给连接层，真正发出时才编上（序号随连接重新开始） */
+export type C2SDraft = Unstamped<C2S>;
+
+const ORDERED_TYPES: ReadonlySet<string> = new Set(ORDERED);
+/** 是否为改变对局状态、带请求序号与状态版本的上行消息（protocol-v4.md 第 7.2 条） */
+export const isOrdered = (m: C2S): m is Extract<C2S, Stamp> => ORDERED_TYPES.has(m.t);
+
+/** 还没编号的消息是否属于要编号的一类 */
+const draftOrdered = (m: C2SDraft): m is Unstamped<Extract<C2S, Stamp>> => ORDERED_TYPES.has(m.t);
+
+/** 编上请求序号与状态版本：ORDERED 中的消息加上 next() 给出的 seq 与 sv，其余原样；next 只在需要编号时调用 */
+export function stampOf(m: C2SDraft, next: () => Stamp): C2S {
+  return draftOrdered(m) ? { ...m, ...next() } : m;
+}
 
 /** 账号的公开资料：公开 UID 的规范值与雅号 */
 export interface PublicUser {
@@ -178,21 +207,36 @@ export type S2C =
   | { t: 'unmatched'; requeued: boolean; reason?: string } // 这次配对作罢；requeued 表示已自动继续匹配，reason 为对方的原因（自己拒绝或超时时没有）
   | { t: 'created'; code: string }
   | { t: 'joinNo'; code: string } // 加入房间被拒的原因（错误码）
-  | { t: 'start'; kind: GameKind; color: number; type: number; size: number; renju: boolean; moveTime: number; black: Opponent; white: Opponent }
-  | { t: 'moved'; x: number; y: number }
-  | { t: 'passed' }
+  // match：局编号（与日志中的 gameId 相同）；sv：状态版本，开局为 0（protocol-v4.md 第 7.1 条）
+  | {
+      t: 'start';
+      kind: GameKind;
+      color: number;
+      type: number;
+      size: number;
+      renju: boolean;
+      moveTime: number;
+      black: Opponent;
+      white: Opponent;
+      match: number;
+      sv: number;
+    }
+  // 以下带 sv 的消息各推进一次状态版本，发给对局双方；重连与完整同步时随 sync 补发的 agreed、over、ask 带当前版本
+  | { t: 'moved'; x: number; y: number; sv: number }
+  | { t: 'passed'; sv: number }
   | { t: 'turn'; color: number; secs: number } // 新的一手开始计时（不限时为 -1）
-  | { t: 'ask'; kind: AskKind }
-  | { t: 'answer'; kind: AskKind; ok: boolean }
-  | { t: 'undone'; n: number }
-  | { t: 'marked'; x: number; y: number }
-  | { t: 'agreed'; color: number }
-  | { t: 'resumed' }
-  | { t: 'over'; winner: number; reason: OverReason }
+  | { t: 'ask'; kind: AskKind; from: number; sv: number } // from：申请方的执子颜色（protocol-v4.md 第 7.1.1 条）
+  | { t: 'answer'; kind: AskKind; from: number; ok: boolean; sv: number }
+  | { t: 'undone'; n: number; sv: number }
+  | { t: 'marked'; x: number; y: number; sv: number }
+  | { t: 'agreed'; color: number; sv: number }
+  | { t: 'resumed'; sv: number }
+  | { t: 'over'; winner: number; reason: OverReason; sv: number }
   | { t: 'rated'; type: number; rating: Rating; delta: number } // 排位结束后自己的新段位分
   | { t: 'peer'; online: boolean; wait?: number } // 对方掉线 / 回来
   | { t: 'left' } // 对方离开房间（终局后）
-  | { t: 'sync'; acts: Act[] } // 重连时回放整局
+  // 完整同步（重连时，或请求重复、跳号、过期时）：回放整局；seq 为服务端在这条连接上已处理的最大请求序号（protocol-v4.md 第 7.4 条）
+  | { t: 'sync'; acts: Act[]; match: number; sv: number; seq: number }
   | { t: 'notice'; code: string } // 不属于错误的通知（如服务器即将维护），code 为错误码
   | ErrorMsg;
 

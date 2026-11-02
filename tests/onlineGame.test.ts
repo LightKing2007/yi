@@ -3,8 +3,9 @@
  * 围棋的停着与点目、重连后的整局回放，以及对方掉线与回来。客户端经假 WebSocket 接到进程内的 RoomServer 上（替身见 fakeNet.ts）
  */
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { GRACE_SECS } from '../src/shared/protocol';
-import { Peer, advance, fake, lastSocket, loadClient, pump, resetNet, startGame, type Client, type State } from './fakeNet';
+import { ASK_SECS, GRACE_SECS } from '../src/shared/protocol';
+import { Peer, advance, fake, inject, lastSocket, loadClient, pump, resetNet, startGame, type Client, type State } from './fakeNet';
+import { must } from './must';
 
 let net: Client, state: State;
 /** 客户端切换过的界面 */
@@ -81,7 +82,7 @@ describe('悔棋与求和', () => {
     net.reply(false);
     pump();
     expect(net.st.askIn).toBeNull();
-    expect(peer.last('answer')).toEqual({ t: 'answer', kind: 'undo', ok: false });
+    expect(peer.last('answer')).toEqual({ t: 'answer', kind: 'undo', from: 2, ok: false, sv: 4 }); // 两手 1、2，申请 3
     expect(state.game.cur.moves).toBe(2);
   });
 
@@ -188,7 +189,7 @@ describe('离开对局', () => {
     net.leave();
     pump();
     expect([net.st.phase, net.st.leaveAsk]).toEqual([net.Phase.Lobby, false]);
-    expect(peer.last('over')).toEqual({ t: 'over', winner: 2, reason: 'left' });
+    expect(peer.last('over')).toEqual({ t: 'over', winner: 2, reason: 'left', sv: 1 });
   });
 
   it('对局已结束时点离开：不再确认，直接回到多人游戏页', () => {
@@ -264,5 +265,105 @@ describe('对方掉线与回来', () => {
     new Peer(fake.server, token, peer.uid);
     expect([net.st.peerOnline, net.st.peerBackBy]).toEqual([true, 0]);
     expect(notices()).toEqual(['对方回来了']);
+  });
+});
+
+describe('状态版本与重同步（protocol-v4.md 第 7 章）', () => {
+  it('收到的版本跳号（丢了下行消息）：丢弃这条，请求一次完整同步，随后局面与服务端一致', () => {
+    const peer = startGame();
+    fake.dropTypes = ['moved'];
+    net.move(7, 7);
+    pump();
+    fake.dropTypes = [];
+    expect([state.game.cur.moves, net.st.sv]).toEqual([0, 0]);
+    peer.send({ t: 'move', x: 8, y: 8 }); // 版本 2：本地还是 0
+    expect([state.game.cur.moves, net.st.sv, net.st.resyncing]).toEqual([2, 2, false]);
+    expect(net.myTurn()).toBe(true);
+  });
+
+  it('完整同步替换本地的局编号、版本与请求序号，此后的请求从同步中的序号加 1 继续', () => {
+    startGame();
+    inject({ t: 'sync', acts: [], match: 9, sv: 4, seq: 7 });
+    expect([net.st.match, net.st.sv, net.st.seq]).toEqual([9, 4, 7]);
+    net.move(7, 7);
+    expect(JSON.parse(must(lastSocket().sent.at(-1), '发出的落子'))).toEqual({ t: 'move', x: 7, y: 7, seq: 8, sv: 4 });
+    inject({ t: 'sync', acts: [], match: 9, sv: 4, seq: 3 }); // 服务端处理到 3 时发出的同步：已发出的 8 不能倒退
+    expect(net.st.seq).toBe(8);
+  });
+
+  it('重连时对方仍在掉线：同步之后照旧显示对方掉线与等待时间', () => {
+    const peer = startGame();
+    net.move(7, 7);
+    pump();
+    peer.drop();
+    pump();
+    advance(5);
+    lastSocket().cut();
+    pump();
+    advance(3);
+    expect([net.st.reconnecting, net.st.peerOnline]).toEqual([false, false]);
+    expect(net.st.peerBackBy).toBeGreaterThan(fake.now);
+  });
+
+  it('请求带序号与所知的版本；重连后序号从 1 重新开始，第一手照常被接受', () => {
+    const peer = startGame();
+    exchange(peer, [7, 7], [8, 8]);
+    expect([net.st.seq, net.st.sv]).toEqual([1, 2]);
+    lastSocket().cut();
+    pump();
+    advance(3, peer);
+    expect([net.st.reconnecting, net.st.seq]).toEqual([false, 0]);
+    net.move(9, 9);
+    pump();
+    expect(peer.last('moved')).toEqual({ t: 'moved', x: 9, y: 9, sv: 3 });
+    expect(net.st.seq).toBe(1);
+  });
+});
+
+describe('申请与回应发给对局双方（protocol-v4.md 第 7.1.1 条）', () => {
+  it('回应对方的申请后，收到 answer 之前不能落子；重复点回应只发一次', () => {
+    const peer = startGame();
+    exchange(peer, [7, 7], [8, 8]);
+    peer.send({ t: 'undo' });
+    net.reply(false);
+    net.reply(false);
+    expect([net.st.askIn, net.myTurn()]).toEqual(['undo', false]);
+    expect(lastSocket().sent.filter(frame => JSON.parse(frame).t === 'reply')).toHaveLength(1);
+    pump();
+    expect([net.st.askIn, net.myTurn()]).toEqual([null, true]);
+  });
+
+  it('对方的申请无人回应而超时：双方都收到回应，“收到申请”随之清除', () => {
+    const peer = startGame();
+    exchange(peer, [7, 7], [8, 8]);
+    peer.send({ t: 'undo' });
+    expect(net.st.askIn).toBe('undo');
+    advance(ASK_SECS + 1, peer);
+    expect(net.st.askIn).toBeNull();
+    expect(notices()).not.toContain('对方拒绝了你的悔棋申请'); // 回应的是对方的申请，不提示
+  });
+
+  it('重连后补回自己待回应的申请（服务端的 ask 带申请方）', () => {
+    const peer = startGame();
+    exchange(peer, [7, 7], [8, 8]);
+    net.undo();
+    pump();
+    lastSocket().cut();
+    pump();
+    advance(3, peer);
+    expect([net.st.askOut, net.st.askIn]).toEqual(['undo', null]);
+  });
+
+  it('请求所依据的版本已过期：提示“棋局已更新”，不执行，局面以随后的同步为准', () => {
+    const peer = startGame();
+    net.move(7, 7);
+    pump();
+    // 对方落子，消息还在路上时本方申请求和
+    peer.sess = fake.server.message(peer.sess, { t: 'move', x: 8, y: 8, seq: ++peer.seq, sv: peer.sv }, peer.conn);
+    net.draw();
+    pump();
+    expect(notices()).toEqual(['棋局已更新，请重新操作']);
+    expect([net.st.askOut, state.game.cur.moves, net.st.sv]).toEqual([null, 2, 2]);
+    expect(peer.inbox.some(m => m.t === 'ask')).toBe(false);
   });
 });

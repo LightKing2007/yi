@@ -51,8 +51,8 @@ describe('WebSocket 传输', () => {
       const { code } = await jia.next('created');
       yi.ws.send(JSON.stringify({ t: 'join', code }));
       expect((await yi.next('start')).color).toBe(2);
-      jia.ws.send(JSON.stringify({ t: 'move', x: 7, y: 7 }));
-      expect(await yi.next('moved')).toEqual({ t: 'moved', x: 7, y: 7 });
+      jia.ws.send(JSON.stringify({ t: 'move', x: 7, y: 7, seq: 1, sv: 0 }));
+      expect(await yi.next('moved')).toEqual({ t: 'moved', x: 7, y: 7, sv: 1 });
       jia.ws.send('不是 JSON'); // 不是 JSON 的内容按非法消息回复，连接照常
       expect(await jia.next('error')).toEqual({ t: 'error', code: 'proto.invalid-message', level: 'E4' });
       yi.ws.terminate();

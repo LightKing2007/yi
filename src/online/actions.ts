@@ -5,7 +5,7 @@
 import { now } from '../core/clock';
 import { GameType } from '../core/types';
 import { game, Screen } from '../app/state';
-import type { C2S, QueueMode } from '../shared/protocol';
+import type { C2SDraft, QueueMode } from '../shared/protocol';
 import { Phase, changed, goScreen, inGame, myTurn, st } from './state';
 import { hasSocket, isOpen, keepPending, send } from './connection';
 
@@ -40,7 +40,7 @@ export function confirm(ok: boolean) {
 }
 
 /** 开好友房间：棋类、路数、房主执子（0 黑 1 白 2 随机）、禁手、每步限时（秒，0 表示不限时），与协议的 create 消息同形 */
-export function createRoom({ type, size, hostColor, renju, moveTime }: Omit<Extract<C2S, { t: 'create' }>, 't'>) {
+export function createRoom({ type, size, hostColor, renju, moveTime }: Omit<Extract<C2SDraft, { t: 'create' }>, 't'>) {
   st.busy = true;
   send({ t: 'create', type, size, hostColor, renju, moveTime });
   changed();
@@ -103,11 +103,14 @@ export function rematch() {
   }
 }
 
-/** 回应对方的申请（悔棋 / 求和 / 再来一局） */
+/**
+ * 回应对方的申请（悔棋 / 求和 / 再来一局）。“收到申请”等服务端发来 answer 时才清除（protocol-v4.md 第 7.1.1 条）：
+ * 在此之前不能落子，免得回应引起的变更（同意悔棋时的退回）还没收到就在旧局面上落子
+ */
 export function reply(ok: boolean) {
   const k = st.askIn;
-  st.askIn = null;
-  if (k) send({ t: 'reply', kind: k, ok });
+  if (k && !st.replied) send({ t: 'reply', kind: k, ok });
+  st.replied = true;
   changed();
 }
 

@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { expect } from 'vitest';
 import { MemoryStore, RoomServer, type AccountGate, type Conn, type RatingStore, type RoomServerOptions, type Session } from '../server/rooms';
-import { PROTO_VERSION, type C2S, type S2C } from '../src/shared/protocol';
+import { PROTO_VERSION, stampOf, type C2S, type C2SDraft, type S2C } from '../src/shared/protocol';
 import { parseS2C } from '../src/shared/parse';
 import { must } from './must';
 
@@ -71,7 +71,10 @@ export function repoGate(repo: { ensure(uidHash: string, name: string, now: numb
   return testGate((_uid, name) => repo.ensure((++made).toString(16).padStart(32, '0'), name, 1));
 }
 
-/** 以假连接直接驱动 RoomServer 的客户端：收到的每条消息都检查能否通过客户端的校验，`expect` 按类型取出消息 */
+/**
+ * 以假连接直接驱动 RoomServer 的客户端：收到的每条消息都检查能否通过客户端的校验，`expect` 按类型取出消息。
+ * 与真实客户端一样记下收到的状态版本，改变对局状态的消息编上本连接的请求序号与所知的版本（protocol-v4.md 第 7 章）
+ */
 export class Client {
   inbox: S2C[] = [];
   sess: Session;
@@ -81,6 +84,9 @@ export class Client {
   closed = false;
   closeCode?: number; // 服务端关闭这条连接时用的关闭码（直接切断时为 undefined）
   welcome?: Msg<'welcome'>;
+  /** 所知的状态版本与本连接上最近编出的请求序号 */
+  sv = 0;
+  seq = 0;
   constructor(
     public srv: RoomServer,
     public name: string,
@@ -90,7 +96,10 @@ export class Client {
     this.conn = {
       send: m => {
         expectClientAccepts(m); // 连接关闭后发出的消息也要检查
-        if (!this.closed) this.inbox.push(m);
+        if (this.closed) return;
+        this.inbox.push(m);
+        if ('sv' in m) this.sv = m.sv;
+        if (m.t === 'sync') this.seq = Math.max(this.seq, m.seq);
       },
       close: code => {
         this.closed = true;
@@ -105,7 +114,11 @@ export class Client {
       this.token = welcome.resume;
     }
   }
-  send(m: C2S) {
+  send(m: C2SDraft) {
+    this.sendRaw(stampOf(m, () => ({ seq: ++this.seq, sv: this.sv })));
+  }
+  /** 原样发出，不编号（检查序号与版本的处理时用） */
+  sendRaw(m: C2S) {
     this.sess = this.srv.message(this.sess, m, this.conn);
   }
   /** 取出第一条该类型（且满足条件）的消息，连同它之前的消息一起丢掉 */

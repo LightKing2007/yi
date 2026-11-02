@@ -80,8 +80,10 @@ function handleP99(before, after) {
 /** 一条施压的连接：两两成对，偶数号开房间，奇数号加入。返回连接与每次轮到发消息时调用的 step */
 function client(i, { port, stats, rooms, auth }) {
   const ws = new WebSocket(`ws://127.0.0.1:${port}`, { localAddress: sourceAddress(i), perMessageDeflate: false });
-  const state = { color: 0, toMove: 0, board: new Set(), sentAt: 0, open: false };
+  const state = { color: 0, toMove: 0, board: new Set(), sentAt: 0, open: false, sv: 0, seq: 0 };
   const send = msg => ws.readyState === ws.OPEN && ws.send(JSON.stringify(msg));
+  /** 改变对局状态的消息带请求序号与所知的状态版本（protocol-v4.md 第 7.2 条） */
+  const request = msg => send({ ...msg, seq: ++state.seq, sv: state.sv });
   const host = i % 2 === 0;
   const rejected = msg => stats.errors.push(msg.code);
   /** 各类服务端消息的处理 */
@@ -90,6 +92,7 @@ function client(i, { port, stats, rooms, auth }) {
     created: msg => rooms.set(i + 1, msg.code),
     start: msg => {
       state.color = msg.color;
+      state.toMove = 1; // 新的一局黑先：再来一局交换先后手后，不能沿用上一局的 turn，等不到新的 turn 就误以为轮到自己
       state.board.clear();
     },
     turn: msg => (state.toMove = msg.color),
@@ -98,8 +101,8 @@ function client(i, { port, stats, rooms, auth }) {
       if (state.sentAt) stats.rtt.push(performance.now() - state.sentAt); // 自己发出的落子由服务端广播回来
       state.sentAt = 0;
     },
-    over: () => host && send({ t: 'rematch' }),
-    ask: msg => msg.kind === 'rematch' && send({ t: 'reply', kind: 'rematch', ok: true }),
+    over: () => host && request({ t: 'rematch' }),
+    ask: msg => msg.kind === 'rematch' && msg.from !== state.color && request({ t: 'reply', kind: 'rematch', ok: true }),
     error: rejected,
     joinNo: rejected,
   };
@@ -109,6 +112,7 @@ function client(i, { port, stats, rooms, auth }) {
   });
   ws.on('message', data => {
     const msg = JSON.parse(String(data));
+    if (typeof msg.sv === 'number') state.sv = msg.sv;
     on[msg.t]?.(msg);
   });
   ws.on('close', code => state.open && stats.closed.push(code));
@@ -123,7 +127,7 @@ function client(i, { port, stats, rooms, auth }) {
       do cell = Math.floor(Math.random() * SIZE * SIZE);
       while (state.board.has(cell));
       state.sentAt = performance.now();
-      send({ t: 'move', x: cell % SIZE, y: Math.floor(cell / SIZE) });
+      request({ t: 'move', x: cell % SIZE, y: Math.floor(cell / SIZE) });
     } else send({ t: 'ping' });
   };
   return { ws, step };

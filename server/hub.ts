@@ -210,6 +210,7 @@ export function takeOver(
     old.close(CLOSE_CODE.replaced);
   }
   back.sessionId = who.sessionId;
+  back.seq = 0; // 请求序号随连接重新开始（protocol-v4.md 第 7.2 条）
   if (!back.room) back.name = who.name; // 不在房间里时取最新的雅号；对局中保持开局时的名字（protocol-v4.md 第 5.3 条）
   back.lastSeen = ctx.now();
   ctx.players.delete(p); // p 还没握手，没有令牌

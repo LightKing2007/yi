@@ -165,9 +165,11 @@ function benchDead() {
   return stats(times);
 }
 
-/** 一名模拟玩家：收到的消息、自己的颜色与对局镜像（用来挑合法的落点） */
+/** 一名模拟玩家：收到的消息、自己的颜色、对局镜像（用来挑合法的落点）、所知的状态版本与请求序号（protocol-v4.md 第 7 章） */
 interface FakePlayer {
   inbox: S2C[];
+  sv: number;
+  seq: number;
   conn: Conn;
   sess: ReturnType<RoomServer['connect']>;
   color: number;
@@ -186,6 +188,7 @@ function send(srv: RoomServer, player: FakePlayer, msg: unknown, times: number[]
 /** 镜像对局同步服务端确认的落子 */
 function syncMirror(player: FakePlayer) {
   for (const msg of player.inbox) {
+    if ('sv' in msg) player.sv = msg.sv;
     if (msg.t === 'start') {
       player.color = msg.color;
       player.mirror.newGame(msg.type ? GameType.Go : GameType.Gomoku, msg.size, { renju: msg.renju });
@@ -216,7 +219,7 @@ export function benchServer(opt: Pick<BenchOptions, 'connections' | 'rounds' | '
   for (let i = 0; i < connections; i++) {
     const inbox: S2C[] = [];
     const conn: Conn = { send: msg => void inbox.push(msg), close: () => {} };
-    const player: FakePlayer = { inbox, conn, sess: srv.connect(conn), color: 0, mirror: new Game() };
+    const player: FakePlayer = { inbox, conn, sess: srv.connect(conn), color: 0, mirror: new Game(), sv: 0, seq: 0 };
     players.push(player);
     send(srv, player, { t: 'hello', v: PROTO_VERSION, auth: benchToken(i) }, times);
   }
@@ -234,7 +237,7 @@ export function benchServer(opt: Pick<BenchOptions, 'connections' | 'rounds' | '
     for (const player of players) {
       const turn = player.mirror.cur.toMove === player.color && !player.mirror.over;
       const move = turn ? pickMove(player, rng) : null;
-      send(srv, player, move ? { t: 'move', x: move.x, y: move.y } : { t: 'ping' }, handled);
+      send(srv, player, move ? { t: 'move', x: move.x, y: move.y, seq: ++player.seq, sv: player.sv } : { t: 'ping' }, handled);
       syncMirror(player);
     }
     srv.tick();

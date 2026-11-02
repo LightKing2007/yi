@@ -4,10 +4,10 @@
  */
 import { errorMsg } from './errorMsg';
 import { BLACK, GameType, WHITE, other } from '../src/core/types';
-import { ASK_SECS, DRAWN, DRAW_LIMIT, UNDO_LIMIT, type AskKind, type C2S } from '../src/shared/protocol';
+import { ASK_SECS, DRAWN, DRAW_LIMIT, UNDO_LIMIT, type AskKind, type C2S, type Stamp } from '../src/shared/protocol';
 import { stampMove } from './record';
-import { addAct, broadcast, finish, resolveAsk, seat, startTurn } from './room';
-import type { Player, Room, ServerContext } from './roomTypes';
+import { addAct, advance, colorOf, endAtLimit, finish, resolveAsk, resync, seat, startTurn } from './room';
+import { RoomState, type Player, type Room, type ServerContext } from './roomTypes';
 
 /** 发出请求的一方：所在的房间、玩家本身、执子的颜色 */
 export interface Actor {
@@ -33,6 +33,45 @@ export function afterGame(ctx: ServerContext, { r, p, me }: Actor, m: C2S) {
   if (r.kind === 'ranked') ctx.send(p, errorMsg('game.rematch-ranked'));
   else if (!r.ask && opp?.conn) ask(ctx, r, me, 'rematch');
   else ctx.send(p, errorMsg(r.ask ? 'game.awaiting-reply' : 'game.rematch-opponent-left'));
+}
+
+/** 不以局面为前提的请求：认输与离开在过期的版本上也照常执行，只按序号判重（protocol-v4.md 第 7.3 条） */
+const ANY_VERSION: ReadonlySet<string> = new Set(['resign', 'leave']);
+
+/**
+ * 改变对局状态的请求先经此检查（protocol-v4.md 第 7.3 条）：序号重复或跳号的不执行；请求所依据的版本之后有不是由本方请求引起的变更
+ * （对方的请求、超时等）时不执行，回复 game.stale。本方请求引起的变更客户端可以预期，不算过期：否则刚回应完申请就落子、
+ * 点目时接连标记死子都会被拒。不执行时回复完整同步（不在对局中时没有可同步的，只记下序号）。返回是否照常处理
+ */
+export function inOrder(ctx: ServerContext, p: Player, m: Extract<C2S, Stamp>): boolean {
+  const expected = p.seq + 1;
+  p.seq = Math.max(p.seq, m.seq);
+  const r = ctx.rooms.get(p.room);
+  const me = r ? colorOf(r, p) : 0;
+  const room = me ? r : undefined;
+  if (m.seq !== expected) {
+    if (room) resync(ctx, room, p);
+    return false;
+  }
+  if (!room || ANY_VERSION.has(m.t) || (m.sv >= (room.foreignSv[me] ?? 0) && m.sv <= room.sv)) return true;
+  ctx.send(p, errorMsg('game.stale'));
+  resync(ctx, room, p);
+  return false;
+}
+
+/** 房间中的请求：按房间的状态交给对局中或终局后的处理；此间的对局变更记为由这一方的请求引起（过期判断，protocol-v4.md 第 7.3 条） */
+export function inRoom(ctx: ServerContext, actor: Actor, m: C2S) {
+  const { r } = actor;
+  r.actor = actor.me;
+  try {
+    if (r.state === RoomState.Over) afterGame(ctx, actor, m);
+    else if (r.state === RoomState.Play) {
+      inGame(ctx, actor, m);
+      endAtLimit(ctx, r); // 落子、停一手、同意悔棋、标记死子、恢复对局之后都在此检查
+    }
+  } finally {
+    r.actor = 0;
+  }
 }
 
 /** 对局中（含点目）的操作 */
@@ -74,7 +113,7 @@ export function ask(ctx: ServerContext, r: Room, me: number, kind: AskKind) {
   r.askFrom = me;
   r.askUntil = ctx.now() + ASK_SECS;
   if (kind !== 'rematch') r.deadline = 0;
-  ctx.send(seat(ctx, r, other(me)), { t: 'ask', kind });
+  advance(ctx, r, { t: 'ask', kind, from: me });
 }
 
 /** 落子：轮到自己、没有待回应的申请、按规则可以落在这里时才落下，并判断是否终局 */
@@ -94,7 +133,7 @@ export function playMove(ctx: ServerContext, { r, p, me }: Actor, x: number, y: 
   } // 含落在本局棋盘之外
   stampMove(ctx, r);
   addAct(r, { k: 'M', x, y });
-  broadcast(ctx, r, { t: 'moved', x, y });
+  advance(ctx, r, { t: 'moved', x, y });
   if (g.over) finish(ctx, r, { winner: g.winner, reason: g.winner === DRAWN ? 'full' : 'five' });
   else startTurn(ctx, r);
 }
@@ -106,7 +145,7 @@ export function passTurn(ctx: ServerContext, r: Room, me: number) {
   g.pass();
   stampMove(ctx, r);
   addAct(r, { k: 'P' });
-  broadcast(ctx, r, { t: 'passed' });
+  advance(ctx, r, { t: 'passed' });
   r.agreed = [false, false, false];
   startTurn(ctx, r);
 }
@@ -151,7 +190,7 @@ export function markDead(ctx: ServerContext, r: Room, x: number, y: number) {
   g.toggleDead(x, y);
   addAct(r, { k: 'K', x, y });
   r.agreed = [false, false, false];
-  broadcast(ctx, r, { t: 'marked', x, y });
+  advance(ctx, r, { t: 'marked', x, y });
 }
 
 /** 确认点目结果；双方都确认后终局 */
@@ -159,7 +198,7 @@ export function agreeScore(ctx: ServerContext, r: Room, me: number) {
   const g = r.g;
   if (!g.scoring || r.agreed[me]) return;
   r.agreed[me] = true;
-  broadcast(ctx, r, { t: 'agreed', color: me });
+  advance(ctx, r, { t: 'agreed', color: me });
   if (!r.agreed[BLACK] || !r.agreed[WHITE]) return;
   g.computeScore();
   g.confirmScore();
@@ -173,6 +212,6 @@ export function resumePlay(ctx: ServerContext, r: Room) {
   g.resume();
   addAct(r, { k: 'R' });
   r.agreed = [false, false, false];
-  broadcast(ctx, r, { t: 'resumed' });
+  advance(ctx, r, { t: 'resumed' });
   startTurn(ctx, r);
 }

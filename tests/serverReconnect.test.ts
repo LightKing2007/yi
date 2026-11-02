@@ -31,7 +31,7 @@ describe('2.0.1 联机修复：重连与计时', () => {
     srv.disconnect(jia.sess, jia.conn); // 旧连接这时才被发现断开
     expect(yi.has('peer')).toBe(false);
     yi.send({ t: 'move', x: 8, y: 8 });
-    expect(jia2.expect('moved')).toEqual({ t: 'moved', x: 8, y: 8 });
+    expect(jia2.expect('moved')).toEqual({ t: 'moved', x: 8, y: 8, sv: 2 });
   });
 
   it('断线期间对局结束：重连后补发结果与排位结算', () => {
@@ -44,7 +44,7 @@ describe('2.0.1 联机修复：重连与计时', () => {
     expect(yi.expect('over')?.reason).toBe('resign');
     const jia2 = new Client(srv, '甲', jia.token, jia.uid);
     expect(jia2.expect('start')).toBeTruthy();
-    expect(jia2.expect('over')).toEqual({ t: 'over', winner: expect.any(Number), reason: 'resign' });
+    expect(jia2.expect('over')).toEqual({ t: 'over', winner: expect.any(Number), reason: 'resign', sv: 1 });
     expect(jia2.expect('rated')?.delta).toBe(16);
     expect(jia2.has('turn')).toBe(false);
   });
@@ -65,7 +65,7 @@ describe('2.0.1 联机修复：重连与计时', () => {
     expect(jia2.expect('turn')).toEqual({ t: 'turn', color: 1, secs: 30 });
     expect(yi.expect('turn')).toEqual({ t: 'turn', color: 1, secs: 30 });
     idle(31, jia2, yi);
-    expect(yi.expect('over')).toEqual({ t: 'over', winner: 2, reason: 'timeout' });
+    expect(yi.expect('over')).toEqual({ t: 'over', winner: 2, reason: 'timeout', sv: 3 });
   });
 });
 
@@ -223,7 +223,7 @@ describe('重连令牌（SEC-020、SEC-022）', () => {
   it('掉线太久被移除后，令牌随之作废', () => {
     const { srv, idle, gone, stay } = dropped();
     idle(GRACE_SECS + 1, stay);
-    expect(stay.expect('over')).toEqual({ t: 'over', winner: 2, reason: 'disconnect' });
+    expect(stay.expect('over')).toEqual({ t: 'over', winner: 2, reason: 'disconnect', sv: expect.any(Number) });
     expect(srv.tokenCount()).toBe(1); // 只剩乙的一枚
     const late = new Client(srv, '甲', gone.token, gone.uid);
     expect(late.has('resumeFailed')).toBe(true);

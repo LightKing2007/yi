@@ -34,6 +34,7 @@ export const ERRORS = {
   'game.rematch-opponent-left': { level: 'E2', text: '对方已离开，无法再来一局' },
   'game.limit-moves': { level: 'E2', text: '本局已达到 1024 手的上限，按和棋结束' },
   'game.limit-acts': { level: 'E2', text: '本局的动作记录已达到 4096 条的上限，按和棋结束' },
+  'game.stale': { level: 'E1', text: '棋局已更新，请重新操作' },
   'match.declined': { level: 'E2', text: '对方未接受' },
   'match.left': { level: 'E2', text: '对方已离开' },
   'match.unconfirmed': { level: 'E2', text: '对方未确认' },

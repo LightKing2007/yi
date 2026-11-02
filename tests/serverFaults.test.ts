@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { MemoryStore } from '../server/rooms';
 import type { GameEnd, GameStart, Settle } from '../server/roomTypes';
 import type { LogEntry, LogLevel } from '../server/log';
-import { ACTS_MAX, CLOSE_CODE, CONFIRM_SECS, GRACE_SECS, MOVES_MAX, type C2S, type S2C } from '../src/shared/protocol';
+import { ACTS_MAX, CLOSE_CODE, CONFIRM_SECS, GRACE_SECS, MOVES_MAX, type C2SDraft, type S2C } from '../src/shared/protocol';
 import { Client, world, startGame, matchUp } from './serverWorld';
 
 /** 对局记录的写入可以出错的存放处（模拟数据库写满或拒绝写入） */
@@ -63,7 +63,7 @@ describe('未预期的异常：处理消息与断线（API-023、EDGE-002）', (
     expect(yi.closed).toBe(false);
     const [blk, wht] = sa.color === 1 ? [bing, ding] : [ding, bing];
     blk.send({ t: 'move', x: 7, y: 7 });
-    expect(wht.expect('moved')).toEqual({ t: 'moved', x: 7, y: 7 });
+    expect(wht.expect('moved')).toEqual({ t: 'moved', x: 7, y: 7, sv: 1 });
   });
 
   it('处理断线时抛出：移除断线的玩家并放弃其房间，对手以 1011 断开', () => {
@@ -147,7 +147,7 @@ function goGame(mode: 'friend' | 'ranked', size = 19) {
   const sa = mode === 'ranked' ? matchUp(jia, yi, 'ranked', 1).sa : startGame(jia, yi, { type: 1, size, moveTime: 0 }).sa;
   const [blk, wht] = sa.color === 1 ? [jia, yi] : [yi, jia];
   let sent = 0;
-  const send = (who: Client, m: C2S) => {
+  const send = (who: Client, m: C2SDraft) => {
     if (++sent % 20 === 0) env.advance(1);
     who.send(m);
   };
@@ -172,7 +172,7 @@ describe('对局上限：手数（API-046，P2-16）', () => {
     send(wht, { t: 'pass' });
     for (const client of [blk, wht]) {
       const at = client.inbox.findIndex(m => m.t === 'over');
-      expect(client.inbox.slice(at)).toEqual([{ t: 'over', winner: 3, reason: 'limit-moves' }]);
+      expect(client.inbox.slice(at)).toEqual([{ t: 'over', winner: 3, reason: 'limit-moves', sv: expect.any(Number) }]);
       client.drain();
     }
     expect(logs.filter(row => row.event === 'game.limit')).toEqual([
@@ -203,7 +203,7 @@ describe('对局上限：手数（API-046，P2-16）', () => {
     send(blk, { t: 'pass' });
     send(wht, { t: 'pass' });
     for (const client of [blk, wht]) {
-      expect(client.expect('over')).toEqual({ t: 'over', winner: 3, reason: 'limit-moves' });
+      expect(client.expect('over')).toEqual({ t: 'over', winner: 3, reason: 'limit-moves', sv: expect.any(Number) });
       expect(client.has('rated')).toBe(false);
     }
     expect(logs.filter(row => row.event === 'rating.changed')).toEqual([]);
@@ -217,10 +217,14 @@ describe('对局上限：动作记录（API-046，P2-16）', () => {
     send(wht, { t: 'move', x: 8, y: 8 });
     send(blk, { t: 'pass' });
     send(wht, { t: 'pass' }); // 进入点目，此时 4 条动作记录
-    // 批量标记期间两人的连接只记下消息类型，不再逐条经客户端校验，免得测试过慢；记满前后的消息照常校验
+    // 批量标记期间两人的连接只记下消息类型与状态版本，不再逐条经客户端校验，免得测试过慢；记满前后的消息照常校验
     const [blkSend, whtSend] = [blk.conn.send, wht.conn.send];
     const seen: S2C['t'][] = [];
-    blk.conn.send = wht.conn.send = m => seen.push(m.t);
+    for (const client of [blk, wht])
+      client.conn.send = m => {
+        seen.push(m.t);
+        if ('sv' in m) client.sv = m.sv;
+      };
     for (let n = 4; n < ACTS_MAX - 1; n++) {
       send(blk, { t: 'mark', x: 0, y: 0 });
       if (n % 100 === 0) send(wht, { t: 'ping' }); // 白方照常发心跳，免得被当作空闲断线
@@ -230,9 +234,10 @@ describe('对局上限：动作记录（API-046，P2-16）', () => {
     expect(seen.filter(type => type === 'marked')).toHaveLength(2 * (ACTS_MAX - 5));
     wht.drop();
     send(blk, { t: 'mark', x: 0, y: 0 });
-    expect(blk.expect('over')).toEqual({ t: 'over', winner: 3, reason: 'limit-acts' });
+    const over = blk.expect('over');
+    expect(over).toEqual({ t: 'over', winner: 3, reason: 'limit-acts', sv: expect.any(Number) });
     const back = new Client(srv, '乙', wht.token, wht.uid);
     expect(back.expect('sync')?.acts).toHaveLength(ACTS_MAX);
-    expect(back.expect('over')).toEqual({ t: 'over', winner: 3, reason: 'limit-acts' });
+    expect(back.expect('over')).toEqual(over); // 同样的结果与版本
   });
 });

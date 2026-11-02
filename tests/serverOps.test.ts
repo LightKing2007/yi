@@ -188,7 +188,7 @@ describe('维护模式（OPS-045）', () => {
     startGame(asker, replier);
     asker.send({ t: 'resign' });
     asker.send({ t: 'rematch' });
-    expect(replier.expect('ask')).toEqual({ t: 'ask', kind: 'rematch' });
+    expect(replier.expect('ask')).toEqual({ t: 'ask', kind: 'rematch', from: 1, sv: 2 }); // 认输 1、申请 2
     srv.maintain();
     asker.drain();
     replier.drain();

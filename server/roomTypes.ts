@@ -182,6 +182,7 @@ export interface Player {
   match: Match | null; // 已配对、等双方确认
   joinFails: number[]; // 最近几次加入房间失败的时刻
   invalid: number; // 这条连接发来的非法消息数（只记第一条的日志）
+  seq: number; // 这条连接上已处理的最大请求序号（protocol-v4.md 第 7.3 条）；重连或接管后归零
   since: number; // 连接建立的时刻（握手时限从此算起，API-042）
   limits: ConnLimits; // 消息限速、操作频率与违规累计（API-043 至 API-045）
 }
@@ -205,7 +206,10 @@ export interface Room {
   renju: boolean;
   moveTime: number;
   host: number; // 好友房间的房主
-  gameId: number; // 当前这一局的编号：再来一局时换新的，用于日志（07-operations.md 第 5.1 条）
+  gameId: number; // 当前这一局的编号：再来一局时换新的，用于日志（07-operations.md 第 5.1 条），也是协议中的局编号 match
+  sv: number; // 状态版本：开局为 0，每次可观察的对局变更加 1（protocol-v4.md 第 7.1 条）
+  foreignSv: [number, number, number]; // 按执子颜色：最近一次不是由这一方的请求引起的变更的版本（过期判断，第 7.3 条）
+  actor: number; // 正在处理哪一方的请求（执子颜色）；超时等服务端自己引起的变更时为 0
   pid: [number, number, number]; // pid[BLACK] / pid[WHITE] 对局双方的玩家号
   who: [Player | null, Player | null, Player | null]; // 开局时的双方（排位结算用，掉线清理后也还在）
   g: Game;

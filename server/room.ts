@@ -4,7 +4,7 @@
  */
 import { Game } from '../src/core/game';
 import { BLACK, GameType, WHITE, other } from '../src/core/types';
-import { ACTS_MAX, DRAWN, MOVES_MAX, type Act, type GameKind, type Opponent, type OverReason, type S2C } from '../src/shared/protocol';
+import { ACTS_MAX, DRAWN, GRACE_SECS, MOVES_MAX, type Act, type GameKind, type Opponent, type OverReason, type S2C } from '../src/shared/protocol';
 import { oppInfo } from './matchmaking';
 import { markTurn, recordEnd, recordStart } from './record';
 import { RoomState, type Player, type Room, type RoomRules, type RoomSeat, type ServerContext } from './roomTypes';
@@ -43,6 +43,17 @@ export function broadcast(ctx: ServerContext, r: Room, msg: S2C) {
   for (const color of [BLACK, WHITE]) ctx.send(seat(ctx, r, color), msg);
 }
 
+/** 推进状态版本的下行消息（protocol-v4.md 第 7.1 条）；sv 由 advance 填上 */
+type Advancing = Exclude<Extract<S2C, { sv: number }>, { t: 'start' | 'sync' }>;
+type AdvancingDraft = Advancing extends infer M ? (M extends Advancing ? Omit<M, 'sv'> : never) : never;
+
+/** 提交一次可观察的对局变更：状态版本加 1，带上新的版本发给对局双方；不是由 r.actor 的请求引起的，记为另一方（或双方）的外来变更 */
+export function advance(ctx: ServerContext, r: Room, msg: AdvancingDraft) {
+  r.sv++;
+  for (const color of [BLACK, WHITE]) if (color !== r.actor) r.foreignSv[color] = r.sv;
+  broadcast(ctx, r, { ...msg, sv: r.sv });
+}
+
 /** 记一条对局动作（重连时回放）；记满 ACTS_MAX 条后不再记，由 endAtLimit 结束对局 */
 export function addAct(r: Room, act: Act) {
   if (r.acts.length < ACTS_MAX) r.acts.push(act);
@@ -62,6 +73,9 @@ export function newRoom(ctx: ServerContext, kind: GameKind, rules: RoomRules, se
     moveTime: rules.moveTime,
     host: seat.host,
     gameId: 0,
+    sv: 0,
+    foreignSv: [0, 0, 0],
+    actor: 0,
     pid: [0, 0, 0],
     who: [null, null, null],
     g: new Game(),
@@ -145,7 +159,7 @@ export function finish(ctx: ServerContext, r: Room, { winner, reason }: { winner
   r.deadline = 0;
   r.paused = 0;
   r.result = { winner, reason };
-  broadcast(ctx, r, { t: 'over', winner, reason });
+  advance(ctx, r, { t: 'over', winner, reason });
   ctx.log('info', 'game.over', { msg: `房间 ${r.id} 结束`, roomId: r.id, gameId: r.gameId, winner, reason, moves: r.g.moves.length });
   ctx.metrics?.inc('yi_games_finished_total', { kind: r.kind, reason });
   recordEnd(ctx, r, { winner, reason, stored: atLimit ? 'limit' : reason, rated: r.kind === 'ranked' && !atLimit });
@@ -183,6 +197,8 @@ export function sendStart(ctx: ServerContext, r: Room, only?: Player) {
       moveTime: r.moveTime,
       black: info(BLACK),
       white: info(WHITE),
+      match: r.gameId,
+      sv: 0,
     });
   }
 }
@@ -190,6 +206,8 @@ export function sendStart(ctx: ServerContext, r: Room, only?: Player) {
 /** 房间开新的一局：换新的对局编号与 Game，清空动作记录、申请与上一局的结果 */
 export function newRoomGame(ctx: ServerContext, r: Room) {
   r.gameId = ctx.nextGame++;
+  r.sv = 0;
+  r.foreignSv = [0, 0, 0];
   r.g = new Game();
   r.g.newGame(r.type === 0 ? GameType.Gomoku : GameType.Go, r.size, { renju: r.type === 0 && r.renju });
   r.acts = [];
@@ -232,7 +250,7 @@ export function resolveAsk(ctx: ServerContext, r: Room, ok: boolean) {
     from = r.askFrom;
   if (!kind) return;
   r.ask = null;
-  ctx.send(seat(ctx, r, from), { t: 'answer', kind, ok });
+  advance(ctx, r, { t: 'answer', kind, from, ok });
   if (kind === 'undo') {
     if (ok) {
       const g = r.g;
@@ -240,7 +258,7 @@ export function resolveAsk(ctx: ServerContext, r: Room, ok: boolean) {
       n = Math.min(n, g.hist.length);
       for (let i = 0; i < n; i++) g.undo();
       addAct(r, { k: 'U', n });
-      broadcast(ctx, r, { t: 'undone', n });
+      advance(ctx, r, { t: 'undone', n });
     }
     if (r.state === RoomState.Play) startTurn(ctx, r);
   } else if (kind === 'draw') {
@@ -253,19 +271,38 @@ export function resolveAsk(ctx: ServerContext, r: Room, ok: boolean) {
   }
 }
 
-/** 重连：把整局动作回放给客户端，再补上点目确认、待回应的申请与计时 */
-export function resync(ctx: ServerContext, r: Room, p: Player) {
-  sendStart(ctx, r, p);
-  ctx.send(p, { t: 'sync', acts: r.acts.slice() });
-  for (const color of [BLACK, WHITE]) if (r.agreed[color]) ctx.send(p, { t: 'agreed', color });
-  if (r.state === RoomState.Over) {
-    // 掉线期间对局已经结束：补发结果与排位结算
-    if (r.result) ctx.send(p, { t: 'over', ...r.result });
-    const rt = r.rated[colorOf(r, p)];
-    if (rt) ctx.send(p, { t: 'rated', ...rt });
+/**
+ * 补发对方的在场情况（start 使客户端以为对方在线）：对方已离开房间时发 left；对方掉线、还在等待重连时发 peer 与剩余的等待秒数
+ */
+function sendPresence(ctx: ServerContext, r: Room, p: Player) {
+  const oppColor = other(colorOf(r, p));
+  if (!r.pid[oppColor]) {
+    ctx.send(p, { t: 'left' });
     return;
   }
-  const me = colorOf(r, p);
-  if (r.ask && r.askFrom !== me) ctx.send(p, { t: 'ask', kind: r.ask });
+  const opp = seat(ctx, r, oppColor);
+  if (opp && !opp.conn) {
+    ctx.send(p, { t: 'peer', online: false, wait: Math.max(0, Math.round(GRACE_SECS - (ctx.now() - opp.offAt))) });
+  }
+}
+
+/**
+ * 完整同步（重连时，或请求重复、跳号、过期时，protocol-v4.md 第 7.4 条）：把整局动作连同局编号、状态版本与已处理的请求序号回放给客户端，
+ * 再以当前版本补上点目确认、终局结果与排位结算、待回应的申请与计时
+ */
+export function resync(ctx: ServerContext, r: Room, p: Player) {
+  const sv = r.sv;
+  sendStart(ctx, r, p);
+  ctx.send(p, { t: 'sync', acts: r.acts.slice(), match: r.gameId, sv, seq: p.seq });
+  for (const color of [BLACK, WHITE]) if (r.agreed[color]) ctx.send(p, { t: 'agreed', color, sv });
+  if (r.state === RoomState.Over) {
+    // 掉线期间对局已经结束：补发结果与排位结算
+    if (r.result) ctx.send(p, { t: 'over', ...r.result, sv });
+    const rt = r.rated[colorOf(r, p)];
+    if (rt) ctx.send(p, { t: 'rated', ...rt });
+  }
+  if (r.ask) ctx.send(p, { t: 'ask', kind: r.ask, from: r.askFrom, sv });
+  sendPresence(ctx, r, p);
+  if (r.state === RoomState.Over) return;
   ctx.send(p, { t: 'turn', color: r.g.cur.toMove, secs: r.deadline ? Math.round(r.deadline - ctx.now()) : -1 });
 }

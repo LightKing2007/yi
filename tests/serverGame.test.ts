@@ -22,10 +22,11 @@ describe('入站消息校验', () => {
     jia.drain();
     yi.drain();
     for (const m of [
-      { t: 'move', x: 7.5, y: 7 },
-      { t: 'move', x: '7', y: 7 },
-      { t: 'move', x: -0, y: 7 },
-      { t: 'resign', extra: 1, ...junk(17) },
+      { t: 'move', x: 7.5, y: 7, seq: 1, sv: 0 },
+      { t: 'move', x: '7', y: 7, seq: 1, sv: 0 },
+      { t: 'move', x: -0, y: 7, seq: 1, sv: 0 },
+      { t: 'move', x: 7, y: 7, seq: 1 },
+      { t: 'resign', seq: 1, sv: 0, extra: 1, ...junk(17) },
     ]) {
       raw(jia, m);
       expect(jia.inbox).toEqual([{ t: 'error', code: 'proto.invalid-message', level: 'E4' }]);
@@ -33,7 +34,7 @@ describe('入站消息校验', () => {
     }
     expect(yi.inbox).toEqual([]);
     jia.send({ t: 'move', x: 0, y: 0 }); // 第一手仍由甲来下，说明非法的那几手没有被当成 (0, 0) 落下
-    expect(yi.expect('moved')).toEqual({ t: 'moved', x: 0, y: 0 });
+    expect(yi.expect('moved')).toEqual({ t: 'moved', x: 0, y: 0, sv: 1 });
   });
 
   it('取值超出范围的匹配与开房间请求被拒，不再被改成默认值', () => {
@@ -90,7 +91,7 @@ function drawResignRematch(jia: Client, yi: Client) {
   expect(jia.expect('answer', m => m.kind === 'draw')).toBeTruthy();
   yi.send({ t: 'resign' });
   const over = must(jia.expect('over'), '终局消息');
-  expect(over).toEqual({ t: 'over', winner: 1, reason: 'resign' });
+  expect(over).toEqual({ t: 'over', winner: 1, reason: 'resign', sv: expect.any(Number) });
   expect(yi.expect('over')).toBeTruthy();
 
   // 再来一局：交换先后手
@@ -131,7 +132,7 @@ function renjuFiveLeave(jia: Client, yi: Client) {
     [jia, 12, 0],
   ]);
   yi.send({ t: 'move', x: 12, y: 12 });
-  expect(jia.expect('over')).toEqual({ t: 'over', winner: 1, reason: 'five' });
+  expect(jia.expect('over')).toEqual({ t: 'over', winner: 1, reason: 'five', sv: expect.any(Number) });
   jia.send({ t: 'leave' });
   expect(yi.expect('left')).toBeTruthy();
   yi.send({ t: 'rematch' });
@@ -173,7 +174,7 @@ describe('五子棋对局', () => {
     startGame(jia, yi);
     jia.send({ t: 'move', x: 7, y: 7 });
     jia.send({ t: 'leave' });
-    expect(yi.expect('over')).toEqual({ t: 'over', winner: 2, reason: 'left' });
+    expect(yi.expect('over')).toEqual({ t: 'over', winner: 2, reason: 'left', sv: expect.any(Number) });
     expect(yi.expect('left')).toBeTruthy();
   });
 });
@@ -218,7 +219,7 @@ describe('断线', () => {
       jia.send({ t: 'ping' });
       advance(10);
     }
-    expect(jia.expect('over')).toEqual({ t: 'over', winner: 1, reason: 'disconnect' });
+    expect(jia.expect('over')).toEqual({ t: 'over', winner: 1, reason: 'disconnect', sv: expect.any(Number) });
   });
 });
 
@@ -241,12 +242,12 @@ describe('超时', () => {
     jia.send({ t: 'undo' });
     yi.drain();
     idle(21, jia, yi);
-    expect(jia.expect('answer')).toEqual({ t: 'answer', kind: 'undo', ok: false });
+    expect(jia.expect('answer')).toEqual({ t: 'answer', kind: 'undo', from: 1, ok: false, sv: 3 }); // 落子 1、申请 2、回应 3
     expect(yi.expect('turn')?.color).toBe(2); // 回应后重新计时
     idle(29, jia, yi);
     expect(jia.has('over')).toBe(false);
     idle(2, jia, yi);
-    expect(jia.expect('over')).toEqual({ t: 'over', winner: 1, reason: 'timeout' });
+    expect(jia.expect('over')).toEqual({ t: 'over', winner: 1, reason: 'timeout', sv: 4 });
   });
 });
 
@@ -268,7 +269,7 @@ describe('围棋对局', () => {
     jia.send({ t: 'agree' });
     expect(yi.expect('agreed')?.color).toBe(1);
     yi.send({ t: 'agree' });
-    expect(jia.expect('over')).toEqual({ t: 'over', winner: 2, reason: 'score' }); // 白 45+7.5 胜黑 27
+    expect(jia.expect('over')).toEqual({ t: 'over', winner: 2, reason: 'score', sv: expect.any(Number) }); // 白 45+7.5 胜黑 27
   });
 
   it('点目时恢复对局', () => {
@@ -281,6 +282,6 @@ describe('围棋对局', () => {
     yi.send({ t: 'resume' });
     expect(jia.expect('resumed')).toBeTruthy();
     jia.send({ t: 'move', x: 4, y: 4 });
-    expect(yi.expect('moved')).toEqual({ t: 'moved', x: 4, y: 4 });
+    expect(yi.expect('moved')).toEqual({ t: 'moved', x: 4, y: 4, sv: 4 }); // 停 1、停 2、恢复 3
   });
 });

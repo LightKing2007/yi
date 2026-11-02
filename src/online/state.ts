@@ -113,7 +113,13 @@ export const st = {
   askIn: null as AskKind | null, // 对方向我提出的申请
   askOut: null as AskKind | null, // 我提出、等对方回应的申请
   askInAt: 0,
+  replied: false, // 已回应 askIn，等服务端的 answer
   agreed: [false, false, false], // 点目时各方是否已确认
+  // 状态版本与请求序号（protocol-v4.md 第 7 章）
+  match: 0, // 局编号（start、sync 带来）
+  sv: 0, // 所知的状态版本
+  seq: 0, // 本连接上最近编出的请求序号
+  resyncing: false, // 已请求完整同步，还没收到
   over: false,
   winner: 0,
   overReason: '' as OverReason | '',

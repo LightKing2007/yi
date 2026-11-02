@@ -61,7 +61,7 @@ describe('限流与违规（API-042 至 API-046）', () => {
     const back = new Client(srv, '甲', jia.token, jia.uid);
     expect(back.closeCode).toBe(CLOSE_CODE.policy);
     idle(61, yi);
-    expect(yi.expect('over')).toEqual({ t: 'over', winner: 2, reason: 'disconnect' });
+    expect(yi.expect('over')).toEqual({ t: 'over', winner: 2, reason: 'disconnect', sv: expect.any(Number) });
   });
 
   it('违规分散在 60 秒以外的不累计', () => {
