@@ -1,6 +1,6 @@
 /** 绘制基础：纯色形状、棋盘木纹贴图、柔和投影、棋子与棋子影子、特效光晕 / 圆环 / 光束 */
 import { BLACK } from '../core/types';
-import { Gfx, Program, type RenderTarget, type RGBA, WHITE, Z4 } from './gl';
+import { Gfx, Program, type RenderTarget, type RGBA, WHITE } from './gl';
 import { BG_FS, BOWL_FS, DUSKMIX_FS, DUSK_FS, FX_FS, SHADOW_FS, SHAPE_FS, STONE3D_FS, STONE3D_VS, STONE_FS, TEX_FS, WOOD_FS } from './shaders';
 import type { Rect } from './layout';
 
@@ -222,5 +222,3 @@ export function matMul3(a: Mat3, b: Mat3): Mat3 {
   const col = (x: number, y: number, z: number) => [a0 * x + a3 * y + a6 * z, a1 * x + a4 * y + a7 * z, a2 * x + a5 * y + a8 * z] as const;
   return [...col(b[0], b[1], b[2]), ...col(b[3], b[4], b[5]), ...col(b[6], b[7], b[8])];
 }
-
-export { Z4 };

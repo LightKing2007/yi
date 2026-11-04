@@ -131,12 +131,9 @@ export function goEndUpdate(L: Layout, now: number, dt: number) {
   }
 }
 
-/** 棋子下方：胜方棋子与领地的金色光晕，此后一圈圈光波从中心向外流过 */
-export function drawGoEndUnder(p: Painter, L: Layout, now: number) {
-  const g = game,
-    t = goEndClock(now);
-  if (t < 0 || settings.value.fx === 0) return;
-  const c = (g.N - 1) / 2;
+/** 两遍遍历胜方的棋子与领地：第一遍普通混合，第二遍加法混合叠加发光；each 收到该点的到达进度 da 与遍数 pass */
+function forEachWinnerPoint(p: Painter, t: number, each: (x: number, y: number, da: number, pass: number) => void) {
+  const g = game;
   for (let pass = 0; pass < 2; pass++) {
     if (pass) p.blend('add');
     for (let x = 0; x < g.N; x++)
@@ -144,37 +141,39 @@ export function drawGoEndUnder(p: Painter, L: Layout, now: number) {
         if (!winnerOwns(x, y)) continue;
         const da = t - goArrival(x, y);
         if (da < 0) continue;
-        const dist = Math.hypot(x - c, y - c);
-        const wave = Math.pow(0.5 + 0.5 * Math.sin(t * 2.4 - dist * 0.55), 6) * Math.min(1, da / 0.3);
-        const stone = g.b(x, y) !== 0;
-        const k = stone
-          ? Math.min(1, da / 0.15) * (0.22 + 0.25 * wave) + 0.9 * Math.exp(-da * 3)
-          : Math.min(1, da / 0.15) * (0.16 + 0.25 * wave) + 0.8 * Math.exp(-da * 3);
-        const q = pt(L, x, y);
-        p.fxGlow(q.x, q.y, L.R * (stone ? 2 : 1.5), pass ? 0.3 : 0.75, k * (pass ? 0.8 : 0.4));
+        each(x, y, da, pass);
       }
     if (pass) p.blend('alpha');
   }
 }
 
+/** 棋子下方：胜方棋子与领地的金色光晕，此后一圈圈光波从中心向外流过 */
+export function drawGoEndUnder(p: Painter, L: Layout, now: number) {
+  const t = goEndClock(now);
+  if (t < 0 || settings.value.fx === 0) return;
+  const c = (game.N - 1) / 2;
+  forEachWinnerPoint(p, t, (x, y, da, pass) => {
+    const dist = Math.hypot(x - c, y - c);
+    const wave = Math.pow(0.5 + 0.5 * Math.sin(t * 2.4 - dist * 0.55), 6) * Math.min(1, da / 0.3);
+    const stone = game.b(x, y) !== 0;
+    const k = stone
+      ? Math.min(1, da / 0.15) * (0.22 + 0.25 * wave) + 0.9 * Math.exp(-da * 3)
+      : Math.min(1, da / 0.15) * (0.16 + 0.25 * wave) + 0.8 * Math.exp(-da * 3);
+    const q = pt(L, x, y);
+    p.fxGlow(q.x, q.y, L.R * (stone ? 2 : 1.5), pass ? 0.3 : 0.75, k * (pass ? 0.8 : 0.4));
+  });
+}
+
 /** 棋子与领地标记上方：冲击波与扫过时的闪光 */
 export function drawGoEndOver(p: Painter, L: Layout, now: number) {
-  const g = game,
-    t = goEndClock(now);
+  const t = goEndClock(now);
   if (t < 0 || settings.value.fx === 0) return;
-  const c = (g.N - 1) / 2;
-  for (let pass = 0; pass < 2; pass++) {
-    if (pass) p.blend('add');
-    for (let x = 0; x < g.N; x++)
-      for (let y = 0; y < g.N; y++) {
-        if (!winnerOwns(x, y)) continue;
-        const da = t - goArrival(x, y);
-        if (da < 0 || da > 0.8) continue;
-        const q = pt(L, x, y);
-        p.fxGlow(q.x, q.y, L.R * (g.b(x, y) ? 1.5 : 1), pass ? 0.1 : 0.7, (pass ? 0.9 : 0.45) * Math.exp(-da * 6));
-      }
-    if (pass) p.blend('alpha');
-  }
+  const c = (game.N - 1) / 2;
+  forEachWinnerPoint(p, t, (x, y, da, pass) => {
+    if (da > 0.8) return;
+    const q = pt(L, x, y);
+    p.fxGlow(q.x, q.y, L.R * (game.b(x, y) ? 1.5 : 1), pass ? 0.1 : 0.7, (pass ? 0.9 : 0.45) * Math.exp(-da * 6));
+  });
   if (settings.value.fx === 2) {
     const cx = L.ox + c * L.cell,
       cy = L.oy + c * L.cell;
