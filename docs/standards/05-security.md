@@ -3,8 +3,8 @@
 | 项目 | 内容 |
 |---|---|
 | 所属 | 弈 · 工程规范（YI-STD-001），总则见 [00-general.md](00-general.md) |
-| 文件版本 | 1.1.18 |
-| 修订日期 | 2026-11-01 |
+| 文件版本 | 1.1.19 |
+| 修订日期 | 2026-11-04 |
 | 规则前缀 | `SEC` |
 
 参考：ISO/IEC 27001:2022、ISO/IEC 27002:2022；GB/T 22239—2019（第二级）；GB/T 20984—2022；OWASP ASVS 5.0；Electron Security Checklist；CIS Ubuntu Linux 24.04 LTS Benchmark；ISO/IEC 29147:2018、ISO/IEC 30111:2019。
@@ -40,9 +40,9 @@
 | 编号 | 等级 | 规定 | 现状 |
 |---|---|---|---|
 | SEC-020 | A | 令牌统一以 `crypto.getRandomValues` 生成，长度 ≥ 128 位；重连令牌在每次重连成功后必须轮换 | 满足（P1-07，#47：重连令牌在每次重连成功后轮换） |
-| SEC-021 | A | 登录会话有效期 ≤ 30 日，闲置 7 日失效；修改口令后，该账号的全部会话必须立即失效 | 不适用 |
+| SEC-021 | A | 登录会话有效期 ≤ 30 日，闲置 7 日失效；修改口令后，该账号的全部会话必须立即失效 | 满足（`server/authPolicy.ts` 的 `SESSION_LIFETIME_MS` 为 30 日、`SESSION_IDLE_MS` 为 7 日，边界时刻不再续活；`server/loginSessions.ts` 验证时只查散列；改密与重置在认证事务中撤销全部会话，`server/authentication.ts`；`tests/loginSessions.test.ts` 覆盖期限与闲置失效；4.0.0 已上线） |
 | SEC-022 | A | 令牌比较统一使用常量时间比较 `crypto.timingSafeEqual`；按令牌查找时，统一以令牌的散列为键查表，严禁线性遍历 | 满足（P1-07，#47：常量时间比较，以令牌的 SHA-256 散列为键查表） |
-| SEC-023 | A | 登录失败按账号与 IP 双维度限速：同一账号 15 分钟内失败 5 次锁定 15 分钟；同一 IP 每分钟 ≤ 10 次登录请求 | 不适用 |
+| SEC-023 | A | 登录失败按账号与 IP 双维度限速：同一账号 15 分钟内失败 5 次锁定 15 分钟；同一 IP 每分钟 ≤ 10 次登录请求 | 满足（`server/authPolicy.ts`：`LOGIN_FAILURE_WINDOW_MS` 15 分钟、`LOGIN_FAILURES` 5 次、`LOGIN_LOCK_MS` 15 分钟、`LOGIN_IP_ATTEMPTS` 每分钟 10 次；`server/authLimits.ts` 以数据库持久化计数，`tests/authLimits.test.ts` 覆盖；4.0.0 已上线） |
 
 ## 4 桌面端安全
 
@@ -72,7 +72,7 @@
 | 编号 | 等级 | 规定 | 现状 |
 |---|---|---|---|
 | SEC-050 | A | 严禁在仓库中提交任何密钥、令牌、口令、私钥、`.env` 文件；CI 必须运行密钥扫描（gitleaks），发现即阻断 | 满足（P1-03，#24：CI 以 gitleaks 扫描提交历史；P1-19 起为规则集 `main` 的必需检查） |
-| SEC-051 | A | 服务器上的密钥文件权限统一为 `0600`，属主为使用它的服务用户；环境变量中的密钥统一通过 systemd 的 `LoadCredential=` 传入，严禁写入 `Environment=` | 部分满足（账号功能的密钥与发信凭据经 `LoadCredential=` 传入：`scripts/server/yi-accounts.conf`、`server/accountSecrets.ts`；尚未在服务器上启用。凭据文件属主为 root、权限 0600，由 systemd 交给服务读取，服务用户不能直接读源文件） |
+| SEC-051 | A | 服务器上的密钥文件权限统一为 `0600`，属主为使用它的服务用户；环境变量中的密钥统一通过 systemd 的 `LoadCredential=` 传入，严禁写入 `Environment=` | 满足（账号功能的密钥与发信凭据经 `LoadCredential=` 传入：`scripts/server/yi-accounts.conf`、`server/accountSecrets.ts`；2026-11-02 随 4.0.0 上线安装，启动日志出现 `account.enabled`。凭据文件属主为 root、权限 0600，由 systemd 交给服务读取，服务用户不能直接读源文件） |
 | SEC-052 | A | CI 中的密钥只允许存放在 GitHub Secrets，并只授予需要它的 job；发布用的 SSH 部署密钥必须是仅能执行上线命令的受限密钥（`command=` 限制） | 不适用 |
 | SEC-053 | D | 所有密钥每 365 日轮换一次；人员变动或疑似泄露时，必须在 24 小时内轮换 | 不适用 |
 
