@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { agreementPages } from '../server/agreementPage';
+import { donatePage } from '../server/donatePage';
 import { notFoundPage } from '../server/notFoundPage';
 import { supportPage, supportPages } from '../server/supportPage';
 
@@ -18,4 +19,5 @@ function write(name: string, body: Buffer | string) {
 for (const [route, body] of agreementPages(__APP_VERSION__)) write(`${route}.html`, body);
 write('support.html', supportPage(__APP_VERSION__, '', true));
 for (const [route, body] of supportPages(__APP_VERSION__)) write(`${route}.html`, body);
+write('donate.html', donatePage(__APP_VERSION__));
 write('404.html', notFoundPage(__APP_VERSION__));

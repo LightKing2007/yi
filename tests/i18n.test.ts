@@ -37,6 +37,7 @@ const SKIPPED_FILES: Record<string, string> = {
   'server/db/index.ts': '数据库无法打开或迁移失败的诊断信息，只写入服务端日志',
   'server/page.ts': '网站页面只有中文，标点由 I18N-011 检查',
   'server/homePage.ts': '网站页面只有中文，标点由 I18N-011 检查',
+  'server/donatePage.ts': '网站捐赠页只有中文，标点由 I18N-011 检查',
   'server/downloadPage.ts': '网站页面只有中文，标点由 I18N-011 检查',
   'server/agreementPage.ts': '网站页面只有中文，标点由 I18N-011 检查',
   'server/supportPage.ts': '网站支持页只有中文，正文与标点由 I18N-011 检查',

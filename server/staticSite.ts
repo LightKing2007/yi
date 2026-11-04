@@ -37,6 +37,6 @@ export function readStaticSite(root: string): StaticSite | null {
   }
   const missing = pages.get('404');
   pages.delete('404');
-  if (!missing || !pages.has('agreement') || !pages.has('support') || !assets.has('support-search.js')) return null;
+  if (!missing || !pages.has('agreement') || !pages.has('support') || !pages.has('donate') || !assets.has('support-search.js')) return null;
   return { pages, missing, assets };
 }

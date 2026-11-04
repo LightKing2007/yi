@@ -6,7 +6,7 @@
 
 文书统一入口为 [文书维护说明](../../server/legal/README.md)。修改三份 Markdown 或 `server/agreementText.ts` 后，按项目流程创建 PR，检查通过后合并。帮助与支持采用“目录 + 独立问题页”：每个问题在 `server/support/` 下各有一份 Markdown，文件头部的 `title` 与 `category` 提供标题和分类；新增文件后在 `server/supportSources/` 的对应分类模块登记一次，即自动进入目录与全文检索。目录检索由 `scripts/support-search.ts` 构建为同源外部脚本，无脚本时仍以原生 GET 表单的 `q` 参数回退检索；页面结构和独立阅读页位于 `server/supportPage.ts`，复用文书布局与受限 Markdown 渲染器。网页渲染代码仍集中在 `server/`，两个程序的构建入口和实际依赖分开；目录名称不代表网站运行于联机进程。
 
-全站设计、组件和样式边界见 [网页端前端规范](../standards/11-website-frontend.md)。页面统一使用 `server/page.ts` 外壳、`server/webUi.ts` 组件和 `server/webTokens.ts` 设计变量；`scripts/site-enhance.ts` 提供全站磁性按钮、手机导航关闭方式与同源文档预取，仅为可选增强，不承载内容或必要功能。新增网页模块必须登记构建白名单，新增脚本还须登记资源白名单。
+全站设计、组件和样式边界见 [网页端前端规范](../standards/11-website-frontend.md)。页面统一使用 `server/page.ts` 外壳、`server/webUi.ts` 组件和 `server/webTokens.ts` 设计变量；`scripts/site-enhance.ts` 提供全站磁性按钮、手机导航关闭方式与同源文档预取，仅为可选增强，不承载内容或必要功能。新增网页模块必须登记构建白名单，新增脚本还须登记资源白名单。支持作者页位于 `server/donatePage.ts`；真实收款地址确认后填入 `DONATION_URL`，留空时只显示“捐赠渠道接入中”，不得设置虚假付款链接。
 
 本机用 `npm run build:website` 构建，以 `YI_WEB_FILES=/安装程序目录 YI_WEB_PAGES=dist-website/site node dist-website/web.cjs` 预览。安装程序目录可为空，支持与文书仍应可读。构建时禁止网站引入数据库或账号模块；`scripts/check-website.mjs` 自动检查全部静态 HTML 的外部 `defer` 脚本、内联事件、重复 ID、页内锚点、图片 `alt` 与新窗口链接隔离，检查失败则不生成发布包。联机包不再嵌入网页和资源。
 

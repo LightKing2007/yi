@@ -6,6 +6,7 @@ import { expect, it } from 'vitest';
 import { readStaticSite } from '../server/staticSite';
 import { supportPage, supportPages } from '../server/supportPage';
 import { agreementPages } from '../server/agreementPage';
+import { donatePage } from '../server/donatePage';
 import { startWebsite } from '../server/websiteHost';
 
 function fixture() {
@@ -16,6 +17,7 @@ function fixture() {
     fs.writeFileSync(file, body);
   }
   fs.writeFileSync(path.join(root, 'support.html'), supportPage('static-test', '', true));
+  fs.writeFileSync(path.join(root, 'donate.html'), donatePage('static-test'));
   fs.mkdirSync(path.join(root, 'support'));
   for (const [route, body] of supportPages('static-test')) fs.writeFileSync(path.join(root, `${route}.html`), body);
   fs.writeFileSync(path.join(root, '404.html'), '<!doctype html><title>static-missing</title>');
@@ -30,6 +32,7 @@ it('只接受完整的静态目录，并把 HTML 文件名还原成现有干净�
     const site = readStaticSite(root);
     expect(site?.pages.has('agreement/privacy-policy')).toBe(true);
     expect(site?.pages.has('support/black-screen-webgl')).toBe(true);
+    expect(site?.pages.get('donate')?.toString()).toContain('一杯咖啡');
     expect(site?.pages.has('404')).toBe(false);
     expect(site?.missing.toString()).toContain('static-missing');
     expect(site?.assets.get('support-search.js')?.toString()).toBe('static-search-script');
