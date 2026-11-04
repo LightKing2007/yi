@@ -1,5 +1,6 @@
 /** 协议页面的真实 HTTP：空安装目录也可阅读，正文不执行脚本，主页与下载页入口可达。 */
 import { randomUUID } from 'node:crypto';
+import fs from 'node:fs';
 import { createServer } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
@@ -119,6 +120,22 @@ it('主页导航不显示协议，页脚使用完整名称且移除校验清单�
     expect(download).toContain('href="/agreement/privacy-policy">隐私政策</a>');
     expect(download).toContain('对局记录');
   });
+});
+
+it('文书版本与发布决定、运维配置说明一致（R2 回归）', () => {
+  const publication = fs.readFileSync(path.resolve(__dirname, '../docs/plan/agreement-publication.md'), 'utf8');
+  expect(publication).toContain(`版本 ${AGREEMENT_INFO.version}`);
+  expect(publication).toContain('生效日期为 2026 年 11 月 2 日');
+  expect(AGREEMENT_INFO.updated).toBe('2026-11-02');
+  // 版本变化时须同步系统服务的同意版本；步骤写在网站维护规程中
+  const procedure = fs.readFileSync(path.resolve(__dirname, '../docs/procedures/website.md'), 'utf8');
+  expect(procedure).toContain('AGREEMENT_INFO');
+  expect(procedure).toContain('YI_PRIVACY_VERSION');
+  expect(procedure).toContain('YI_TERMS_VERSION');
+  // 仓库中的 systemd 附加配置不在发布前写死版本号，避免与官网正式版本不一致
+  const dropIn = fs.readFileSync(path.resolve(__dirname, '../scripts/server/yi-accounts.conf'), 'utf8');
+  expect(dropIn).toContain('Environment=YI_PRIVACY_VERSION=\n');
+  expect(dropIn).toContain('Environment=YI_TERMS_VERSION=\n');
 });
 
 it('统一配置的修改同步到目录、页脚和正文信息，日期只填写一次且显示信息经过转义', async () => {

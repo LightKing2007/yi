@@ -9,6 +9,7 @@ import { esc } from './webHtml';
 import type { Detected } from './platform';
 
 export { esc } from './webHtml';
+export type { Detected } from './platform';
 
 /** 页面上的一个安装程序；sha256 为 null 表示校验值尚在计算 */
 export interface PagePkg {
@@ -72,6 +73,8 @@ export interface ShellSpec {
   script?: string;
   /** 页脚内容层之前的装饰；由页面生成，不进入无障碍树 */
   footerVisual?: string;
+  /** 页脚变体类名；支持作者页据此使用深复古红底色（11-website-frontend 6.1） */
+  footerClass?: string;
 }
 
 /** 完整的 HTML 文档：头部、顶栏、正文与页脚 */
@@ -92,7 +95,7 @@ export function shell(spec: ShellSpec) {
 <header class="bar"><a class="logo" href="/" aria-label="弈 主页"><span class="glyph"></span></a>
 ${siteNavigation(spec.nav, spec.current)}</header>
 <main id="main">${spec.body}</main>
-<footer class="foot">${spec.footerVisual ?? ''}<div class="foot-in">
+<footer class="foot${spec.footerClass ? ` ${esc(spec.footerClass)}` : ''}">${spec.footerVisual ?? ''}<div class="foot-in">
 <div class="foot-brand"><span class="glyph"></span><span class="foot-motto">以木为枰，以石为子</span></div>
 <div class="foot-links"><a href="/">主页</a><a href="/download/">下载</a><a href="/donate">支持作者</a><a href="/support">帮助与支持</a>
 <a href="/agreement">${esc(AGREEMENT_INFO.title)}</a>

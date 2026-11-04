@@ -1,8 +1,11 @@
 /** 支持作者页：真实成本与自愿约定完整可读；未配置收款渠道时不出现虚假付款入口。 */
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { DONATION_URL, donatePage } from '../server/donatePage';
 import { startWebsite } from '../server/websiteHost';
 
+const ROOT = path.resolve(__dirname, '..');
 const EXPECTED_COPY = [
   '一杯咖啡',
   '让这盘棋继续下去',
@@ -17,6 +20,12 @@ const EXPECTED_COPY = [
   '谢谢你',
 ];
 
+/** 04-api.md 中一条规则的数据行；找不到时返回空串，让断言给出明确失败 */
+function ruleRow(id: string): string {
+  const text = fs.readFileSync(path.join(ROOT, 'docs/standards/04-api.md'), 'utf8');
+  return text.split('\n').find(line => line.startsWith(`| ${id} |`)) ?? '';
+}
+
 describe('支持作者页', () => {
   it('包含两行中文标题、运营去向、支持约定、常见问题与致谢，装饰不进入无障碍树', () => {
     const html = donatePage('test');
@@ -24,6 +33,8 @@ describe('支持作者页', () => {
     for (const text of EXPECTED_COPY) expect(html).toContain(text);
     expect(html.match(/class="donate-title-line"/g)).toHaveLength(2);
     expect(html.match(/class="heart-ocean" aria-hidden="true"/g)).toHaveLength(1);
+    expect(html).toContain('<div class="heart-ocean" aria-hidden="true">' + '<i></i>'.repeat(22) + '</div>');
+    expect(html).toContain('<footer class="foot foot-heart">');
     expect(html).toContain('<details class="donate-question" open>');
     expect(html.match(/<details class="donate-question"/g)).toHaveLength(3);
     for (const removed of [
@@ -43,6 +54,15 @@ describe('支持作者页', () => {
       expect(html).not.toContain(removed);
     expect(html).toContain('<script defer src="/assets/site-enhance.js?v=test"></script>');
     expect(html).not.toContain('onclick');
+  });
+
+  it('不写内联样式：爱心海洋的位置与节奏全部由样式表的 nth-child 规则给出', () => {
+    const html = donatePage('test');
+    expect(html).not.toMatch(/\sstyle\s*=/i);
+    expect(html.match(/class="heart-ocean"/g)).toHaveLength(1);
+    for (let n = 1; n <= 22; n++) expect(html).toContain(`.heart-ocean i:nth-child(${n})`);
+    expect(html).toContain('@media (prefers-reduced-motion: no-preference)');
+    expect(html).toContain('.heart-ocean i { animation: heart-float var(--duration) linear var(--delay) infinite; }');
   });
 
   it('收款渠道留空时只显示接入状态；配置后必须显式使用真实外链', () => {
@@ -67,4 +87,11 @@ describe('支持作者页', () => {
       await site.close();
     }
   });
+});
+
+it('API-060 白名单包含 /donate，且文书已不是草案', () => {
+  const whitelist = ruleRow('API-060');
+  expect(whitelist).toContain('`/donate`（支持作者页');
+  expect(whitelist).not.toContain('尚未生效的草案');
+  expect(whitelist).toContain('正文为正式版，自 2026-11-02 起生效');
 });

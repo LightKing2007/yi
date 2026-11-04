@@ -43,6 +43,27 @@ it('只接受完整的静态目录，并把 HTML 文件名还原成现有干净�
   }
 });
 
+it('静态目录不完整时回退动态页面，增强脚本仍从发布目录的 assets/ 读取', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'yi-static-partial-'));
+  fs.mkdirSync(path.join(root, 'assets'));
+  fs.writeFileSync(path.join(root, 'assets/site-enhance.js'), 'static-enhance');
+  const site = await startWebsite({ port: 0, files: path.join(root, 'none'), pages: root, commit: 'test', now: () => 1 });
+  const base = `http://127.0.0.1:${site.port}`;
+  try {
+    expect(readStaticSite(root)).toBeNull();
+    const donate = await fetch(`${base}/donate`);
+    expect(donate.status).toBe(200);
+    expect(await donate.text()).toContain('一杯咖啡');
+    const enhance = await fetch(`${base}/assets/site-enhance.js?v=test`);
+    expect([enhance.status, enhance.headers.get('content-type'), await enhance.text()]).toEqual([200, 'text/javascript; charset=utf-8', 'static-enhance']);
+    const search = await fetch(`${base}/assets/support-search.js?v=test`);
+    expect(search.status).toBe(404);
+  } finally {
+    await site.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 it('静态目录响应保留搜索地址、CSP、HEAD、404 状态以及动态主页和下载页', async () => {
   const root = fixture();
   const site = await startWebsite({ port: 0, files: path.join(root, 'none'), pages: root, commit: 'test', now: () => 1 });

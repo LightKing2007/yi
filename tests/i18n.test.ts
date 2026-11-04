@@ -47,6 +47,7 @@ const SKIPPED_FILES: Record<string, string> = {
   'server/agreementStyle.ts': '网站页面的样式',
   'server/pageStyle.ts': '网站页面的样式',
   'server/homeStyle.ts': '网站页面的样式',
+  'server/donateStyle.ts': '网站页面的样式',
   'server/geometry.ts': '网站页面的样式',
   'server/ring.ts': '网站页面只有中文，标点由 I18N-011 检查',
   'server/downloadStyle.ts': '网站页面的样式',
