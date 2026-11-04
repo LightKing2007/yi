@@ -13,7 +13,8 @@ function release(dir: string, digit: string) {
   fs.mkdirSync(path.join(dir, 'site/assets'), { recursive: true });
   fs.writeFileSync(path.join(dir, 'web.cjs'), `website ${digit}`);
   fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({ service: 'yi-web', commit }));
-  for (const name of ['agreement.html', 'support.html', '404.html', 'assets/support-search.js']) fs.writeFileSync(path.join(dir, 'site', name), name);
+  for (const name of ['agreement.html', 'support.html', 'donate.html', '404.html', 'assets/support-search.js'])
+    fs.writeFileSync(path.join(dir, 'site', name), name);
   execFileSync('tar', ['-cf', path.join(dir, 'site.tar'), '-C', path.join(dir, 'site'), '.']);
   fs.writeFileSync(
     path.join(dir, 'SHA256SUMS'),

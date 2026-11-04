@@ -55,6 +55,8 @@ const allowed = new Set([
   'legalMarkdown',
   'downloadPage',
   'downloadStyle',
+  'donatePage',
+  'donateStyle',
   'homePage',
   'homeStyle',
   'board',

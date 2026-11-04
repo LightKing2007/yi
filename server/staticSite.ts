@@ -9,10 +9,30 @@ export interface StaticSite {
   assets: ReadonlyMap<string, Buffer>;
 }
 
+/** 静态目录允许直接提供的增强脚本；白名单与 server/files.ts 的 ASSET_TYPES 对应。 */
+const STATIC_SCRIPTS = ['support-search.js', 'site-enhance.js'] as const;
+
+/**
+ * 读取静态目录 `assets/` 下的增强脚本；目录或单个脚本缺失时跳过，不抛异常。
+ * 静态页面不完整时仍可用它提供增强脚本，避免回退到动态页面后脚本 404（R7）。
+ */
+export function readStaticAssets(root: string): ReadonlyMap<string, Buffer> {
+  const assets = new Map<string, Buffer>();
+  for (const name of STATIC_SCRIPTS) {
+    try {
+      const file = path.join(root, 'assets', name);
+      if (fs.statSync(file).isFile()) assets.set(name, fs.readFileSync(file));
+    } catch {
+      // 脚本不存在或目录不可读：增强效果不出现，页面内容与功能不受影响
+    }
+  }
+  return assets;
+}
+
 /** 只读取常规文件，不跟随目录中的符号链接；路由来自构建产物的相对文件名。 */
 export function readStaticSite(root: string): StaticSite | null {
   const pages = new Map<string, Buffer>();
-  const assets = new Map<string, Buffer>();
+  let assets: ReadonlyMap<string, Buffer>;
   try {
     const visit = (directory: string, prefix = '') => {
       for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
@@ -23,20 +43,12 @@ export function readStaticSite(root: string): StaticSite | null {
       }
     };
     visit(root);
-    const script = path.join(root, 'assets/support-search.js');
-    if (fs.statSync(script).isFile()) assets.set('support-search.js', fs.readFileSync(script));
-    /** 可选增强包：缺失不影响静态站完整性，无脚本时页面功能完整 */
-    try {
-      const enhance = path.join(root, 'assets/site-enhance.js');
-      if (fs.statSync(enhance).isFile()) assets.set('site-enhance.js', fs.readFileSync(enhance));
-    } catch {
-      /* 增强包不存在时忽略 */
-    }
+    assets = readStaticAssets(root);
   } catch {
     return null;
   }
   const missing = pages.get('404');
   pages.delete('404');
-  if (!missing || !pages.has('agreement') || !pages.has('support') || !assets.has('support-search.js')) return null;
+  if (!missing || !pages.has('agreement') || !pages.has('support') || !pages.has('donate') || !assets.has('support-search.js')) return null;
   return { pages, missing, assets };
 }

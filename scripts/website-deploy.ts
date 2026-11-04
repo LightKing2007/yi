@@ -119,7 +119,7 @@ export async function installWebsite(ctx: WebsiteDeployment, source: string, tag
     const site = path.join(stage, 'site');
     fs.mkdirSync(site, { mode: DIRECTORY_MODE });
     ctx.extract(path.join(stage, 'site.tar'), site);
-    for (const name of ['agreement.html', 'support.html', '404.html', 'assets/support-search.js']) {
+    for (const name of ['agreement.html', 'support.html', 'donate.html', '404.html', 'assets/support-search.js']) {
       if (!fs.statSync(path.join(site, name)).isFile()) throw new Error(`静态官网缺项：${name}`);
     }
     const commit = websiteCommit(path.join(stage, 'manifest.json'));

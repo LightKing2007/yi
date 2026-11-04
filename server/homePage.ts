@@ -173,6 +173,7 @@ export function homePage(pkgs: PagePkg[], detected: Detected, assetVersion: stri
       ['#features', '功能'],
       ['#details', '细节'],
       [DOWNLOAD, '下载'],
+      ['/donate', '支持作者'],
     ],
     style: homeStyle(),
     body: hero(pkgs, detected) + games() + modes() + featureRing() + details() + finale(pkgs, detected),
