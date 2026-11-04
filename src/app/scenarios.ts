@@ -55,6 +55,40 @@ function denseBoard() {
   game.cur.moves = s.length;
 }
 
+/** 场景的固定开头：先进入对局界面，棋罐移开后再执行 setup（摆局面、触发动作） */
+function gameSteps(setup: () => void): [number, () => void][] {
+  return [
+    [0, () => goScreen(Screen.Game)],
+    [GAME, setup],
+  ];
+}
+
+/** 开一局并依次落子（经过规则），用来摆出常见的开局 */
+function movesSetup(type: GameType, size: number, moves: [number, number][]): () => void {
+  return () => {
+    newGame(type, size);
+    play(moves);
+  };
+}
+
+/** 认输与离开对局两个场景共用的八手棋 */
+const EIGHT_MOVES: [number, number][] = [
+  [7, 7],
+  [8, 8],
+  [6, 8],
+  [8, 6],
+  [9, 7],
+  [6, 6],
+  [5, 5],
+  [10, 10],
+];
+
+/** 摆满棋盘的连拍场景共用的开局 */
+function denseSetup() {
+  newGame(GameType.Gomoku, 15);
+  denseBoard();
+}
+
 const SCENARIOS: Record<string, Scenario> = {
   /** 开始菜单：棋罐与光影 */
   menu: { steps: [], shots: [1.0] },
@@ -62,29 +96,24 @@ const SCENARIOS: Record<string, Scenario> = {
   /** 五子棋连五：点亮、冲击、炸飞，之后“查看棋局”让棋子飞回 */
   'gomoku-win': {
     steps: [
-      [0, () => goScreen(Screen.Game)],
-      [
-        GAME,
-        () => {
-          newGame(GameType.Gomoku, 15);
-          play([
-            [3, 3],
-            [11, 11],
-            [3, 11],
-            [11, 3],
-            [5, 9],
-            [9, 5],
-            [7, 3],
-            [8, 3],
-            [7, 4],
-            [8, 4],
-            [7, 5],
-            [8, 5],
-            [7, 6],
-            [8, 6],
-          ]);
-        },
-      ],
+      ...gameSteps(
+        movesSetup(GameType.Gomoku, 15, [
+          [3, 3],
+          [11, 11],
+          [3, 11],
+          [11, 3],
+          [5, 9],
+          [9, 5],
+          [7, 3],
+          [8, 3],
+          [7, 4],
+          [8, 4],
+          [7, 5],
+          [8, 5],
+          [7, 6],
+          [8, 6],
+        ]),
+      ),
       [GAME + 0.6, () => play([[7, 7]])],
       [GAME + 5.2, () => toggleReview()],
     ],
@@ -93,26 +122,7 @@ const SCENARIOS: Record<string, Scenario> = {
 
   /** 认输结束的五子棋：败方棋子被炸飞，胜方留在盘上 */
   'gomoku-forfeit': {
-    steps: [
-      [0, () => goScreen(Screen.Game)],
-      [
-        GAME,
-        () => {
-          newGame(GameType.Gomoku, 15);
-          play([
-            [7, 7],
-            [8, 8],
-            [6, 8],
-            [8, 6],
-            [9, 7],
-            [6, 6],
-            [5, 5],
-            [10, 10],
-          ]);
-        },
-      ],
-      [GAME + 0.5, () => game.forfeitEnd(WHITE)],
-    ],
+    steps: [...gameSteps(movesSetup(GameType.Gomoku, 15, EIGHT_MOVES)), [GAME + 0.5, () => game.forfeitEnd(WHITE)]],
     shots: [GAME + 0.8, GAME + 1.6, GAME + 3.5],
   },
 
@@ -144,19 +154,14 @@ const SCENARIOS: Record<string, Scenario> = {
   /** 悔棋的时光倒流 */
   'undo-rewind': {
     steps: [
-      [0, () => goScreen(Screen.Game)],
-      [
-        GAME,
-        () => {
-          newGame(GameType.Gomoku, 15);
-          play([
-            [7, 7],
-            [8, 8],
-            [6, 8],
-            [8, 6],
-          ]);
-        },
-      ],
+      ...gameSteps(
+        movesSetup(GameType.Gomoku, 15, [
+          [7, 7],
+          [8, 8],
+          [6, 8],
+          [8, 6],
+        ]),
+      ),
       [GAME + 0.8, () => requestUndo()],
     ],
     shots: [GAME + 0.85, GAME + 1.0, GAME + 1.2, GAME + 1.6],
@@ -165,21 +170,16 @@ const SCENARIOS: Record<string, Scenario> = {
   /** 围棋提子：被提的子淡出 */
   'go-capture': {
     steps: [
-      [0, () => goScreen(Screen.Game)],
-      [
-        GAME,
-        () => {
-          newGame(GameType.Go, 9);
-          play([
-            [4, 4],
-            [4, 3],
-            [3, 3],
-            [0, 0],
-            [5, 3],
-            [0, 1],
-          ]);
-        },
-      ],
+      ...gameSteps(
+        movesSetup(GameType.Go, 9, [
+          [4, 4],
+          [4, 3],
+          [3, 3],
+          [0, 0],
+          [5, 3],
+          [0, 1],
+        ]),
+      ),
       [GAME + 0.5, () => play([[4, 2]])],
     ],
     shots: [GAME + 0.45, GAME + 0.62, GAME + 0.75, GAME + 1.0],
@@ -188,24 +188,20 @@ const SCENARIOS: Record<string, Scenario> = {
   /** 围棋点目与胜负揭晓：自动估死子、确认结果后的冲击波与领地 */
   'go-score': {
     steps: [
-      [0, () => goScreen(Screen.Game)],
-      [
-        GAME,
-        () => {
-          newGame(GameType.Go, 9);
-          const stones: [number, number, number][] = [];
-          for (let y = 0; y < 9; y++) {
-            stones.push([3, y, BLACK]);
-            stones.push([5, y, WHITE]);
-          }
-          stones.push([1, 4, WHITE], [7, 4, BLACK], [7, 5, BLACK]);
-          place(stones);
-          game.cur.moves = stones.length;
-          game.pass();
-          game.pass();
-          autoMarkDead(game, (Math.random() * SEED_MAX) >>> 0); // prepare() 已把 Math.random 换成固定的序列，种子与改动前 core 内部取的相同
-        },
-      ],
+      ...gameSteps(() => {
+        newGame(GameType.Go, 9);
+        const stones: [number, number, number][] = [];
+        for (let y = 0; y < 9; y++) {
+          stones.push([3, y, BLACK]);
+          stones.push([5, y, WHITE]);
+        }
+        stones.push([1, 4, WHITE], [7, 4, BLACK], [7, 5, BLACK]);
+        place(stones);
+        game.cur.moves = stones.length;
+        game.pass();
+        game.pass();
+        autoMarkDead(game, (Math.random() * SEED_MAX) >>> 0); // prepare() 已把 Math.random 换成固定的序列，种子与改动前 core 内部取的相同
+      }),
       [GAME + 1.0, () => game.confirmScore()],
     ],
     shots: [GAME + 0.9, GAME + 1.25, GAME + 1.6, GAME + 2.2, GAME + 4.0],
@@ -214,21 +210,16 @@ const SCENARIOS: Record<string, Scenario> = {
   /** 换棋盘：旧棋子由中心向外升起淡去，网格从 15 路过渡到 19 路 */
   'board-switch': {
     steps: [
-      [0, () => goScreen(Screen.Game)],
-      [
-        GAME,
-        () => {
-          newGame(GameType.Gomoku, 15);
-          play([
-            [7, 7],
-            [8, 8],
-            [6, 8],
-            [8, 6],
-            [9, 7],
-            [6, 6],
-          ]);
-        },
-      ],
+      ...gameSteps(
+        movesSetup(GameType.Gomoku, 15, [
+          [7, 7],
+          [8, 8],
+          [6, 8],
+          [8, 6],
+          [9, 7],
+          [6, 6],
+        ]),
+      ),
       [GAME + 0.6, () => newGame(GameType.Go, 19)],
     ],
     shots: [GAME + 0.75, GAME + 0.95, GAME + 1.4],
@@ -236,74 +227,30 @@ const SCENARIOS: Record<string, Scenario> = {
 
   /** 离开对局：棋子飞回棋罐 */
   gather: {
-    steps: [
-      [0, () => goScreen(Screen.Game)],
-      [
-        GAME,
-        () => {
-          newGame(GameType.Gomoku, 15);
-          play([
-            [7, 7],
-            [8, 8],
-            [6, 8],
-            [8, 6],
-            [9, 7],
-            [6, 6],
-            [5, 5],
-            [10, 10],
-          ]);
-        },
-      ],
-      [GAME + 0.6, () => goScreen(Screen.Menu)],
-    ],
+    steps: [...gameSteps(movesSetup(GameType.Gomoku, 15, EIGHT_MOVES)), [GAME + 0.6, () => goScreen(Screen.Menu)]],
     shots: [GAME + 0.8, GAME + 1.1, GAME + 1.5, GAME + 2.6],
   },
 
   /** 调炸飞效果用的连拍：盘上摆满棋子，连五后每 0.1 秒截一张 */
   'film-blow': {
-    steps: [
-      [0, () => goScreen(Screen.Game)],
-      [
-        GAME,
-        () => {
-          newGame(GameType.Gomoku, 15);
-          denseBoard();
-        },
-      ],
-      [GAME + 0.4, () => play([[7, 7]])],
-    ],
+    steps: [...gameSteps(denseSetup), [GAME + 0.4, () => play([[7, 7]])]],
     shots: Array.from({ length: 30 }, (_, i) => GAME + 0.4 + i * 0.1),
   },
 
   /** 调效果用的连拍：炸飞后开新局，棋子先飞回原位，再慢慢清盘 */
   'film-newgame': {
-    steps: [
-      [0, () => goScreen(Screen.Game)],
-      [
-        GAME,
-        () => {
-          newGame(GameType.Gomoku, 15);
-          denseBoard();
-        },
-      ],
-      [GAME + 0.4, () => play([[7, 7]])],
-      [GAME + 3.5, () => requestNewGame(GameType.Gomoku, 15)],
-    ],
+    steps: [...gameSteps(denseSetup), [GAME + 0.4, () => play([[7, 7]])], [GAME + 3.5, () => requestNewGame(GameType.Gomoku, 15)]],
     shots: Array.from({ length: 16 }, (_, i) => GAME + 3.4 + i * 0.2),
   },
 
   /** 检查人机对弈（用真的后台线程）：五子棋人下一手电脑应一手；围棋电脑想到一半时悔棋，电脑停下、不会落下过时的一手 */
   'film-ai': {
     steps: [
-      [0, () => goScreen(Screen.Game)],
-      [
-        GAME,
-        () => {
-          setVsAI(true);
-          newGame(GameType.Gomoku, 15);
-          session.play(7, 7);
-        },
-      ],
+      ...gameSteps(() => {
+        setVsAI(true);
+        newGame(GameType.Gomoku, 15);
+        session.play(7, 7);
+      }),
       [
         GAME + 2.0,
         () => {

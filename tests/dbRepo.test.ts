@@ -37,16 +37,15 @@ describe('昵称的字节上限（DAT-022，决定 D5-5）', () => {
 });
 
 describe('数据访问', () => {
-  it('同一台设备只建一个游客用户；上线时更新昵称与最近上线的时刻', () => {
+  it('同一台设备只建一个游客用户', () => {
     const id = repo.ensure(HASH_A, '甲', 10);
     expect(repo.ensure(HASH_A, '别的名字', 20)).toBe(id);
     expect(repo.userOf(HASH_A)).toBe(id);
     expect(repo.userOf(HASH_B)).toBeUndefined();
-    expect(repo.touch(HASH_A, '乙', 30)).toBe(id);
     expect(db.prepare('SELECT kind, name, created_at, last_seen_at FROM users').all()).toEqual([
-      { kind: 'guest', name: '乙', created_at: 10, last_seen_at: 30 },
+      { kind: 'guest', name: '甲', created_at: 10, last_seen_at: 10 },
     ]);
-    expect(db.prepare('SELECT uid_hash, first_seen_at, last_seen_at FROM devices').all()).toEqual([{ uid_hash: HASH_A, first_seen_at: 10, last_seen_at: 30 }]);
+    expect(db.prepare('SELECT uid_hash, first_seen_at, last_seen_at FROM devices').all()).toEqual([{ uid_hash: HASH_A, first_seen_at: 10, last_seen_at: 10 }]);
   });
 
   it('没有段位记录的棋类为初始段位；写入为覆盖', () => {

@@ -2,7 +2,7 @@
 export type SfxId = 'clack' | 'rewind' | 'bowl' | 'win' | 'goend' | 'tick';
 
 type Impl = {
-  play(id: SfxId, vol?: number, rate?: number, pan?: number): void;
+  play(id: SfxId, vol?: number, rate?: number): void;
   clack(strength: number): void;
   duck(): void;
 };
@@ -14,7 +14,7 @@ export function setAudioImpl(i: Impl) {
 }
 
 export const sfx = {
-  play: (id: SfxId, vol = 1, rate = 1, pan = 0) => impl.play(id, vol, rate, pan),
+  play: (id: SfxId, vol = 1, rate = 1) => impl.play(id, vol, rate),
   clack: (strength: number) => impl.clack(strength),
   /** 终局音效响起时把背景音乐压低一会儿 */
   duck: () => impl.duck(),

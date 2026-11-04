@@ -218,9 +218,6 @@ app.whenReady().then(() => {
     err => writeLog('warn', `更新失败：${String(err)}`),
   );
   createWindow();
-  app.on('activate', () => {
-    if (!BrowserWindow.getAllWindows().length) createWindow();
-  });
 });
 
 app.on('window-all-closed', () => app.quit());

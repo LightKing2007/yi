@@ -237,6 +237,12 @@ export class Game {
     this.push({ type: 'stone', strength: 0.35 });
   }
 
+  /** 点目时写入一批死子（电脑估值或联机确认）并重算比分；空列表不重算（不改变局面指纹 ver） */
+  markDead(points: readonly { x: number; y: number }[]) {
+    for (const p of points) this.dead[at(p.x, p.y)] = 1;
+    if (points.length) this.computeScore();
+  }
+
   confirmScore() {
     this.scoring = false;
     this.finished = true;

@@ -17,7 +17,7 @@ import { T, TF } from '../i18n';
 import * as net from '../online/client';
 import { Phase, netTick, ratingOf, st, tr } from '../online/client';
 import { seatPlates } from '../scene/online';
-import { RANKS, queueRules, rankAt, rankIndex, rankName, type AskKind, type Opponent } from '../shared/protocol';
+import { RANKS, RANK_SPAN, queueRules, rankAt, rankFloor, rankIndex, rankName, type AskKind, type Opponent } from '../shared/protocol';
 import { Row, UpdateNote } from './panels';
 import { AccountBar } from './account';
 import { Button, Fit, Hair, Seg, StoneIcon } from './widgets';
@@ -98,7 +98,7 @@ function rankCard(type: number) {
   const r = ratingOf(type),
     i = rankIndex(r.points),
     top = i === RANKS.length - 1;
-  const prog = top ? 1 : Math.min(1, Math.max(0, (r.points - 840 - i * 60) / 60));
+  const prog = top ? 1 : Math.min(1, Math.max(0, (r.points - rankFloor(i)) / RANK_SPAN));
   const games = r.win + r.loss + r.draw;
   return (
     <div class="rank-card">
@@ -114,7 +114,7 @@ function rankCard(type: number) {
           <div style={{ width: prog * 100 + '%' }} />
         </div>
         <div class="faint" style={{ fontSize: '11px', marginTop: '4px' }}>
-          <Fit size={11}>{top ? T('已是最高段位') : TF('距 %s 还差 %d 分', T(rankAt(i + 1)), Math.ceil(840 + (i + 1) * 60 - r.points))}</Fit>
+          <Fit size={11}>{top ? T('已是最高段位') : TF('距 %s 还差 %d 分', T(rankAt(i + 1)), Math.ceil(rankFloor(i + 1) - r.points))}</Fit>
         </div>
       </div>
     </div>

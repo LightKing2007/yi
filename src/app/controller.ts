@@ -92,7 +92,6 @@ export function goScreen(s: Screen) {
     boardView.switch.t0 = -100;
   }
   online.onScreen(cur, s);
-  view.panelFrom = cur;
   view.panelT = 0;
   screen.value = s;
 }
