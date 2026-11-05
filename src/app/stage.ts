@@ -33,6 +33,8 @@ export class Stage {
   readonly pg: Painter;
   readonly bowls: Bowls;
   readonly light: Light;
+  /** ≥0 时直接指定光影强度，否则按设置与所在界面 */
+  lightOverride = -1;
 
   constructor(sceneCanvas: HTMLCanvasElement, overCanvas: HTMLCanvasElement, glowCanvas: HTMLCanvasElement) {
     this.ps = new Painter(new Gfx(sceneCanvas, { alpha: false }));
@@ -61,6 +63,7 @@ export class Stage {
 
   /** 光影的强度：全局都有，对局中稍淡一些（七成），免得影响看棋 */
   lightK() {
+    if (this.lightOverride >= 0) return this.lightOverride;
     return view.duskK * (0.7 + 0.3 * smooth01(view.bowlK));
   }
 

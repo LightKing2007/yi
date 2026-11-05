@@ -9,12 +9,12 @@ import { describe, expect, it } from 'vitest';
 import { agreementPage } from '../server/agreementPage';
 import { mailText } from '../server/codeMailText';
 import { AGREEMENT_DOCUMENTS } from '../server/agreementText';
-import { donatePage } from '../server/donatePage';
 import { downloadPage } from '../server/downloadPage';
 import { homePage } from '../server/homePage';
 import { notFoundPage } from '../server/notFoundPage';
 import { supportPage } from '../server/supportPage';
-import { PLATFORMS, type Detected, type PagePkg } from '../server/page';
+import { PLATFORMS, type PagePkg } from '../server/page';
+import type { Detected } from '../server/platform';
 import { TABLE } from '../src/i18n/table';
 import { INFO_PAGES, releasedLog, type InfoLine } from '../src/ui/info';
 // @ts-expect-error 纯 JS 脚本，没有类型声明
@@ -94,8 +94,8 @@ function pageTexts(html: string) {
 }
 
 describe('标点的检查范围（I18N-011）', () => {
-  it('支持页、支持作者页、404 页面、文书目录与独立文件页的文字：中文标点成对且段落以句号结尾', () => {
-    for (const html of [supportPage('v'), donatePage('v'), notFoundPage('v'), agreementPage('v'), ...AGREEMENT_DOCUMENTS.map(doc => agreementPage('v', doc))]) {
+  it('支持页、404 页面、文书目录与独立文件页的文字：中文标点成对且段落以句号结尾', () => {
+    for (const html of [supportPage('v'), notFoundPage('v'), agreementPage('v'), ...AGREEMENT_DOCUMENTS.map(doc => agreementPage('v', doc))]) {
       const { paragraphs, others } = pageTexts(html);
       expect(paragraphs.length).toBeGreaterThan(0);
       expect([...paragraphs.flatMap(paragraphIssues), ...others.flatMap(punctuationIssues)]).toEqual([]);

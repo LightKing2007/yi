@@ -11,7 +11,6 @@ const CASES = [
       ['#features', '功能'],
       ['#details', '细节'],
       ['/download/', '下载'],
-      ['/donate', '支持作者'],
     ],
   ],
   [
@@ -38,15 +37,6 @@ const CASES = [
       ['/agreement/privacy-policy', '隐私政策'],
       ['/agreement/terms-of-service', '用户服务条款'],
       ['/agreement/minors-privacy-rules', '未成年人个人信息保护规则'],
-      ['/support', '帮助与支持'],
-    ],
-  ],
-  [
-    '/donate',
-    [
-      ['#purpose', '支持去向'],
-      ['#support', '支持约定'],
-      ['#questions', '常见问题'],
       ['/support', '帮助与支持'],
     ],
   ],

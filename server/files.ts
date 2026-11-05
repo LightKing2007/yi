@@ -5,15 +5,16 @@ import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { clientIp } from './clientIp';
 import { agreementPages } from './agreementPage';
-import { donatePage } from './donatePage';
 import { downloadPage } from './downloadPage';
 import { homePage } from './homePage';
 import { notFoundPage } from './notFoundPage';
-import { readStaticAssets, readStaticSite } from './staticSite';
-import { normalizeSupportQuery, supportPage, supportPages } from './supportPage';
+import { readStaticSite } from './staticSite';
+import { normalizeSupportQuery } from './supportContent';
+import { supportPage, supportPages } from './supportPage';
 import { PLATFORMS, type PagePkg } from './page';
 import { sendDocument, sendPage, sendUpdateFeed } from './pageResponse';
 import { detectPlatform } from './platform';
+
 const PER_IP = 2,
   TOTAL = 8;
 const NAME = /^Yi-(\d+(?:\.\d+)*)-(mac-arm64|mac-x64|win-x64|linux-x86_64)[\w.-]*\.(dmg|exe|AppImage)$/;
@@ -29,6 +30,7 @@ export interface StallLimit {
 }
 /** 写入速率低于 1 KB/s 持续 60 秒即断开 */
 const STALL: StallLimit = { stallMs: 60_000, minBytesPerSec: 1024 };
+
 /** /assets/ 下允许的资源与内容类型（API-060 的名单）；图片和字体见 scripts/page-assets.mjs */
 const ASSET_TYPES: Record<string, string> = {
   'title-yi.png': 'image/png',
@@ -216,7 +218,7 @@ function parseUrl(req: IncomingMessage): { name: string; starting: boolean; quer
   }
 }
 
-/** 静态检索脚本来自 HTML 构建目录；目录不完整时仍从 assets/ 读取增强脚本，其余资源沿用构建时嵌入的白名单。 */
+/** 静态检索脚本来自 HTML 构建目录；其余资源沿用构建时嵌入的白名单。 */
 function sendAsset(res: ServerResponse, asset: string, head: boolean, staticAsset?: Buffer) {
   const type = Object.hasOwn(ASSET_TYPES, asset) ? ASSET_TYPES[asset] : undefined;
   const embedded = type && __PAGE_ASSETS__[asset] ? Buffer.from(__PAGE_ASSETS__[asset], 'base64') : undefined;
@@ -349,10 +351,7 @@ export function fileServer(dir: string, stall: StallLimit = STALL, staticRoot = 
   const pkgs = listing(dir);
   const render = pages(pkgs, sums);
   const fixed = readStaticSite(staticRoot);
-  /** 静态页面目录不完整时仍可从发布目录的 assets/ 取增强脚本，避免回退到动态页面后脚本 404（R7） */
-  const staticAssets = fixed?.assets ?? readStaticAssets(staticRoot);
-  const documents =
-    fixed?.pages ?? new Map([...agreementPages(__APP_VERSION__), ...supportPages(__APP_VERSION__), ['donate', Buffer.from(donatePage(__APP_VERSION__))]]);
+  const documents = fixed?.pages ?? new Map([...agreementPages(__APP_VERSION__), ...supportPages(__APP_VERSION__)]);
   const reading = (res: ServerResponse, name: string, query: string, head: boolean) => {
     if (sendUpdateFeed(dir, name, res, head)) return true;
     const search = normalizeSupportQuery(query);
@@ -388,7 +387,7 @@ export function fileServer(dir: string, stall: StallLimit = STALL, staticRoot = 
     else if (`${name}/` === DOWNLOAD) res.writeHead(MOVED, { ...BASE_HEADERS, Location: `/${DOWNLOAD}${starting ? '?start' : ''}` }).end();
     else if (name.startsWith('assets/')) {
       const asset = name.slice('assets/'.length);
-      sendAsset(res, asset, head, staticAssets.get(asset));
+      sendAsset(res, asset, head, fixed?.assets.get(asset));
     } else if (name === 'SHA256SUMS') sendSums(res, pkgs.load(), sums, head);
     else {
       const pkg = NAME.test(name) ? pkgs.fresh(name) : undefined;

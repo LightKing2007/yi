@@ -2,11 +2,9 @@
 
 | 项目 | 内容 |
 |---|---|
-| 文件版本 | 2.0 |
-| 修订日期 | 2026-11-04 |
-| 状态 | 现行；P0、P1 已完成，P2 部分完成 |
 | 依据 | [基线审查报告](../audits/2026-10-02-baseline.md)、[工程规范](../standards/00-general.md) |
-| 维护方式 | 每完成一项，把状态改为“已完成”并注明 PR 编号；新的审计发现按 [12-audit.md](../standards/12-audit.md) 第 3 节分级后登记。整改项状态以本文件为唯一来源，其他文档只引用，不复述 |
+| 修订日期 | 2026-10-28 |
+| 维护方式 | 每完成一项，把状态改为“已完成”并注明 PR 编号；新的审计发现按 [12-audit.md](../standards/12-audit.md) 第 3 节分级后登记 |
 | 最近一次审计 | [2026-10-03 全面审计](../audits/2026-10-03-full-audit.md)：登记 P1-19、P2-15 至 P2-21 |
 
 1 整改项按优先级分为三档：P0 必须在 7 日内完成，P1 必须在 30 日内完成，P2 必须在 90 日内或随对应阶段完成。期限从本规范发布之日（2026-10-02）起算。
@@ -54,7 +52,7 @@
 |---|---|---|---|
 | P2-01 | 修订 [roadmap.md](roadmap.md) 中阶段 5 的表结构，使其符合 [03-data.md](../standards/03-data.md)（命名、STRICT、毫秒时间、IP 截断、子表、外键策略、CHECK） | F-24、F-25；DAT-010 至 DAT-034、DAT-071 | 已完成（2026-10-16 修订 [roadmap.md](roadmap.md) 第 5.2 节：阶段 5 的 6 张表的完整 DDL 均为 `STRICT`，时间为 UTC 毫秒，枚举、布尔、文本长度、JSON 均有 `CHECK`，外键 `ON DELETE RESTRICT`，索引按 `idx_`、`uq_` 命名；DDL 在 `node:sqlite` 中执行，20 种违规数据均被拒，热路径查询均走索引；阶段 5 不保存 IP；后续阶段的表列出结构要点） |
 | P2-02 | 数据库迁移框架与在线备份 | DAT-040 至 DAT-045、DAT-062 | 已完成（阶段 5 第 4 步：`server/db/index.ts` 打开数据库、PRAGMA 与完整性检查、结构版本检查、按序执行迁移、迁移前备份，`server/db/migrations/` 下的 SQL 文件以文本打包进 `server.cjs`；第 5 步接入服务端；第 7 步：`node server.cjs backup` 以 `VACUUM INTO` 在线备份，每小时一次，异地备份改传数据库；2026-10-24 随 3.0.0 安装每小时备份与异地备份；上线后的恢复演练按 DAT-065 另行记录） |
-| P2-03 | 协议 v4 错误码体系，`src/shared/errors.ts` | F-17；API-020 至 API-024、[04-api.md](../standards/04-api.md) 第 8 节 | 已完成（#242 的 F1：`src/shared/errors.ts` 的错误码表、`server/errorMsg.ts` 与 `notice`；F2、F3 增加 `auth.replaced`、`game.stale` 等；`tests/errors.test.ts` 核对错误码表与规范第 8 节一致；随 4.0.0 上线） |
+| P2-03 | 协议 v4 错误码体系，`src/shared/errors.ts` | F-17；API-020 至 API-024、[04-api.md](../standards/04-api.md) 第 8 节 | 随阶段 7 |
 | P2-04 | `server/config.ts` 集中解析与校验配置 | ARC-042 | 已完成（阶段 5 第 3 步：`server/config.ts` 解析并校验端口、监听地址、存档路径、最新版本号、下载地址、安装程序目录与日志级别，不合法时逐项写 `server.config-invalid` 并以退出码 78 退出；ESLint 禁止 `server/` 下其他文件读取 `process.env`、`process.argv`；`yi.service` 的 `RestartPreventExitStatus` 加入 78，须以 `install-service` 安装后生效） |
 | P2-05 | TLS 与 CSP 收紧 | F-08；SEC-010 至 SEC-013 | 已完成（阶段 5 计划第 6c 步：客户端改连 `wss://yi.lightking.com.cn/ws`，CSP 的 `connect-src` 只放行该地址，开发模式另行注入本机地址；`yi.service` 设 `HOST=127.0.0.1`。2026-10-24 随 3.0.0 上线，安装 `yi.service` 并在安全组与 UFW 中关闭 8443） |
 | P2-06 | 指标与告警 | OPS-071 至 OPS-075 | 已完成（#92 `/metrics` 与每分钟的指标快照，随下一个版本上线；D-4 决定暂不建立告警通知；#94 上线后 60 分钟内每分钟自动检查，异常时回滚（OPS-047）） |
@@ -63,7 +61,7 @@
 | P2-09 | `SECURITY.md` | SEC-063 | 已完成（[SECURITY.md](../../SECURITY.md)：支持的版本、经 GitHub 私下报告提交、范围与测试守则、72 小时内确认、按 SEC-060 的期限修复、修复后 30 日内公开说明；2026-10-06 开启仓库的私下报告漏洞功能） |
 | P2-10 | 开启 `noImplicitOverride`、`noUncheckedIndexedAccess` 并整改 | F-32；COD-050 | 已完成（两项均在 `tsconfig.json` 中开启。`noImplicitOverride` 随 #100 开启；`noUncheckedIndexedAccess` 分 6 批整改约 667 处，即 #100、#102、#103、#104、#106 与本项的最后一批，过渡用的 `tsconfig.strict.json` 已删除。机械性改动所触及函数的存量违规由 P2-12 整改） |
 | P2-11 | 建立 `docs/adr/`，补录近期决策 | ARC-060 | 已完成（#134：[docs/adr/](../adr/README.md) 的写法与索引，补录 0001 联机对局上限、0002 服务端异常隔离、0003 内存上限、0004 域名与 TLS 提前启用、0005 Caddy 配置的分工、0006 部署用户、0007 不申请 Developer ID 签名） |
-| P2-12 | 存量超长文件与函数拆分（`server/rooms.ts`、`src/online/client.ts`、`src/core/game.ts` 等），含 P2-10 的机械性改动所触及、按总则第 4.3.3 条未一并整改的函数（电脑思考、声音合成、渲染等）；文档注释覆盖率提升至 ≥ 80% | F-30；COD-031、COD-037、COD-040 | 部分完成（#140 修订总则第 4.3.3 条，允许为拆分文件而整段搬移；#143 至 #150 把 `server/rooms.ts`（1400 行）拆为 `rooms.ts` 与 `roomTypes`、`rating`、`matchmaking`、`room`、`play`、`hub`、`lobby`、`faults` 8 个模块，各模块经上下文接口 `ServerContext` 访问共用状态，行为不变；被搬移部分的存量违规已由 #152 整改。#153 至 #156 把 `src/online/client.ts`（903 行）拆为入口 `client.ts`（88 行）与 `state`、`connection`、`actions`、`handlers`、`frame` 5 个模块，行为不变；被搬移部分的存量违规已由 #157 整改，并补上页面在后台时驱动每帧检查的定时器的测试。#163 把 `tests/server.test.ts`（1783 行）拆为多个测试文件与公共模块 `tests/serverWorld.ts`（2026-11-04 复核：`rooms.ts` 当前 399 行，服务端测试当前最长 383 行），测试不变；被搬移部分的存量违规（ESLint 101 处）已由 #202、#203 整改（总则第 4.3.3 条），测试的条数与名称不变。#136 拆分 `gomokuMove`。#198 拆分 `server/files.ts` 的 `fileServer`（#195 按总则第 4.3.3 条承诺的整改），行为不变。待实施：其余超长文件（`src/core/goAI.ts` 等，见 COD-040 的现状）与超长函数、文档注释覆盖率） |
+| P2-12 | 存量超长文件与函数拆分（`server/rooms.ts`、`src/online/client.ts`、`src/core/game.ts` 等），含 P2-10 的机械性改动所触及、按总则第 4.3.3 条未一并整改的函数（电脑思考、声音合成、渲染等）；文档注释覆盖率提升至 ≥ 80% | F-30；COD-031、COD-037、COD-040 | 部分完成（#140 修订总则第 4.3.3 条，允许为拆分文件而整段搬移；#143 至 #150 把 `server/rooms.ts`（1400 行）拆为 `rooms.ts`（361 行）与 `roomTypes`、`rating`、`matchmaking`、`room`、`play`、`hub`、`lobby`、`faults` 8 个模块，各模块经上下文接口 `ServerContext` 访问共用状态，行为不变；被搬移部分的存量违规已由 #152 整改。#153 至 #156 把 `src/online/client.ts`（903 行）拆为入口 `client.ts`（88 行）与 `state`、`connection`、`actions`、`handlers`、`frame` 5 个模块，行为不变；被搬移部分的存量违规已由 #157 整改，并补上页面在后台时驱动每帧检查的定时器的测试。#163 把 `tests/server.test.ts`（1783 行）拆为 7 个测试文件（最长 355 行）与公共模块 `tests/serverWorld.ts`，测试不变；被搬移部分的存量违规（ESLint 101 处）已由 #202、#203 整改（总则第 4.3.3 条），测试的条数与名称不变。#136 拆分 `gomokuMove`。#198 拆分 `server/files.ts` 的 `fileServer`（#195 按总则第 4.3.3 条承诺的整改），行为不变。待实施：其余超长文件（`src/core/goAI.ts` 等，见 COD-040 的现状）与超长函数、文档注释覆盖率） |
 | P2-13 | `core` 层去除对 `performance.now`、`Math.random` 的直接调用 | ARC-020 | 已完成（#21：`gomokuAI.ts` 的思考时限改用注入的时钟；#135：`goAI.ts` 按思考时间搜索时经 `clock.ts` 读时钟，`goThink`、`estimateDead`、`gomokuMove` 的随机数种子或随机数函数改由调用方给出，`src/core/` 中不再有对 `performance.now`、`Math.random` 的直接引用；`gomokuMove` 超出 COD-037 的长度上限，按总则第 4.3.3 条另以 #136 整改：拆为简单、普通、困难三种选点与逐层加深的一层搜索，与改动前逐例比对结果相同） |
 | P2-14 | 部署用户 `deploy` 与 sudo 白名单 | SEC-044 | 已完成（#129 按项目所有者的决定修订 SEC-044；#130：上线、重启、回滚、查看状态以部署用户经 sudo 执行 root 所有的 `/usr/local/sbin/yi-deploy`，上传的文件以部署用户的身份读出；其余配置修改以 root 执行。2026-10-13 经项目所有者同意，以 root 执行 `npm run deploy -- install-deploy-user` 安装到服务器，见 `deploy.log`；核对：`sudo -l` 只列出 `/usr/local/sbin/yi-deploy`，以部署用户执行 `npm run deploy -- status` 成功，白名单以外的命令与配置类命令均被拒） |
 | P2-15 | 服务端处理消息与定时检查时捕获未预期的异常：按 API-023 记录调用栈与错误编号，只关闭出错的连接，其余照常服务 | A-02；API-023、EDGE-002 | 已完成（#109：`RoomServer` 处理消息、断线与定时检查时捕获未预期的异常，写 `internal.error` 日志（完整调用栈与错误编号 `errorId`），并随提示“服务器出现问题，请稍后再试”把错误编号下发给客户端，客户端写入本机日志；处理消息出错时只以 1011 断开该连接，对局保留席位，可重连；断线处理或定时检查出错时，放弃出错的配对或房间、移除出错的玩家，免得每次检查都再出错，其余照常检查。随下一个版本上线） |
@@ -74,7 +72,6 @@
 | P2-20 | 桌面端加固：IPC 校验发送方；打包版不读取 `YI_DEV_URL`；`window.json` 逐项校验并修正屏幕外的位置；显式设置 `webSecurity`；签名后收紧 macOS 权限声明 | A-10 至 A-14；SEC-030 至 SEC-033、COD-053 | 已完成，A-14 除外（#126：IPC 只处理来自 `app://yi/`（开发时为开发服务器）的消息；打包版不读取 `YI_DEV_URL`，开发服务器地址按源整体比较；`window.json` 逐项校验，窗口不在任何显示器内时由系统居中；显式设置 `webSecurity`；页面日志的级别与内容在主进程中校验。A-14 收紧 macOS 权限声明须先取得 Developer ID 签名，2026-10-13 项目所有者决定不申请（需付费的 Apple 开发者账号），在取得签名前保持现状） |
 | P2-21 | 其余低级发现：存档改用无原型的对象；上线脚本不拼接用户名；`changelog.mjs` 改用 `execFileSync`；`forbiddenAt` 按局面版本缓存；淡出列表及时清理；快捷键忽略自动重复；更正过时注释 | A-15 至 A-21 | 部分完成（A-16 已由 #76 修复：部署日志中的操作者只留字母、数字与 `._-`；#130 在服务器端脚本中同样过滤。A-15 由 #137 修复：段位存档改用 `Map` 保存，键为 `__proto__` 的记录按普通记录读取、原样写回。其余待实施） |
 | P2-22 | 服务端保存的对局历史压缩：每一手都保存一份完整棋盘（19 路每手约 750 字节，动作记录每条约 54 字节），使满载（1024 个房间各达 1024 手、4096 条）时常驻内存实测约 1.4 GB，重连积压时峰值约 1.5 GB，远超 `yi.service` 原先的 `MemoryMax=512M`；压缩后按同样的方法实测满载，须在内存上限之内 | 2026-10-11 满载实测（P2-16）；API-046、EDGE-002 | 暂缓（2026-10-12 项目所有者决定先把 `MemoryMax` 提高到 768M（#114），可容纳约 480 个房间同时被刷到上限，正常下棋时 1023 个房间峰值约 449 MB；压缩待玩家规模需要时实施） |
-| P2-23 | 文档相对链接的自动检查（DOC-004） | DOC-004；[11-documentation.md](../standards/11-documentation.md) | 已完成（`tests/docs.test.ts` 检查 `docs/` 与仓库根部 Markdown 的相对链接与页内锚点，由 CI 的 `test` 任务运行；故意破坏链接时测试失败已验证。登记时同步把 DOC-004 的“现状”改为满足） |
 
 ## 7 待决策事项
 

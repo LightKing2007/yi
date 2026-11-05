@@ -6,7 +6,7 @@
 export type RGBA = readonly [number, number, number, number];
 /** 仿射变换 a b c d e f：x' = a x + c y + e，y' = b x + d y + f */
 type Affine = [number, number, number, number, number, number];
-export type Blend = 'alpha' | 'add' | 'premul' | 'multiply' | 'replace';
+export type Blend = 'alpha' | 'add' | 'premul' | 'multiply' | 'replace' | 'bake';
 
 const FLOATS = 12; // 每个顶点的浮点数
 const MAXQ = 8192; // 一批最多几个四边形
@@ -220,6 +220,9 @@ export class Gfx {
       case 'replace':
         gl.blendFunc(gl.ONE, gl.ZERO);
         break;
+      case 'bake':
+        gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+        break;
     }
   }
 
@@ -406,6 +409,6 @@ export class Gfx {
   }
 }
 
-const Z4: RGBA = [0, 0, 0, 0];
+export const Z4: RGBA = [0, 0, 0, 0];
 export const WHITE: RGBA = [1, 1, 1, 1];
 export const rgba = (r: number, g: number, b: number, a = 255): RGBA => [r / 255, g / 255, b / 255, a / 255];

@@ -4,7 +4,7 @@
 客户端（游戏）前端不在本规范范围内。
 目标：**让后面的页面都长在同一套规则上**——新页面只做内容与组装，不发明新样式、新组件、新依赖。
 
-现状盘点（2026-11-01）：42 个常规页面及 404 回退全部可达（主页、下载、支持作者、支持目录、34 篇帮助、文书目录、3 份文书）。
+现状盘点（2026-11-01）：41 个常规页面及 404 回退全部可达（主页、下载、支持目录、34 篇帮助、文书目录、3 份文书）。
 核心内容保持无脚本可用；全站有一个可选增强包，帮助目录另有渐进增强检索脚本。统一外壳 `server/page.ts`，共享样式 `server/pageStyle.ts`，全部页面已迁入共享组件与设计变量。
 
 ---
@@ -98,7 +98,6 @@ server/
   webUi.ts           # 共享 UI 组件（本规范第 3.3 节）
   homePage.ts / homeStyle.ts          # 页面与页面样式配对
   downloadPage.ts / downloadStyle.ts
-  donatePage.ts / donateStyle.ts           # 支持作者：两行标题、爱心海洋、成本说明与自愿约定
   supportPage.ts / supportStyle.ts / supportContent.ts
   agreementPage.ts / agreementStyle.ts / agreementText.ts
   notFoundPage.ts / notFoundStyle.ts
@@ -177,7 +176,7 @@ token 分八组：colors / fonts / type / leading / tracking / space / radius / 
 
 落地状态（2026-11-01）：
 
-- [x] 全站 42 个常规页面及 404 回退盘点与现状梳理
+- [x] 全站 41 个常规页面及 404 回退盘点与现状梳理
 - [x] 设计 token 单一来源 `server/webTokens.ts`，`pageStyle.ts` 改为引用
 - [x] 共享组件库 `server/webUi.ts`：`siteNavigation` / `secHead` / `btn` / `factTags` / `statNum` / `codeLine` / `badge` / `chapterIndex` / `documentHero` / `documentLink` / `documentToc`；统一转义与 SVG 图标分别位于 `webHtml.ts`、`webIcons.ts`
 - [x] 构建白名单登记全部新增网页模块；共享样式、组件、当前导航、字体预加载与增强脚本有单元测试
@@ -186,7 +185,7 @@ token 分八组：colors / fonts / type / leading / tracking / space / radius / 
 四个阶段均已落地：
 
 1. **阶段一：新页面先行**。任何新页面只准用本规范的组件与 token。
-2. **阶段二：旧页面归并（已完成）**。`homePage / downloadPage / donatePage / supportPage / agreementPage / notFoundPage` 的章节头、按钮、标签、文书页首、目录行与正文目录均使用共享组件；42 个常规页面及 404 回退全部覆盖。
+2. **阶段二：旧页面归并（已完成）**。`homePage / downloadPage / supportPage / agreementPage / notFoundPage` 的章节头、按钮、标签、文书页首、目录行与正文目录均使用共享组件；41 个常规页面及 404 回退全部覆盖。
 3. **阶段三：样式收编（已完成）**。跨页样式上提 `pageStyle.ts`，帮助页与 404 分别使用 `supportStyle.ts`、`notFoundStyle.ts`；页面样式文件只保留私有部分。
 4. **阶段四：验收固化（已落地）**。`npm run build:website` 先检查构建依赖白名单，再由 `scripts/check-website.mjs` 检查全部静态 HTML：禁止内联事件与非白名单脚本，脚本必须外部、同源、`defer`；同时检查重复 ID、失效页内锚点、图片 `alt` 与新窗口链接隔离。失败时中止打包。视觉目检、无脚本与 reduced-motion 仍属于页面变更的发布验收，不以静态检查代替。
 
@@ -206,12 +205,10 @@ token 分八组：colors / fonts / type / leading / tracking / space / radius / 
 | 手机折叠导航 | 小屏顶栏以 44px 圆形三线按钮展开贝色面板，按钮变为叉号；链接沿细分割线纵向排列 | 原生 `details` / `summary` + CSS；`site-enhance.ts` 补充 Escape、点击外部、选择链接与切换到桌面后的收起 | 无脚本仍可展开、关闭和跳转；桌面导航保持原样 |
 | 悬停预取 | 同源导航链接停留 65ms 后预取目标文档，让下一次"行棋"更从容；每个地址只预取一次 | `site-enhance.ts` 动态创建 `<link rel="prefetch">`；仅精确指针且非 Save-Data 时启用，指针离开即取消待执行预取；排除下载文件、资源文件与同页链接 | 按普通链接跳转，内容与下载流程不变 |
 
-支持作者页首屏固定为两行中文标题，以 8 秒周期交叉切换两行透明度；装饰只用细线与一条棋盘边线，不使用插画、装饰英文或底部滑动提示，终章保持简洁墨色。只有页脚使用低饱和深复古红底色与爱心海洋：22 枚最大 60px 的低边形爱心具有不同大小、透明度、周期与相位，全部正立并沿固定垂直轨道上浮，不旋转、不横向漂移；每枚爱心的位置、大小与节奏以 `nth-child` 规则写在 `donateStyle.ts`，页面模板不写内联样式，页脚以 `foot-heart` 变体标识而不依赖 `:has()`。图形只使用 CSS 渐变与裁切，容器统一 `aria-hidden`；reduced-motion 下保留静态层次而停用浮动。标题定时明暗、爱心浮动及滚动转场均不依赖脚本，不支持滚动时间线时保持完整静态排版。收款地址只从 `DONATION_URL` 读取，未配置时展示状态文本，不渲染付款链接。
-
 ### 6.2 交互约束
 
 - 动画不承载唯一信息：章节名、链接、状态与操作结果必须在静态 HTML 中已经成立。
-- 不引入滚动劫持、自定义鼠标、强制视差或自动播放声音；除支持作者页明确要求的低干扰爱心海洋外，不使用持续漂浮；不用动效延迟用户操作。
+- 不引入滚动劫持、自定义鼠标、持续漂浮、强制视差或自动播放声音；不用动效延迟用户操作。
 - 位移只作用于合成属性（`transform` / `translate` / `opacity`），避免改变文档布局；磁性限幅保持小幅，不让目标逃离指针。
 - 新增脚本先证明"纯 CSS 做不到"，再进入共享增强包；所有脚本仍遵守第 2.3 节的加载、登记与回退要求。
 

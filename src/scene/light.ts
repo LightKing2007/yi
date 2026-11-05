@@ -12,6 +12,7 @@ type Params = number[]; // 8 × vec4
 
 /** 每行：P[0] 光源 xy、暗角、叶影强度；P[1] 近光色 + 叶影横拉伸；P[2] 远处色 + 纵拉伸；P[3] 叶影色 + 斜切；P[4] 晕光；P[5] 叶隙透光；P[6] 光束；P[7].x 竹影 */
 const MODES: Params[] = [
+  [0.5, 1.1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
   [
     -0.06, 1.1, 0.26, 1.0, 1.0, 0.95, 0.84, 1, 0.82, 0.7, 0.64, 1, 0.8, 0.78, 0.82, 0, 0.3, 0.186, 0.084, 0, 0.07, 0.052, 0.028, 0, 0.05, 0.038, 0.023, 0, 0, 0,
     0, 0,
@@ -107,8 +108,7 @@ export class Light {
   constructor(private p: Painter) {}
 
   private blendParams(mode: number, dt: number) {
-    // 设置中的 1 至 4（黄昏、晨曦、月夜、竹影）对应表的下标 0 至 3；0（无光影）只靠强度 k 淡出，参数沿用黄昏
-    const to = MODES[mode >= 1 && mode <= MODES.length ? mode - 1 : 0];
+    const to = MODES[mode > 0 && mode < MODES.length ? mode : 1];
     if (!to) return; // 下标已限定在表内
     if (!this.cur) {
       this.cur = to.slice();

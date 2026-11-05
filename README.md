@@ -2,7 +2,7 @@
 
 “弈”是一款围棋与五子棋桌面游戏，支持人机对弈及联机对战。游戏以 TypeScript 编写，通过 Electron 提供 macOS、Windows 及 Linux 平台的安装程序；开发期间亦可在浏览器中运行调试。安装程序支持 macOS 13 或更高版本（Apple 芯片、Intel 芯片）、Windows 10 或更高版本（x64）及 Linux（x86_64）。
 
-本文档说明项目的功能、开发方法、打包发行、联机服务端部署及源码结构。项目的工程规范、操作规程、计划、参考与审计报告见 [docs/README.md](docs/README.md)。本文件只写产品功能与操作流程，不重复规范条文；两者不一致时以 [docs/standards/](docs/standards/00-general.md) 为准。
+本文档说明项目的功能、开发方法、打包发行、联机服务端部署及源码结构。项目的工程规范、操作规程、计划与审计报告见 [docs/README.md](docs/README.md)。
 
 ## 1 概述
 
@@ -32,12 +32,12 @@
 
 ### 2.2 联机对战
 
-联机对战页面分为三栏，全部经由服务器进行。界面中不显示服务器地址，进入页面时自动连接。4.0 起，匹配、排位与好友房间均须使用账号登录、验证邮箱并同意当前必需的隐私协议；未登录时只能进行单机双人与人机对弈。同一账号同一时间只保留一条联机会话，在别处登录时先前的连接断开。
+联机对战页面分为三栏，全部经由服务器进行。界面中不显示服务器地址，进入页面时自动连接。
 
 | 模式 | 说明 |
 |---|---|
 | 匹配 | 选定棋类后点击“开始匹配”，系统与同一队列中等待时间最长的玩家配对；配对后显示对手，双方须在 15 秒内点击“接受”方可开局，对方拒绝或超时则自动继续匹配。不计段位。 |
-| 排位 | 配对流程与匹配相同，对手名称旁显示段位。胜负按 Elo 等级分计算，段位自十级、一级、初段直至九段（新玩家自四级起始），段位与对局归属账号（4.0 起）。中途离开按负局计。 |
+| 排位 | 配对流程与匹配相同，对手名称旁显示段位。胜负按 Elo 等级分计算，段位自十级、一级、初段直至九段（新玩家自四级起始），与本机生成的匿名身份绑定。中途离开按负局计。 |
 | 好友 | 点击“开房间”获得四位房号，好友在“加入房间”中输入房号即可开局。 |
 
 对局规则如下：
@@ -79,17 +79,6 @@
 | `Esc` | 返回、离开对局或取消匹配 |
 | `1`、`2` | 切换至五子棋、围棋 |
 | `F11` | 全屏（桌面版） |
-
-### 2.4 账号
-
-4.0 起，匹配、排位与好友房间需要账号：
-
-- 注册填写雅号、邮箱、密码与邮箱验证码。雅号允许重名；系统分配不可更改的八位公开 UID，显示为 `XXXX-XXXX`；
-- 登录使用邮箱与密码。登录会话最长 30 日、闲置 7 日失效；修改或重置密码后，该账号的全部会话立即失效；
-- 全部联机模式还须验证邮箱并同意当前必需版本的隐私政策与服务条款，正文见 <https://yi.lightking.com.cn/agreement>；
-- “多人游戏”页面的账号界面提供雅号与公开 UID 的查看、雅号的修改、密码的修改与找回；未登录时只能进行单机双人与人机对弈；
-- 账号注销暂经官网公布的联系方式申请，由运营者手工处理；注销后十五日内清除邮箱与认证凭据，棋谱匿名保留；
-- 升级前的游客段位与棋谱不并入账号（2026-11-02 项目所有者决定）。
 
 ## 3 开发
 
@@ -141,7 +130,7 @@ Electron 本体（约 130 MB）不随 `npm install` 下载，而在首次运行 
 2. 在浏览器中打开 `http://localhost:5173/?server=ws://127.0.0.1:8443`；
 3. 打开两个标签页，即可互相匹配或创建好友房间。
 
-4.0 起，同一账号在两个标签页同时联机时，后登录的连接接管、先前的连接断开；本机测试双人联机须使用两个不同的账号，并在本机服务端打开账号功能（步骤见 [运维规程](docs/procedures/ops.md) 第 8 章）。
+同一浏览器的两个标签页共用同一匿名身份，排位模式不会使同一设备与自身配对；测试排位模式时应使用两个不同的浏览器。
 
 ## 4 打包与发行
 
@@ -210,7 +199,7 @@ node dist-server/server.cjs 8443   # 默认端口为 8443
 node dist-server/server.cjs --version
 ```
 
-账号、设备、段位、对局与段位变化保存于运行目录下的数据库 `yi.db`（`node:sqlite`，可由环境变量 `YI_DB` 指定路径）；表结构以 [server/db/migrations/](server/db/migrations/) 为准，阶段 5 的 DDL 与说明见 [docs/plan/roadmap.md](docs/plan/roadmap.md) 第 5.2 节。启动时打开数据库并检查完整性、执行尚未执行的迁移（已有数据的数据库先备份到同目录下的 `backup/pre-migrate-版本号-时间.db`）；数据库损坏、结构版本高于程序支持、迁移失败时拒绝启动并以退出码 65 退出（无法打开时为 74）。
+段位与玩家数据保存于运行目录下的数据库 `yi.db`（`node:sqlite`，可由环境变量 `YI_DB` 指定路径），仅记录匿名身份的散列值、昵称及段位，表结构见 [docs/plan/roadmap.md](docs/plan/roadmap.md) 第 5.2 节。启动时打开数据库并检查完整性、执行尚未执行的迁移（已有数据的数据库先备份到同目录下的 `backup/pre-migrate-版本号-时间.db`）；数据库损坏、结构版本高于程序支持、迁移失败时拒绝启动并以退出码 65 退出（无法打开时为 74）。
 
 ### 5.2 环境变量
 
@@ -219,12 +208,10 @@ node dist-server/server.cjs --version
 | `PORT` | 端口，亦可在命令行参数中指定，默认为 8443 |
 | `HOST` | 监听地址，默认为全部网卡；置于反向代理之后时应设为 `127.0.0.1` |
 | `YI_DB` | 数据库文件的路径，默认为运行目录下的 `yi.db` |
-| `YI_LATEST` | 最新客户端版本号，例如 `4.0.0`。第 3 版客户端版本较旧时，开始菜单及联机对战页面提示有新版本；含 #254 至 #256 的下一版本起，客户端在启动时经官网的更新清单检查，不依赖本变量 |
+| `YI_LATEST` | 最新客户端版本号，例如 `2.0.2`；客户端版本较旧时，开始菜单及联机对战页面提示有新版本 |
 | `YI_DOWNLOAD` | 新版本的下载地址（`http://` 或 `https://`），提示可点击打开 |
 | `YI_LOG_LEVEL` | 日志级别：`error`、`warn`、`info`（默认）、`debug`（OPS-062） |
-| `YI_ACCOUNTS` | 账号功能开关：`1` 打开，默认关闭；关闭时 `/api/*` 一律 404。打开时还须设置 `YI_PRIVACY_VERSION`、`YI_TERMS_VERSION`，并经 systemd `LoadCredential=` 传入账号密钥与发信凭据 |
-| `YI_PRIVACY_VERSION`、`YI_TERMS_VERSION` | 打开账号功能时必填的隐私政策与服务条款版本，须与官网文书正文的版本一致（如 `1.0`） |
-| `YI_FILES` | 旧配置兼容字段：联机程序已不提供网站与下载页面，官网由独立进程 `yi-web` 提供（决策 0013）。官网的运行参数为 `YI_WEB_PORT`、`YI_WEB_FILES`、`YI_WEB_PAGES`，见 [独立官网规程](docs/procedures/website.md) |
+| `YI_FILES` | 安装程序所在目录。设置后，服务端在同一端口提供网站：主页 `http://地址:端口/`、下载页面 `/download/` 与文书目录 `/agreement`。三份文件分别通过 `/agreement/privacy-policy`、`/agreement/terms-of-service`、`/agreement/minors-privacy-rules` 访问，正文为尚未生效的草案；文书路径的尾斜杠重定向至无尾斜杠地址，忽略查询参数，不依赖安装包目录；主页和下载页面按请求头推断访客的操作系统并推荐对应的安装程序（`server/platform.ts`），下载页面带 `?start` 时进入即开始下载；下载页面列出各平台最新的 `Yi-版本-平台` 安装程序及其 SHA-256 校验值（另有 `/SHA256SUMS`），支持断点续传；每个 IP 同时最多 2 个下载，全服最多 8 个。页面所用的标题图、图标与字体在构建时嵌入服务端（`scripts/page-assets.mjs`），页面不含脚本；未知页面路径返回与官网同风格的 HTML 404 页面，未知资源仍返回纯文本 404 |
 
 以上变量与命令行参数由 `server/config.ts` 集中解析并校验（ARC-042）：端口须为 1 至 65535 的整数，`HOST` 须为 IP 地址或主机名，`YI_LATEST` 须为“主版本.次版本.修订号”，`YI_DOWNLOAD` 须为 `http://` 或 `https://` 网址；任一项不合法时，服务端为每一项写一行 `server.config-invalid` 日志（变量名与期望的格式）并以退出码 78 退出。空值与未设置相同。
 
@@ -232,7 +219,7 @@ node dist-server/server.cjs --version
 
 ### 5.3 线上部署
 
-线上服务器为 47.108.181.240（域名 `yi.lightking.com.cn`，Ubuntu 24.04），部署结构如下。联机服务端按版本存放（整改项 P1-09，OPS-043）；官网是独立进程，位于 `/opt/www/yi.lightking.com.cn`，服务名 `yi-web`、只监听本机 8444，经 Caddy 与联机路径分流（决策 0013）；安装程序由官网目录维护：
+线上服务器为 47.108.181.240（域名 `yi.lightking.com.cn`，Ubuntu 24.04），部署结构如下。联机服务端按版本存放（整改项 P1-09，OPS-043），安装程序由独立官网目录维护：
 
 | 位置 | 内容 |
 |---|---|
@@ -249,17 +236,14 @@ node dist-server/server.cjs --version
 | `/var/lib/yi/backup/` | 数据库的备份 `yi-UTC时间.db` 及其 `.sha256` 校验和，保留最新的 24 份与最近 7 天各一份（DAT-061、DAT-064）；启动迁移前的备份 `pre-migrate-版本号-时间.db`（DAT-042） |
 | `/opt/yi/offsite.cjs`、`/etc/systemd/system/yi-offsite.service`、`/etc/yi/offsite.env` | 异地加密备份（DAT-061 第二层、DAT-063）：每次本地备份成功后，以 age 加密最新的一份并上传到阿里云 OSS；`offsite.env` 内含 OSS 的存储桶与只能写入的访问密钥（属主 root:yi，权限 640），解密用的私钥只在维护者本机。源文件为仓库中的 `scripts/offsite.ts` 与 `scripts/server/yi-offsite.service`，由 `npm run deploy -- install-offsite` 安装；本版本须在 3.0.0 上线后安装，线上低于 3.0.0 时中止 |
 | `/etc/systemd/journald.conf.d/yi.conf` | journald 的保留策略：日志总量至多 1 GB，保留 90 日（OPS-065），源文件为仓库中的 `scripts/server/journald-yi.conf`，由 `npm run deploy -- install-journald` 安装 |
-| `/opt/www/yi.lightking.com.cn/` | 官网目录：`releases/完整提交号/` 为不可变的网站产物，`current`、`previous` 为链接；`downloads/releases/游戏版本/` 为安装程序，`downloads/current` 单独切换（只保留当前游戏版本）；`config-backup/`、`deploy.log` 为配置备份与网站操作记录。发布与回滚见 [独立官网规程](docs/procedures/website.md) |
-| `/etc/systemd/system/yi-web.service` | 独立官网进程，只监听本机 8444，不打开数据库；源文件为仓库中的 `scripts/server/yi-web.service`，由 `npm run deploy:website -- bootstrap` 安装 |
-| `/etc/caddy/sites/yi.caddy` | Caddy 中弈的站点配置：`yi.lightking.com.cn` 的 `/ws` 与 `/api/*` 以 HTTPS 转发到联机服务的本机 8443，其余请求转发到官网的本机 8444；屏蔽 `/healthz` 与 `/metrics`（API-061），不开访问日志（DAT-073）；源文件为仓库中的 `scripts/server/yi.caddy`，由 `npm run deploy -- install-caddy` 安装。Caddy 本身与主配置 `/etc/caddy/Caddyfile` 由 LightsWeb 仓库管理 |
+| `/etc/caddy/sites/yi.caddy` | Caddy 中弈的站点配置：`yi.lightking.com.cn` 以 HTTPS 转发到本机 8443，屏蔽 `/healthz` 与 `/metrics`（API-061），不开访问日志（DAT-073）；源文件为仓库中的 `scripts/server/yi.caddy`，由 `npm run deploy -- install-caddy` 安装。Caddy 本身与主配置 `/etc/caddy/Caddyfile` 由 LightsWeb 仓库管理 |
 | 部署用户 `deploy`、`/usr/local/sbin/yi-deploy`、`/etc/sudoers.d/yi-deploy` | 日常运维的身份（SEC-044）：`npm run deploy` 的上线、`restart`、`rollback`、`status` 以 `deploy` 登录，只能经 sudo 执行 root 所有的 `yi-deploy`（`scripts/server/deploy-remote.sh` 的副本，只接受这几个命令），上传的文件由它以 `deploy` 的身份读出后使用；`deploy` 属 `systemd-journal` 组，可直接查看日志。白名单的源文件为 `scripts/server/sudoers-yi-deploy`，三者由 `npm run deploy -- install-deploy-user` 以 root 安装；其余 `install-*` 以 root 执行 |
 
 `yi.service` 的内容见仓库中的 [scripts/server/yi.service](scripts/server/yi.service)，由 `npm run deploy -- install-service` 安装：服务端与 `YI_LATEST` 均经 `/opt/yi/current` 读取；加固选项按 SEC-045，安装前检查 `systemd-analyze security` 的评分不高于 4.0，装好后重启并做健康检查，不通过即恢复原文件。
 
 ### 5.4 更新与运维
 
-- **更新**：服务端随发版一同更新，由 `npm run deploy -- 版本号` 部署对应 Release 中的 `yi-server-版本.cjs`：有对局时先进入维护模式，等对局结束后重启，重启后以健康检查核对版本，不通过即自动回滚；`npm run deploy -- rollback` 立即回退至上一版本。安装程序与游戏内更新清单由独立官网流程更新，不随联机上线或回滚：`npm run deploy:website -- downloads 游戏版本` 从该 Release 下载并原子切换四个安装程序与 `latest.yml`、`latest-linux.yml`。详见 [开发与发布规程](docs/procedures/release.md) 第 6 章与 [独立官网规程](docs/procedures/website.md) 第 5 章。
-- **游戏内更新**：4.0.0 之后的版本（决策 0014）在桌面版启动时独立检查官网版本，不依赖登录。Windows、Linux 点击更新提示后下载，按发布清单校验，完成后可选择“重启并安装”；匹配、等待好友或对局期间拒绝安装。macOS 仍由提示进入下载页面手动安装。
+- **更新**：服务端随发版一同更新，由 `npm run deploy -- 版本号` 部署对应 Release 中的 `yi-server-版本.cjs`：有对局时先进入维护模式，等对局结束后重启，重启后以健康检查核对版本，不通过即自动回滚；`npm run deploy -- rollback` 立即回退至上一版本。安装程序由独立官网流程更新，不随联机上线或回滚。详见 [开发与发布规程](docs/procedures/release.md) 第 6 章。
 - **健康检查**：`npm run deploy -- status` 经服务器本机读取 `/healthz`，打出版本号、提交号、活跃对局数、是否处于维护模式与连接数；`/healthz` 只回应来自本机的请求（API-061）。
 - **监控指标**：同一端口上的 `/metrics`（只回应来自本机的请求，API-061）以 Prometheus 文本格式输出 [07-operations.md](docs/standards/07-operations.md) 第 9 节的指标（连接数、在线玩家、房间、排队、消息与错误码计数、处理耗时、事件循环延迟、内存，以及数据库的事务耗时、文件大小与写入失败次数等）；服务端另每 60 秒在日志中写一条 `metrics.snapshot`（OPS-071）。查看：`ssh deploy@47.108.181.240 /opt/node/bin/node -e "fetch('http://127.0.0.1:8443/metrics').then(r=>r.text()).then(console.log)"`。
 - **查看日志**：`ssh deploy@47.108.181.240 journalctl -u yi -f`。日志为 JSON Lines，每行一个事件，`ver` 字段为服务端的版本号及提交号（格式与事件码见 [07-operations.md](docs/standards/07-operations.md) 第 5 节、第 8 节）；只看警告及以上：`journalctl -u yi -p warning`；临时输出 debug 级别：以 root 执行 `systemctl edit yi` 在附加配置中设 `Environment=YI_LOG_LEVEL=debug`（OPS-062），不改动 `yi.service` 本身，用完以 `systemctl revert yi` 删除。
@@ -272,13 +256,13 @@ node dist-server/server.cjs --version
 
 ### 5.5 域名与 TLS
 
-域名 `lightking.com.cn` 的 ICP 备案已于 2026-10-12 通过（渝ICP备2025066996号-2），`yi.lightking.com.cn` 已解析至该服务器。按项目所有者的决定，域名与 TLS 提前于 3.0 启用（路线图第 6 章）：2026-10-13 完成第 1 至 4 项及第 5 项中的 `YI_DOWNLOAD`，其余随 3.0.0 于 2026-10-24 完成（架构决策记录 0009）；Caddy 为 v2.11.7：
+域名 `lightking.com.cn` 的 ICP 备案已于 2026-10-12 通过（渝ICP备2025066996号-2），`yi.lightking.com.cn` 已解析至该服务器。按项目所有者的决定，域名与 TLS 提前于 3.0 启用（路线图第 6 章），2026-10-13 已完成第 1 至 4 项及第 5 项中的 `YI_DOWNLOAD`；客户端改用 `wss://` 已在代码中完成，随 3.0.0 发布，第 6 项随 3.0.0 上线执行（架构决策记录 0009）；Caddy 为 v2.11.7：
 
 1. Caddy 作为整台服务器的反向代理，监听 80、443 端口并自动申请、续期证书（SEC-010）。Caddy 本身、主配置 `/etc/caddy/Caddyfile`（以 `import /etc/caddy/sites/*.caddy` 引入各站点）、默认拒绝以 IP 或未登记的域名访问、公共响应头由 LightsWeb 仓库管理；
 2. 弈的站点配置为仓库中的 `scripts/server/yi.caddy`，以 `npm run deploy -- install-caddy` 安装：先以整套配置校验，再平滑重载（不中断其他网站与已建立的联机），经 HTTPS 检查下载页面可以访问、`/healthz` 已屏蔽，不通过即恢复原文件；
 3. 服务端按客户端的真实地址限流：经本机代理时取 `X-Forwarded-For` 的最后一项，只信任来自本机的这个头（API-040，`server/clientIp.ts`）；
 4. 阿里云安全组与 UFW 放行 80、443 端口，其中 80 端口仅供证书验证及跳转至 HTTPS；8443 端口已于 2026-10-24 随 3.0.0 上线关闭；
-5. 3.0.0 起客户端改用 `wss://yi.lightking.com.cn/ws`，CSP 的 `connect-src` 只放行该地址（SEC-013），`YI_DOWNLOAD` 改为 `https://yi.lightking.com.cn/`，下载页面底部展示备案号；
+5. 3.0.0 客户端改用 `wss://yi.lightking.com.cn/ws`，CSP 的 `connect-src` 只放行该地址（SEC-013），`YI_DOWNLOAD` 改为 `https://yi.lightking.com.cn/`，下载页面底部展示备案号；
 6. 3.0.0 上线时以 `install-service` 安装已含 `Environment=HOST=127.0.0.1` 的 `yi.service`，使服务端仅接受本机反向代理的连接，并在安全组与 UFW 中关闭 8443 端口（SEC-011）。
 
 ## 6 多语言
@@ -287,7 +271,7 @@ node dist-server/server.cjs --version
 
 - 代码中以中文书写原文，显示时经 [src/i18n/index.ts](src/i18n/index.ts) 中的 `T()`、`TF()` 转换为当前语言；
 - 译文统一维护于 [src/i18n/table.ts](src/i18n/table.ts)，新增界面文字时应在其中补充译文，开发模式下缺少译文时控制台给出提示；
-- 服务端下发的错误与提示以错误码表示（API-020），由客户端查译文表显示；第 3 版客户端另收可直接显示的文本提示；
+- 服务端发送的提示同样为中文原文，由客户端翻译；
 - 各语言的写法见 [docs/standards/09-text-and-i18n.md](docs/standards/09-text-and-i18n.md)。
 
 ## 7 源码结构
@@ -320,26 +304,25 @@ src/
   ui/                 Preact 界面：panels（菜单、对局、设置、更多）、online（联机对战）、widgets、styles.css、info（“更多”页面的文字）
   i18n/               多语言
 server/               rooms.ts 队列、配对、房间、对局与段位（与传输无关）；ratelimit.ts 限流与违规累计；db/ 数据库（打开与迁移、仓储、段位与对局记录、备份）；backupCommand.ts 备份命令（node server.cjs backup）；record.ts 对局记录与每手用时；serve.ts 服务端的运行（启动、关闭、信号）；main.ts 入口（读取配置后调用 serve.ts）；host.ts 接入 WebSocket（可同时监听多个端口）；
-                      files.ts 官网页面、静态文书、帮助与安装程序的处理（homePage.ts 主页、downloadPage.ts 下载页面、supportPage.ts 帮助与支持（正文位于 server/support/）、notFoundPage.ts 默认 404 页面、agreementPage.ts 文书目录与文书页（正文位于 server/legal/，legalMarkdown.ts 安全渲染），共用 page.ts 外壳、pageStyle.ts 样式与 pageResponse.ts 响应头；board.ts 主页上的棋盘；geometry.ts 主页的背景几何；ring.ts 主页随滚动转动的功能环；platform.ts 推断访客的操作系统）；websiteHost.ts 独立官网进程入口（本机 8444）、websiteConfig.ts 官网配置、staticSite.ts 读取构建产物；updateFeed.ts 游戏内更新清单
+                      files.ts 同一端口上的网站与下载服务（homePage.ts 主页、downloadPage.ts 下载页面、supportPage.ts 帮助与支持（正文位于 server/support.md）、notFoundPage.ts 默认 404 页面、agreementPage.ts 文书目录与独立草案页（正文位于 server/legal/，legalMarkdown.ts 安全渲染），共用 page.ts 外壳、pageStyle.ts 样式与 pageResponse.ts 响应头；board.ts 主页上的棋盘；geometry.ts 主页的背景几何；ring.ts 主页随滚动转动的功能环；platform.ts 推断访客的操作系统）；main.ts 入口
 electron/             桌面版主进程（窗口、单实例、匹配成功时的任务栏提醒、错误日志）及预加载脚本
 tests/                vitest：rules（规则与人机）、record（规则层与棋谱）、session（会话与座位）、protocol（消息校验与昵称清洗）、server（联机服务端）、ratelimit（限流）、
                       db、dbRepo、dbStartup 与 dbBackup（数据库：打开与迁移、仓储与段位、启动、备份）、client（联机客户端：断线、重连、服务器重启、非法消息）、lobby（联机大厅：匹配、排位、好友房间）、
-                      account 系列（账号接口、认证、会话与限流、桌面安全存储、登录与账号界面）、docs（文档相对链接，DOC-004）、
                       onlineGame（联机对局中的请求、点目与回放）、reconnect 与 retry（断线重连的退避与关闭码）、storage（本地存储与设置）、updateNote（新版本提示的本地记录）、
                       fakeNet（联机客户端测试用的假网络与浏览器环境）、layers 与 importGraph（分层与第三方包检查，以语法树找出四种引用形式）、text（标点与更新日志）、site（网站：推断访客的操作系统、主页与下载页面）、agreement（文书目录、英文路径、安全头与网站入口）、i18n 与 uiText（译文齐全、英文的写法、以语法树扫描界面文字）、
                       ratchet（违规棘轮）、coverage（改动行覆盖率）、deps（许可证、依赖漏洞门禁、工作流的 Action 固定）
-scripts/              build-node（打包主进程与服务端）、build-website（构建独立官网）、deploy.sh（联机上线）、deploy-website（官网发布、部署与回滚）、check-website（静态页面验收）、
-                      make-fonts（生成内置字体子集）、page-assets（网站页面的图片与字体）、changelog（读取更新日志、生成发布说明）、release（发版）、
-                      shots.cjs 与 compare-shots.mjs（场景截图与逐像素对比）、smoke-app（安装后的冒烟检查）、bench（性能基准）、loadtest（服务端压测）、
-                      fit-check.cjs 与 fit-driver（界面文字排版检查，只在 CI 上运行）、ratchet（违规棘轮）、diff-coverage（改动行覆盖率）、audit（依赖漏洞门禁）、licenses（许可证检查）
-docs/                 standards/（工程规范）、procedures/（操作规程）、plan/（改造与整改计划）、audits/（审计报告）、adr/（架构决策记录）、reference/（参考资料）、incidents/（事件复盘，发生事件时建立），索引见 docs/README.md
+scripts/              build-node（打包主进程与服务端）、make-fonts（生成内置字体子集）、page-assets（网站页面的图片与字体）、changelog（读取更新日志、生成发布说明）、
+                      release（发版）、deploy.sh（上线）、shots.cjs 与 compare-shots.mjs（场景截图与逐像素对比）、smoke-app（安装后的冒烟检查）、
+                      fit-check.cjs 与 fit-driver（界面文字排版检查，只在 CI 上运行）、
+                      ratchet（违规棘轮）、diff-coverage（改动行覆盖率）、audit（依赖漏洞门禁）、licenses（许可证检查）
+docs/                 standards/（工程规范）、procedures/（操作规程）、plan/（改造与整改计划）、audits/（审计报告），索引见 docs/README.md
 ```
 
 画面分为四层：`#scene`（WebGL：背景、棋盘、棋子、棋罐、光影）、`#ui`（Preact 界面）、`#over`（飞越界面的碎子）、`#glow`（叠加的光效）。
 
 ## 8 路线图
 
-后续改造计划见 [docs/plan/roadmap.md](docs/plan/roadmap.md)：阶段 4 至 7（数据库、对局记录、账号系统、联机协议第 4 版）已完成，下一阶段为反作弊与管理工具，其后为新功能。当前工作顺序见 [docs/plan/next-development.md](docs/plan/next-development.md) 第 14 章。
+后续改造计划（数据库与对局记录、账号系统、排位反作弊等）见 [docs/plan/roadmap.md](docs/plan/roadmap.md)。
 
 ## 9 版权与许可
 

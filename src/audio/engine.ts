@@ -55,7 +55,7 @@ function startMusic(i: number) {
   m.started = true;
 }
 
-function play(id: SfxId, vol = 1, rate = 1) {
+function play(id: SfxId, vol = 1, rate = 1, pan = 0) {
   const s = settings.value;
   if (!ctx || !s.sound || ctx.state !== 'running') return;
   const b = buffers.get(id);
@@ -65,8 +65,16 @@ function play(id: SfxId, vol = 1, rate = 1) {
   src.playbackRate.value = rate;
   const g = ctx.createGain();
   g.gain.value = vol * s.volume;
-  src.connect(g);
-  g.connect(sfxBus);
+  let node: AudioNode = src;
+  node.connect(g);
+  node = g;
+  if (pan) {
+    const p = ctx.createStereoPanner();
+    p.pan.value = pan;
+    node.connect(p);
+    node = p;
+  }
+  node.connect(sfxBus);
   src.start();
 }
 

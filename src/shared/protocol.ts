@@ -16,6 +16,8 @@ export const NAME_MAX = 16; // 昵称最多几个字素（I18N-030）
 export const VERSION_PATTERN = /^[0-9A-Za-z.+-]{1,32}$/;
 /** 新版本下载地址的格式（welcome.url）：只接受 http(s) 地址，最长 2048 个字符（客户端只用系统浏览器打开这种地址） */
 export const DOWNLOAD_URL_PATTERN = /^https?:\/\/[^\s]{1,2040}$/;
+/** 本机匿名身份 uid 的格式（API-013）；不合格式的 hello 被服务端拒绝 */
+export const UID_PATTERN = /^[0-9A-Za-z-]{16,64}$/;
 export const UNDO_LIMIT = 3; // 每局每人最多申请悔棋次数
 export const DRAW_LIMIT = 3; // 每局每人最多求和次数
 export const ASK_SECS = 20; // 申请无人回应多久后视为拒绝
@@ -105,14 +107,8 @@ export const RANKS = [
   '八段',
   '九段',
 ];
-/** 最低段位的下限分：起始 1200 分为四级（RANKS 的下标从 0 起） */
-const RANK_BASE = 840;
-/** 每 60 分一档 */
-export const RANK_SPAN = 60;
-/** 第 i 段的下限分（段位进度条与升级所需分数用） */
-export const rankFloor = (i: number) => RANK_BASE + i * RANK_SPAN;
 /** 段位分 → 段位序号（每 60 分一档，起始 1200 分为四级） */
-export const rankIndex = (points: number) => Math.max(0, Math.min(RANKS.length - 1, Math.floor((points - RANK_BASE) / RANK_SPAN)));
+export const rankIndex = (points: number) => Math.max(0, Math.min(RANKS.length - 1, Math.floor((points - 840) / 60)));
 /** 第 i 段的名称；i 由 rankIndex 限定在表内，取不到时为空 */
 export const rankAt = (i: number) => RANKS[i] ?? '';
 export const rankName = (points: number) => rankAt(rankIndex(points));

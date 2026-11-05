@@ -7,7 +7,7 @@
 import { now } from '../core/clock';
 import type { Game } from '../core/game';
 import { goSnap, gomokuSnap } from '../core/snap';
-import { GameType } from '../core/types';
+import { GameType, MAXN } from '../core/types';
 import type { BoardView } from '../presentation/boardView';
 import type { ThinkReply, ThinkRequest } from './think';
 
@@ -122,7 +122,8 @@ export class ComputerSeat implements Seat {
       if (!d || d.id !== r.id) return;
       this.dead = null;
       if (!g.scoring || d.stamp !== this.stamp()) return; // 点目已经结束或局面变了
-      g.markDead(r.dead);
+      for (const p of r.dead) g.dead[p.x * MAXN + p.y] = 1;
+      if (r.dead.length) g.computeScore();
       return;
     }
     if (this.pending && r.id === this.pending.id) {

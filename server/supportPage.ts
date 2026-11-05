@@ -6,9 +6,6 @@ import { supportStyle } from './supportStyle';
 import { SEARCH } from './webIcons';
 import { documentHero, documentLink, documentToc } from './webUi';
 
-/** 帮助检索词的规范化函数；files.ts 经此复用，避免再次直接引用 supportContent。 */
-export { normalizeSupportQuery } from './supportContent';
-
 function navigation(searchHref: string): [string, string][] {
   return [
     [searchHref, '查找问题'],

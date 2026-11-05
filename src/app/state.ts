@@ -36,6 +36,7 @@ export const screen = signal<Screen>(Screen.Menu);
 
 /** 每帧变化的状态（画面直接读，界面靠 uiTick 重绘） */
 export const view = {
+  panelFrom: Screen.Menu,
   panelT: 1, // 面板切换进度 0..1
   bowlK: 1, // 棋罐：1 在盘上，0 已移出
   onlineK: 0, // 多人游戏页棋盘布置的显现程度

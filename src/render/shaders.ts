@@ -36,7 +36,7 @@ void main(){
   finalColor = vec4(fragColor.rgb, fragColor.a*a);
 }`;
 
-/** 贴图：纹理颜色与 fragColor 相乘；是否预乘 alpha 由 Painter.image 切换的混合模式决定 */
+/** 贴图：ext.x = 1 时按预乘 alpha 输出 */
 export const TEX_FS =
   HEAD +
   `

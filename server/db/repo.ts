@@ -70,6 +70,8 @@ function statements(db: DatabaseSync) {
     userOf: db.prepare('SELECT user_id FROM devices WHERE uid_hash = ? ORDER BY id LIMIT 1'),
     insertUser: db.prepare("INSERT INTO users (kind, name, created_at, last_seen_at) VALUES ('guest', ?, ?, ?)"),
     insertDevice: db.prepare('INSERT INTO devices (uid_hash, user_id, first_seen_at, last_seen_at) VALUES (?, ?, ?, ?)'),
+    seeUser: db.prepare('UPDATE users SET name = ?, last_seen_at = ? WHERE id = ?'),
+    seeDevice: db.prepare('UPDATE devices SET last_seen_at = ? WHERE uid_hash = ? AND user_id = ?'),
     ratingsOf: db.prepare('SELECT game_type, points, win_count, loss_count, draw_count FROM ratings WHERE user_id = ?'),
     saveRating: db.prepare(
       'INSERT INTO ratings (user_id, game_type, points, win_count, loss_count, draw_count, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ' +
@@ -143,6 +145,14 @@ export class Repo {
     if (found !== undefined) return found;
     const userId = Number(this.sql.insertUser.run(clipNameBytes(name), now, now).lastInsertRowid);
     this.sql.insertDevice.run(uidHash, userId, now, now);
+    return userId;
+  }
+
+  /** 玩家上线：找到或新建用户，记下最近使用的昵称与时刻，返回用户编号 */
+  touch(uidHash: string, name: string, now: number): number {
+    const userId = this.ensure(uidHash, name, now);
+    this.sql.seeUser.run(clipNameBytes(name), now, userId);
+    this.sql.seeDevice.run(now, uidHash, userId);
     return userId;
   }
 

@@ -6,7 +6,7 @@ import { ghostUpdate } from '../fx/ghost';
 import { clearParticles } from '../fx/fx';
 import { boardClick, boardHover, bump, controllerTick, handleKey, newGame } from './controller';
 import { animK, settings } from './settings';
-import { game, screen, view, boardView, session } from './state';
+import { game, screen, Screen, uiTick, view, boardView, session } from './state';
 import { Stage } from './stage';
 import { signal } from '@preact/signals';
 import { GameType } from '../core/types';
@@ -135,3 +135,5 @@ export function startApp(sceneCanvas: HTMLCanvasElement, overCanvas: HTMLCanvasE
   requestAnimationFrame(frame);
   return stage;
 }
+
+export { uiTick, Screen };
